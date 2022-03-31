@@ -141,23 +141,26 @@ async fn chat_server(
                                     Ok(())
                                 }
                                 InnerMessage::Data(data) => {
-                                    let locked = db.lock().await;
-                                    let mut stmt = locked
-                                        .prepare("
-                                        INSERT INTO messages (body, channel_id, user, sent_time, received_time) VALUES (?, ?, ?, ?, ?)
-                                        ")
-                                        .unwrap();
-                                    stmt.bind(1, &Value::String(data)).unwrap();
-                                    stmt.bind(2, &Value::String(envelope.channel)).unwrap();
-                                    stmt.bind(3, &userid).unwrap();
-                                    stmt.bind(4, &Value::Integer(envelope.sent_time_ms as i64)).unwrap();
-                                    stmt.bind(5, &Value::Integer(SystemTime::now()
-                                    .duration_since(SystemTime::UNIX_EPOCH).expect("System Time OK").as_millis() as i64)).unwrap();
-                                    loop {
-                                        if stmt.next()? == sqlite::State::Done {
-                                            break;
+                                    {
+                                        let locked = db.lock().await;
+                                        let mut stmt = locked
+                                            .prepare("
+                                            INSERT INTO messages (body, channel_id, user, sent_time, received_time) VALUES (?, ?, ?, ?, ?)
+                                            ")
+                                            .unwrap();
+                                        stmt.bind(1, &Value::String(data)).unwrap();
+                                        stmt.bind(2, &Value::String(envelope.channel)).unwrap();
+                                        stmt.bind(3, &userid).unwrap();
+                                        stmt.bind(4, &Value::Integer(envelope.sent_time_ms as i64)).unwrap();
+                                        stmt.bind(5, &Value::Integer(SystemTime::now()
+                                        .duration_since(SystemTime::UNIX_EPOCH).expect("System Time OK").as_millis() as i64)).unwrap();
+                                        loop {
+                                            if stmt.next()? == sqlite::State::Done {
+                                                break;
+                                            }
                                         }
                                     }
+                                    write .write_all("HTTP/1.1 200 OK\r\n\r\n".as_bytes()) .await;
                                     Ok(())
                                 }
                             }
