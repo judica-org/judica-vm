@@ -31,8 +31,8 @@ use tokio::net::TcpListener;
 fn setup_db(db: &sqlite::Connection) {
     db.execute(
             "
-            CREATE TABLE IF NOT EXISTS user (userid INTEGER PRIMARY KEY , nickname TEXT , key TEXT UNIQUE);
-            CREATE TABLE IF NOT EXISTS messages (body TEXT, channel_id TEXT, user INTEGER, FOREIGN KEY(user) references user(userid));
+            CREATE TABLE IF NOT EXISTS user (userid INTEGER PRIMARY KEY, nickname TEXT , key TEXT UNIQUE);
+            CREATE TABLE IF NOT EXISTS messages (mid INTEGER PRIMARY KEY, body TEXT, channel_id TEXT, user INTEGER, FOREIGN KEY(user) references user(userid));
             PRAGMA journal_mode=WAL;
             ",
         )
@@ -52,90 +52,116 @@ async fn chat_server(
                 let db = db.clone();
                 tokio::spawn(async move {
                     let (read, mut write) = tokio::io::split(socket);
-                    let br = tokio::io::BufReader::new(read);
-                    let mut reader = tokio::io::AsyncBufReadExt::lines(br);
-                    // In a loop, read data from the socket and write the data back.
-                    // Line GET /msg HTTP/1.1
-                    // Line accept: */*
-                    // Line host: 3m52h7x2od4mr6i45fy7zqjce35oiagefxylc5l3fcj4uf6ccnaqwayd.onion:46789
-                    // Line content-length: 4
-                    let method = reader.next_line().await;
-                    println!("RECV Req: {:?}", method);
-                    if method.ok().flatten() != Some("POST /msg HTTP/1.1".into()) {
-                        return;
-                    }
-                    loop {
-                        if let Ok(Some(line)) = reader.next_line().await {
-                            println!("RECV Header: {}", line);
-                            if Some(line) == Some("".into()) {
-                                println!("Breaking...");
-                                break;
+                    let bad = {
+                        let res = async || -> Result<(), Box<dyn std::error::Error>> {
+                            let br = tokio::io::BufReader::new(read);
+                            let mut reader = tokio::io::AsyncBufReadExt::lines(br);
+                            // In a loop, read data from the socket and write the data back.
+                            // Line GET /msg HTTP/1.1
+                            // Line accept: */*
+                            // Line host: 3m52h7x2od4mr6i45fy7zqjce35oiagefxylc5l3fcj4uf6ccnaqwayd.onion:46789
+                            // Line content-length: 4
+                            let method = reader.next_line().await;
+                            println!("RECV Req: {:?}", method);
+                            if method.ok().flatten() != Some("POST /msg HTTP/1.1".into()) {
+                                return Err(Err("Wrong Request Type")?);
                             }
-                        } else {
-                            return;
-                        }
-                    }
-                    if let Ok(Some(body)) = reader.next_line().await {
-                        println!("RECV Body: {}", body);
-                        if let Ok(envelope) = serde_json::from_str::<Envelope>(&body) {
-                            if let Ok(signed) =
-                                serde_json::from_str::<ruma_serde::CanonicalJsonObject>(&body)
-                            {
-                                let mut pkmap2 = ruma_signatures::PublicKeyMap::new();
-                                let keyhash = sapio_bitcoin::hashes::sha256::Hash::hash(
-                                    envelope.key.as_bytes(),
-                                );
-                                let key = Base64::<ruma_serde::base64::Standard>::new(
-                                    envelope.key.as_bytes().to_vec(),
-                                );
-                                let hex_key = keyhash.to_hex();
-                                pkmap2.insert(
-                                    hex_key.clone(),
-                                    [("ed25519:1".to_owned(), key)].into_iter().collect(),
-                                );
-                                let row = {
-                                    let locked = db.lock().await;
-                                    let mut stmt = locked
-                                        .prepare("SELECT * FROM user WHERE key = ? LIMIT 1")
+                            loop {
+                                if let Some(line) = reader.next_line().await? {
+                                    println!("RECV Header: {}", line);
+                                    if Some(line) == Some("".into()) {
+                                        println!("Breaking...");
+                                        break;
+                                    }
+                                } else {
+                                    return Err(Err("Didn't finish Headers")?);
+                                }
+                            }
+                            let body = reader.next_line().await?.ok_or("No Body Received")?;
+                            println!("RECV Body: {}", body);
+                            let envelope = serde_json::from_str::<Envelope>(&body)?;
+                                if envelope.channel.len()> 128 {
+                                    return Err(Err("Channel Name Too Long")?);
+                                }
+                            let signed =
+                                serde_json::from_str::<ruma_serde::CanonicalJsonObject>(&body)?;
+                            let mut pkmap2 = ruma_signatures::PublicKeyMap::new();
+                            let keyhash =
+                                sapio_bitcoin::hashes::sha256::Hash::hash(envelope.key.as_bytes());
+                            let key = Base64::<ruma_serde::base64::Standard>::new(
+                                envelope.key.as_bytes().to_vec(),
+                            );
+                            let hex_key = keyhash.to_hex();
+                            pkmap2.insert(
+                                hex_key.clone(),
+                                [("ed25519:1".to_owned(), key)].into_iter().collect(),
+                            );
+                            let userid = {
+                                let locked = db.lock().await;
+                                let mut stmt = locked
+                                    .prepare("SELECT * FROM user WHERE key = ? LIMIT 1")
+                                    .unwrap().into_cursor();
+                                stmt.bind(&[Value::String(hex_key)]).unwrap();
+                                let row = stmt.next()?.ok_or(
+                                    "No User Found"
+                                )?;
+                                row[0].clone()
+                            };
+                            ruma_signatures::verify_json(&pkmap2, &signed)?;
+                            // TODO: check signers in DB
+                            println!("RECV Verified: {:?}", signed);
+                            use tokio::io::AsyncWriteExt;
+                            match envelope.msg {
+                                InnerMessage::Ping(data) => {
+                                    write.write_all("HTTP/1.1 200 OK\r\n".as_bytes()).await;
+                                    let b = serde_json::to_string(&MessageResponse::Pong(body))
                                         .unwrap();
-                                    stmt.bind(1, &Value::String(hex_key)).unwrap();
-                                    let row = stmt.next();
-                                    row
-                                };
-                                if let Ok(user) = row {
-                                    if ruma_signatures::verify_json(&pkmap2, &signed).is_ok() {
-                                        // TODO: check signers in DB
-                                        println!("RECV Verified: {:?}", signed);
-                                        use tokio::io::AsyncWriteExt;
-                                        write.write_all("HTTP/1.1 200 OK\r\n".as_bytes()).await;
-                                        let b = serde_json::to_string(&MessageResponse::Pong(body))
-                                            .unwrap();
-                                        write
-                                            .write_all(
-                                                "Access-Control-Allow-Origin: *\r\n".as_bytes(),
-                                            )
-                                            .await;
-                                        write
+                                    write
+                                        .write_all("Access-Control-Allow-Origin: *\r\n".as_bytes())
+                                        .await;
+                                    write
                                         .write_all(
                                             "Content-Type: application/json\r\nContent-Length: "
                                                 .as_bytes(),
                                         )
                                         .await;
-                                        write.write_all(format!("{}", b.len()).as_bytes()).await;
-                                        write.write_all("\r\n\r\n".as_bytes()).await;
-                                        write.write_all(b.as_bytes()).await;
-                                    } else {
-                                        println!("Invalid Signatures on Envelope")
-                                    }
-                                } else {
-                                    println!("incompatible, should be unreachavle")
+                                    write.write_all(format!("{}", b.len()).as_bytes()).await;
+                                    write.write_all("\r\n\r\n".as_bytes()).await;
+                                    write.write_all(b.as_bytes()).await;
+                                    Ok(())
                                 }
-                            } else {
-                                write
-                                    .write_all("HTTP/1.1 400 Bad Request\r\n\r\n".as_bytes())
-                                    .await;
+                                InnerMessage::Data(data) => {
+                                    let locked = db.lock().await;
+                                    let mut stmt = locked
+                                        .prepare("
+                                        INSERT INTO messages (body, channel_id, user) VALUES (?, ?, ?)
+                                        ")
+                                        .unwrap();
+                                    stmt.bind(1, &Value::String(data)).unwrap();
+                                    stmt.bind(2, &Value::String(envelope.channel)).unwrap();
+                                    stmt.bind(3, &userid).unwrap();
+                                    loop {
+                                        if stmt.next()? == sqlite::State::Done {
+                                            break;
+                                        }
+                                    }
+                                    Ok(())
+                                }
+                            }
+                        }()
+                        .await;
+                        match res {
+                            Ok(()) => {}
+                            Err(ref x) => {
+                                println!("{:?}", x);
                             }
                         }
+                        res.is_err()
+                    };
+                    if bad {
+                        write
+                            .write_all("HTTP/1.1 400 Bad Request\r\n\r\n".as_bytes())
+                            .await;
                     }
                 });
             }
@@ -153,18 +179,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     chat_db_file.push("chat.sqlite3");
     let mut db = sqlite::open(chat_db_file).unwrap();
     setup_db(&mut db);
-
-    let channel = sapio_bitcoin::hashes::sha256::Hash::hash("hello".as_bytes());
-    let key = ed25519_dalek::Keypair::generate(&mut rand::rngs::OsRng {});
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&Envelope {
-            msg: InnerMessage::Ping("hello".into()),
-            channel,
-            key: key.public,
-            signatures: Default::default()
-        })?
-    );
 
     let jh2 = chat_server(Arc::new(tokio::sync::Mutex::new(db))).await;
     let jh = start_tor(data_dir.clone());
@@ -201,7 +215,7 @@ enum InnerMessage {
 #[derive(Serialize, Deserialize, Debug)]
 struct Envelope {
     msg: InnerMessage,
-    channel: sapio_bitcoin::hashes::sha256::Hash,
+    channel: String,
     key: ed25519_dalek::PublicKey,
     #[serde(default)]
     signatures: ruma_signatures::PublicKeyMap,
