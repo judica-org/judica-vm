@@ -9,6 +9,7 @@ use sqlite::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
+use std::time::SystemTime;
 fn start_tor(mut buf: PathBuf) -> JoinHandle<Result<u8, libtor::Error>> {
     buf.push("onion");
     let mut tor = Tor::new();
@@ -32,7 +33,16 @@ fn setup_db(db: &sqlite::Connection) {
     db.execute(
             "
             CREATE TABLE IF NOT EXISTS user (userid INTEGER PRIMARY KEY, nickname TEXT , key TEXT UNIQUE);
-            CREATE TABLE IF NOT EXISTS messages (mid INTEGER PRIMARY KEY, body TEXT, channel_id TEXT, user INTEGER, FOREIGN KEY(user) references user(userid));
+            CREATE TABLE IF NOT EXISTS messages
+                (mid INTEGER PRIMARY KEY,
+                    body TEXT,
+                    channel_id TEXT,
+                    user INTEGER,
+                    received_time INTEGER,
+                    sent_time INTEGER,
+                    FOREIGN KEY(user) references user(userid),
+                    UNIQUE(sent_time, body, channel_id, user)
+                );
             PRAGMA journal_mode=WAL;
             ",
         )
@@ -134,12 +144,15 @@ async fn chat_server(
                                     let locked = db.lock().await;
                                     let mut stmt = locked
                                         .prepare("
-                                        INSERT INTO messages (body, channel_id, user) VALUES (?, ?, ?)
+                                        INSERT INTO messages (body, channel_id, user, sent_time, received_time) VALUES (?, ?, ?, ?, ?)
                                         ")
                                         .unwrap();
                                     stmt.bind(1, &Value::String(data)).unwrap();
                                     stmt.bind(2, &Value::String(envelope.channel)).unwrap();
                                     stmt.bind(3, &userid).unwrap();
+                                    stmt.bind(4, &Value::Integer(envelope.sent_time_ms as i64)).unwrap();
+                                    stmt.bind(5, &Value::Integer(SystemTime::now()
+                                    .duration_since(SystemTime::UNIX_EPOCH).expect("System Time OK").as_millis() as i64)).unwrap();
                                     loop {
                                         if stmt.next()? == sqlite::State::Done {
                                             break;
@@ -217,6 +230,7 @@ struct Envelope {
     msg: InnerMessage,
     channel: String,
     key: ed25519_dalek::PublicKey,
+    sent_time_ms: u64,
     #[serde(default)]
     signatures: ruma_signatures::PublicKeyMap,
 }
