@@ -4,13 +4,16 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use ruma_serde::Base64;
-use sapio_bitcoin::hashes::hex::ToHex;
+use ruma_serde::{Base64, CanonicalJsonValue};
 use sapio_bitcoin::hashes::Hash;
+use sapio_bitcoin::{
+    hashes::hex::ToHex,
+    secp256k1::{Message as SchnorrMessage, Secp256k1, Verification},
+};
 use sqlite::Value;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::SystemTime;
+use std::{collections::BTreeMap, env, net::SocketAddr};
 use tokio::sync::Mutex;
 
 use crate::chat::messages::InnerMessage;
@@ -30,32 +33,20 @@ async fn post_message(
         ));
     }
     tracing::debug!("recieved: {:?}", envelope);
+    envelope
+        .self_authenticate(&Secp256k1::new())
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "Envelope not valid"))?;
+    tracing::debug!("verified signatures");
+
     let userid = {
-        let mut pkmap2 = ruma_signatures::PublicKeyMap::new();
-        let keyhash = sapio_bitcoin::hashes::sha256::Hash::hash(envelope.key.as_bytes());
-        let key = Base64::<ruma_serde::base64::Standard>::new(envelope.key.as_bytes().to_vec());
-        let hex_key = keyhash.to_hex();
-        pkmap2.insert(
-            hex_key.clone(),
-            [("ed25519:1".to_owned(), key)].into_iter().collect(),
-        );
         let userid = {
             let locked = db.get_handle().await;
             locked
-                .locate_user(hex_key)
+                .locate_user(&envelope.key)
                 .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
                 .ok_or((StatusCode::BAD_REQUEST, "No User Found"))?
         };
 
-        {
-            let reserialized = serde_json::to_value(envelope.clone())
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
-            let signed = serde_json::from_value(reserialized)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
-            ruma_signatures::verify_json(&pkmap2, &signed)
-                .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid Signatures"))?;
-            tracing::debug!("verified signatures");
-        }
         userid
     };
     let r = match envelope.msg {

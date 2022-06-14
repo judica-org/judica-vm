@@ -18,11 +18,10 @@ ruma-signatures = "0.10.0"
 ruma-serde = "0.6.0"
 sqlite = "0.26.0"   
 directories = "3.0.1"
-rand = "0.7"
 [dependencies.ed25519-dalek]
 version= "1.0.1"
 features=['serde']
 
 [dependencies.sapio-bitcoin]
-version = "0.28.0-rc.3"
-features=['use-serde']
+version = "0.28.1"
+features=['use-serde', 'rand']

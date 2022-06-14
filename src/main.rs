@@ -2,6 +2,8 @@ use crate::chat::messages::{Envelope, InnerMessage};
 use chat::db::MsgDB;
 use ruma_signatures::Ed25519KeyPair;
 use sapio_bitcoin::hashes::Hash;
+use sapio_bitcoin::secp256k1::{rand, Secp256k1};
+use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::{hashes::hex::ToHex, util::key};
 use sqlite::Value;
 use std::path::PathBuf;
@@ -35,13 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:19050")?;
     let client = reqwest::Client::builder().proxy(proxy).build()?;
     let url = "n6e4vcd6lmznthfrmwa66rghyabd3p2z2rreewearcqgag3hoxktulid.onion";
-    let raw_keypair = Ed25519KeyPair::generate()?;
-    let keypair = Ed25519KeyPair::from_der(&raw_keypair, "1".into())?;
 
-    let hex_key = {
-        let locked = mdb.get_handle().await;
-        locked.insert_user(&keypair, "test_user".into())?
-    };
+    let secp = Secp256k1::new();
+    let keypair: _ = KeyPair::new(&secp, &mut rand::thread_rng());
     loop {
         tracing::debug!("Waiting to send message...");
         tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
@@ -49,20 +47,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_millis() as u64;
-        let msg = Envelope {
+        let mut msg = Envelope {
             msg: InnerMessage::Ping("hi".into()),
             channel: "hello".into(),
-            key: ed25519_dalek::PublicKey::from_bytes(keypair.public_key())?,
+            key: keypair.public_key().x_only_public_key().0,
             sent_time_ms: ms,
-            signatures: Default::default(),
+            signature: Default::default(),
         };
-        let mut object = ruma_serde::to_canonical_value(msg)?;
-        object
-            .as_object_mut()
-            .map(|m| ruma_signatures::sign_json(&hex_key, &keypair, m));
+        msg.sign_with(&keypair, &secp)?;
         let resp = client
             .post(format!("http://{}:46789/msg", url))
-            .json(&object)
+            .json(&msg)
             .send()
             .await?
             .bytes()
