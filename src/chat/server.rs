@@ -10,7 +10,6 @@ use sapio_bitcoin::{
     hashes::hex::ToHex,
     secp256k1::{Message as SchnorrMessage, Secp256k1, Verification},
 };
-use sqlite::Value;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::{collections::BTreeMap, env, net::SocketAddr};
@@ -43,8 +42,7 @@ async fn post_message(
             let locked = db.get_handle().await;
             locked
                 .locate_user(&envelope.header.key)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
-                .ok_or((StatusCode::BAD_REQUEST, "No User Found"))?
+                .map_err(|_| (StatusCode::BAD_REQUEST, "No User Found"))?
         };
 
         userid

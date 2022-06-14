@@ -16,7 +16,7 @@ serde = "1.0.136"
 serde_derive = "1.0.136"
 ruma-signatures = "0.10.0"
 ruma-serde = "0.6.0"
-sqlite = "0.26.0"   
+rusqlite = "0.27.0"
 directories = "3.0.1"
 [dependencies.ed25519-dalek]
 version= "1.0.1"

@@ -1,11 +1,11 @@
 use crate::chat::messages::{Envelope, Header, InnerMessage, Unsigned};
 use chat::db::MsgDB;
 use ruma_signatures::Ed25519KeyPair;
+use rusqlite::Connection;
 use sapio_bitcoin::hashes::Hash;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::{hashes::hex::ToHex, util::key};
-use sqlite::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut chat_db_file = data_dir.clone();
     chat_db_file.push("chat.sqlite3");
     let mut mdb = MsgDB::new(Arc::new(tokio::sync::Mutex::new(
-        sqlite::open(chat_db_file).unwrap(),
+        Connection::open(chat_db_file).unwrap(),
     )));
     mdb.get_handle().await.ensure_created();
 

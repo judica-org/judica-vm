@@ -1,11 +1,14 @@
 use std::{sync::Arc, time::SystemTime};
 
 use ruma_signatures::Ed25519KeyPair;
+use rusqlite::Connection;
 use sapio_bitcoin::{
-    hashes::{hex::ToHex, Hash},
+    hashes::{
+        hex::{self, ToHex},
+        Hash,
+    },
     XOnlyPublicKey,
 };
-use sqlite::{Connection, Value};
 use tokio::sync::{Mutex, MutexGuard};
 
 #[derive(Clone)]
@@ -35,7 +38,7 @@ impl<'a> MsgDBHandle<'a> {
                     UNIQUE(sent_time, body, channel_id, user)
                 );
             PRAGMA journal_mode=WAL;
-            ",
+            ",[]
         )
         .unwrap();
     }
@@ -45,62 +48,40 @@ impl<'a> MsgDBHandle<'a> {
         data: String,
         channel: String,
         sent_time_ms: u64,
-        userid: Value,
-    ) -> Result<(), sqlite::Error> {
+        userid: i64,
+    ) -> Result<(), rusqlite::Error> {
         let mut stmt = self.0
                                 .prepare("
                                             INSERT INTO messages (body, channel_id, user, sent_time, received_time) VALUES (?, ?, ?, ?, ?)
                                             ")?;
-        stmt.bind(1, &Value::String(data))?;
-        stmt.bind(2, &Value::String(channel))?;
-        stmt.bind(3, &userid)?;
-        stmt.bind(4, &Value::Integer(sent_time_ms as i64))?;
-        stmt.bind(
-            5,
-            &Value::Integer(
-                SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("System Time OK")
-                    .as_millis() as i64,
-            ),
-        )?;
-
-        loop {
-            if stmt.next()? == sqlite::State::Done {
-                return Ok(());
-            }
-        }
+        let time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("System Time OK")
+            .as_millis() as i64;
+        stmt.insert(rusqlite::params![data, channel, userid, sent_time_ms, time])?;
+        Ok(())
     }
 
     pub fn locate_user(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    ) -> Result<Option<Value>, sqlite::Error> {
+    ) -> Result<i64, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT * FROM user WHERE key = ? LIMIT 1")?
-            .into_cursor();
-        stmt.bind(&[Value::String(key.to_hex())])?;
-        let row = stmt.next()?;
-        Ok(row.map(|r| r.get(0).cloned()).flatten())
+            .prepare("SELECT userid FROM user WHERE key = ? LIMIT 1")?;
+        stmt.query_row([key.to_hex()], |row| row.get(0))
     }
 
     pub fn insert_user(
         &self,
         key: &XOnlyPublicKey,
         nickname: String,
-    ) -> Result<String, sqlite::Error> {
+    ) -> Result<String, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare("INSERT INTO user (nickname, key) VALUES (?, ?)")?;
-        stmt.bind(1, &Value::String(nickname))?;
         let hex_key = key.to_hex();
-        stmt.bind(2, &Value::String(hex_key.clone()))?;
-        loop {
-            if stmt.next()? == sqlite::State::Done {
-                break;
-            }
-        }
+        stmt.insert([&nickname, &hex_key])?;
         Ok(hex_key)
     }
 }
