@@ -23,12 +23,20 @@ pub enum InnerMessage {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Envelope {
+pub struct Unsigned {
+    pub signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Header {
     pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
     pub channel: String,
     pub sent_time_ms: u64,
-    #[serde(default)]
-    pub signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
+    pub unsigned: Unsigned,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Envelope {
+    pub header: Header,
     pub msg: InnerMessage,
 }
 
@@ -68,13 +76,15 @@ impl Envelope {
     ) -> Result<(), AuthenticationError> {
         let mut redacted = self.clone();
         let sig = redacted
+            .header
+            .unsigned
             .signature
             .take()
             .ok_or(AuthenticationError::NoSignature)?;
         let msg = redacted
             .msg_hash()
             .map_err(AuthenticationError::SerializerError)?;
-        secp.verify_schnorr(&sig, &msg, &self.key)
+        secp.verify_schnorr(&sig, &msg, &self.header.key)
             .map_err(AuthenticationError::ValidationError)
     }
 
@@ -83,14 +93,15 @@ impl Envelope {
         keypair: &KeyPair,
         secp: &Secp256k1<C>,
     ) -> Result<(), SigningError> {
-        self.signature = None;
+        self.header.unsigned.signature = None;
 
         let msg = self
             .clone()
             .msg_hash()
             .map_err(SigningError::SerializerError)?;
         let aux_rand = rand::thread_rng().gen();
-        self.signature = Some(secp.sign_schnorr_with_aux_rand(&msg, keypair, &aux_rand));
+        self.header.unsigned.signature =
+            Some(secp.sign_schnorr_with_aux_rand(&msg, keypair, &aux_rand));
 
         Ok(())
     }

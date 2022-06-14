@@ -1,4 +1,4 @@
-use crate::chat::messages::{Envelope, InnerMessage};
+use crate::chat::messages::{Envelope, Header, InnerMessage, Unsigned};
 use chat::db::MsgDB;
 use ruma_signatures::Ed25519KeyPair;
 use sapio_bitcoin::hashes::Hash;
@@ -48,11 +48,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .duration_since(std::time::UNIX_EPOCH)?
             .as_millis() as u64;
         let mut msg = Envelope {
+            header: Header {
+                channel: "hello".into(),
+                key: keypair.public_key().x_only_public_key().0,
+                sent_time_ms: ms,
+                unsigned: Unsigned {
+                    signature: Default::default(),
+                },
+            },
             msg: InnerMessage::Ping("hi".into()),
-            channel: "hello".into(),
-            key: keypair.public_key().x_only_public_key().0,
-            sent_time_ms: ms,
-            signature: Default::default(),
         };
         msg.sign_with(&keypair, &secp)?;
         let resp = client

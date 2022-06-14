@@ -26,7 +26,7 @@ async fn post_message(
     Extension(db): Extension<MsgDB>,
     Json(envelope): Json<Envelope>,
 ) -> Result<(Response<()>, Json<MessageResponse>), (StatusCode, &'static str)> {
-    if envelope.channel.len() > 128 {
+    if envelope.header.channel.len() > 128 {
         return Err((
             StatusCode::BAD_REQUEST,
             "Channel ID Longer than 128 Characters",
@@ -42,7 +42,7 @@ async fn post_message(
         let userid = {
             let locked = db.get_handle().await;
             locked
-                .locate_user(&envelope.key)
+                .locate_user(&envelope.header.key)
                 .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
                 .ok_or((StatusCode::BAD_REQUEST, "No User Found"))?
         };
@@ -55,7 +55,12 @@ async fn post_message(
             {
                 let locked = db.get_handle().await;
                 locked
-                    .insert_msg(data, envelope.channel, envelope.sent_time_ms, userid)
+                    .insert_msg(
+                        data,
+                        envelope.header.channel,
+                        envelope.header.sent_time_ms,
+                        userid,
+                    )
                     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
             }
             Json(MessageResponse::None)
