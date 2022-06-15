@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     signature: Default::default(),
                 },
             },
-            msg: InnerMessage::Ping("hi".into()),
+            msg: InnerMessage::Ping(ms),
         };
         msg.sign_with(&keypair, &secp, nonce)?;
         let resp = client
@@ -69,6 +69,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .bytes()
             .await?;
         tracing::debug!("Response: {:?}", resp);
-        //        let msg: MessageResponse = serde_json::from_slice(&resp[..])?;
     }
 }

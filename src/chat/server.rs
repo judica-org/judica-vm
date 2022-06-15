@@ -42,21 +42,22 @@ pub async fn post_message(
 
         userid
     };
+
+    {
+        let locked = db.get_handle().await;
+        locked
+            .insert_msg(envelope.clone(), envelope.header.sent_time_ms, userid)
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+    }
     let r = match envelope.msg {
-        InnerMessage::Ping(data) => Json(MessageResponse::Pong(data)),
-        InnerMessage::Data(data) => {
-            {
-                let locked = db.get_handle().await;
-                locked
-                    .insert_msg(
-                        data,
-                        envelope.header.sent_time_ms,
-                        userid,
-                    )
-                    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
-            }
-            Json(MessageResponse::None)
+        InnerMessage::Ping(u) => {
+            let ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Clock Error"))?
+                .as_millis() as u64;
+            Json(MessageResponse::Pong(u, ms))
         }
+        InnerMessage::Data(data) => Json(MessageResponse::None),
     };
     Ok((
         Response::builder()

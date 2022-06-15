@@ -4,6 +4,8 @@ use std::fmt::Display;
 
 use rand::Rng;
 use ruma_serde::CanonicalJsonValue;
+use rusqlite::types::FromSql;
+use rusqlite::ToSql;
 use sapio_bitcoin::hashes::{sha256, Hash, HashEngine, Hmac};
 use sapio_bitcoin::secp256k1::ffi::types::{c_char, c_int, c_uchar, c_void, size_t};
 use sapio_bitcoin::secp256k1::ffi::{CPtr, SchnorrSigExtraParams};
@@ -18,7 +20,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum InnerMessage {
     Data(String),
-    Ping(String),
+    Ping(u64),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -38,10 +40,23 @@ pub struct Envelope {
     pub header: Header,
     pub msg: InnerMessage,
 }
+impl ToSql for Envelope {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        let s = serde_json::to_string(self)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+        Ok(s.into())
+    }
+}
+impl FromSql for Envelope {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let s = value.as_str()?;
+        serde_json::from_str(s).map_err(|e| rusqlite::types::FromSqlError::Other(e.into()))
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum MessageResponse {
-    Pong(String),
+    Pong(u64, u64),
     None,
 }
 

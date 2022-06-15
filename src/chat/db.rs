@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, str::FromStr, sync::Arc, time::SystemTime};
 
+use fallible_iterator::FallibleIterator;
 use ruma_signatures::Ed25519KeyPair;
 use rusqlite::{
     params,
@@ -77,6 +78,22 @@ impl<'a> MsgDBHandle<'a> {
         .unwrap();
     }
 
+    pub fn load_all_messages(
+        &self,
+
+        key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
+    ) -> Result<Vec<Envelope>, rusqlite::Error> {
+        let mut stmt = self.0.prepare(
+            "SELECT (messages.body)
+        FROM messages
+        INNER JOIN users ON messages.user = users.user_id
+        WHERE users.key = ?
+        ",
+        )?;
+        let rows = stmt.query(params![key.to_hex()])?;
+        let v: Vec<Envelope> = rows.map(|r| r.get(0)).collect()?;
+        Ok(v)
+    }
     pub fn get_keymap(&self) -> Result<BTreeMap<PublicKey, SecretKey>, rusqlite::Error> {
         let mut stmt = self
             .0
@@ -106,7 +123,7 @@ impl<'a> MsgDBHandle<'a> {
     }
     pub fn insert_msg(
         &self,
-        data: String,
+        data: Envelope,
         sent_time_ms: u64,
         user_id: i64,
     ) -> Result<(), rusqlite::Error> {
