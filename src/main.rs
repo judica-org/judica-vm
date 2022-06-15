@@ -1,4 +1,5 @@
 use crate::chat::messages::{Envelope, Header, InnerMessage, Unsigned};
+use crate::chat::nonce::PrecomittedNonce;
 use chat::db::MsgDB;
 use ruma_signatures::Ed25519KeyPair;
 use rusqlite::Connection;
@@ -47,9 +48,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_millis() as u64;
+        let nonce = PrecomittedNonce::new(&secp);
         let mut msg = Envelope {
             header: Header {
-                channel: "hello".into(),
+                next_nonce: nonce.get_public(&secp),
                 key: keypair.public_key().x_only_public_key().0,
                 sent_time_ms: ms,
                 unsigned: Unsigned {
@@ -58,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
             msg: InnerMessage::Ping("hi".into()),
         };
-        msg.sign_with(&keypair, &secp)?;
+        msg.sign_with(&keypair, &secp, nonce)?;
         let resp = client
             .post(format!("http://{}:46789/msg", url))
             .json(&msg)

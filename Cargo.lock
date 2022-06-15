@@ -1311,6 +1311,7 @@ dependencies = [
  "hashlink",
  "libsqlite3-sys",
  "memchr",
+ "serde_json",
  "smallvec",
 ]
 
@@ -1702,6 +1703,7 @@ dependencies = [
  "axum",
  "directories",
  "ed25519-dalek",
+ "fallible-iterator",
  "libtor",
  "reqwest",
  "ruma-serde",

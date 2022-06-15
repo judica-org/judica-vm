@@ -21,16 +21,11 @@ use super::{
     db::MsgDB,
     messages::{Envelope, MessageResponse},
 };
-async fn post_message(
+
+pub async fn post_message(
     Extension(db): Extension<MsgDB>,
     Json(envelope): Json<Envelope>,
 ) -> Result<(Response<()>, Json<MessageResponse>), (StatusCode, &'static str)> {
-    if envelope.header.channel.len() > 128 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Channel ID Longer than 128 Characters",
-        ));
-    }
     tracing::debug!("recieved: {:?}", envelope);
     envelope
         .self_authenticate(&Secp256k1::new())
@@ -55,7 +50,6 @@ async fn post_message(
                 locked
                     .insert_msg(
                         data,
-                        envelope.header.channel,
                         envelope.header.sent_time_ms,
                         userid,
                     )
