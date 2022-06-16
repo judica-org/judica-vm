@@ -7,11 +7,7 @@ use std::{
 
 use fallible_iterator::FallibleIterator;
 use ruma_signatures::Ed25519KeyPair;
-use rusqlite::{
-    params,
-    types::{FromSql, FromSqlError},
-    Connection,
-};
+use rusqlite::{params, Connection};
 use sapio_bitcoin::{
     hashes::{
         hex::{self, ToHex},
@@ -40,22 +36,45 @@ impl MsgDB {
     }
 }
 
-struct SK(SecretKey);
-struct PK(PublicKey);
-impl FromSql for SK {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let s = value.as_str()?;
-        SecretKey::from_str(s)
-            .map_err(|e| FromSqlError::Other(Box::new(e)))
-            .map(SK)
+mod sql_serializers {
+    use std::str::FromStr;
+
+    use rusqlite::types::FromSqlError;
+    use rusqlite::Connection;
+
+    use rusqlite::types;
+
+    use rusqlite::types::FromSql;
+
+    use sapio_bitcoin::PublicKey;
+
+    use sapio_bitcoin::secp256k1::SecretKey;
+    use sapio_bitcoin::XOnlyPublicKey;
+
+    pub(crate) struct SK(pub SecretKey);
+
+    pub(crate) struct PK(pub XOnlyPublicKey);
+
+    impl FromSql for SK {
+        fn column_result(
+            value: rusqlite::types::ValueRef<'_>,
+        ) -> rusqlite::types::FromSqlResult<Self> {
+            let s = value.as_str()?;
+            SecretKey::from_str(s)
+                .map_err(|e| FromSqlError::Other(Box::new(e)))
+                .map(SK)
+        }
     }
-}
-impl FromSql for PK {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let s = value.as_str()?;
-        PublicKey::from_str(s)
-            .map_err(|e| FromSqlError::Other(Box::new(e)))
-            .map(PK)
+
+    impl FromSql for PK {
+        fn column_result(
+            value: rusqlite::types::ValueRef<'_>,
+        ) -> rusqlite::types::FromSqlResult<Self> {
+            let s = value.as_str()?;
+            XOnlyPublicKey::from_str(s)
+                .map_err(|e| FromSqlError::Other(Box::new(e)))
+                .map(PK)
+        }
     }
 }
 pub struct MsgDBHandle<'a>(pub MutexGuard<'a, Connection>);
@@ -271,13 +290,18 @@ impl<'a> MsgDBHandle<'a> {
     }
 
     /// build a keymap for all known keypairs.
-    pub fn get_keymap(&self) -> Result<BTreeMap<PublicKey, SecretKey>, rusqlite::Error> {
+    pub fn get_keymap(&self) -> Result<BTreeMap<XOnlyPublicKey, SecretKey>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare("SELECT (public_key, private_key) FROM private_keys")?;
         let rows = stmt.query([])?;
-        rows.map(|r| Ok((r.get::<_, PK>(0)?.0, r.get::<_, SK>(1)?.0)))
-            .collect()
+        rows.map(|r| {
+            Ok((
+                r.get::<_, sql_serializers::PK>(0)?.0,
+                r.get::<_, sql_serializers::SK>(1)?.0,
+            ))
+        })
+        .collect()
     }
 
     /// adds a hidden service to our connection list
