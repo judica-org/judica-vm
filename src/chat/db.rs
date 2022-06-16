@@ -267,7 +267,7 @@ impl<'a> MsgDBHandle<'a> {
         ])?;
         Ok(())
     }
-    pub fn insert_msg(&self, data: Envelope) -> Result<(), rusqlite::Error> {
+    pub fn try_insert_authenticated_envelope(&self, data: Envelope) -> Result<(), rusqlite::Error> {
         let mut stmt = self.0.prepare(
             "
                                             INSERT INTO messages (body, user_id, received_time)
@@ -343,12 +343,12 @@ mod tests {
             .unwrap()
             .unwrap();
         envelope_1.clone().self_authenticate(&secp).unwrap();
-        handle.insert_msg(envelope_1).unwrap();
+        handle.try_insert_authenticated_envelope(envelope_1).unwrap();
         let envelope_2 = handle
             .create_envelope(InnerMessage::Ping(10), &kp, &secp)
             .unwrap()
             .unwrap();
-        handle.insert_msg(envelope_2.clone()).unwrap();
+        handle.try_insert_authenticated_envelope(envelope_2.clone()).unwrap();
         let tips = handle.get_tips().unwrap();
         assert_eq!(tips.len(), 1);
         assert_eq!(tips[0], envelope_2);

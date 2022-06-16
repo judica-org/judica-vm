@@ -26,29 +26,19 @@ pub async fn post_message(
     Extension(db): Extension<MsgDB>,
     Json(envelope): Json<Envelope>,
 ) -> Result<(Response<()>, Json<MessageResponse>), (StatusCode, &'static str)> {
-    tracing::debug!("recieved: {:?}", envelope);
+    tracing::debug!("Envelope Received: {:?}", envelope);
     envelope
         .self_authenticate(&Secp256k1::new())
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Envelope not valid"))?;
-    tracing::debug!("verified signatures");
-
-    let userid = {
-        let userid = {
-            let locked = db.get_handle().await;
-            locked
-                .locate_user(&envelope.header.key)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "No User Found"))?
-        };
-
-        userid
-    };
-
+    tracing::debug!("Verified Signatures");
     {
+        tracing::debug!("Inserting Into Database");
         let locked = db.get_handle().await;
         locked
-            .insert_msg(envelope.clone())
+            .try_insert_authenticated_envelope(envelope.clone())
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     }
+    tracing::debug!("Responding");
     let r = match envelope.msg {
         InnerMessage::Ping(u) => {
             let ms = std::time::SystemTime::now()
