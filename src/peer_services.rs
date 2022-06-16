@@ -183,7 +183,7 @@ fn generate_new_user() -> Result<
     let secp = Secp256k1::new();
     let keypair: _ = KeyPair::new(&secp, &mut rand::thread_rng());
     let nonce = PrecomittedNonce::new(&secp);
-    let sent_time_ms = util::now().ok_or("Unknown Time")?;
+    let sent_time_ms = util::now();
     let mut msg = Envelope {
         header: Header {
             height: 0,

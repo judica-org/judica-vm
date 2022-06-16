@@ -125,7 +125,7 @@ fn make_test_user(
             prev_msg: sha256::Hash::hash(&[]),
             tips: vec![],
             height: 0,
-            sent_time_ms: util::now().unwrap(),
+            sent_time_ms: util::now(),
             unsigned: Unsigned { signature: None },
         },
         msg: InnerMessage::Ping(0),

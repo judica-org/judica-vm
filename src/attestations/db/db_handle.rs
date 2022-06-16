@@ -121,7 +121,7 @@ impl<'a> MsgDBHandle<'a> {
         // Side effect free...
         let tips = self.get_tips_for_all_users()?;
         let my_tip = self.get_tip_for_user_by_key(key)?;
-        let sent_time_ms = util::now().ok_or("Unknown Time").expect("Time is Known");
+        let sent_time_ms = util::now();
         let secret = self.get_secret_for_public_nonce(my_tip.header.next_nonce)?;
         // Has side effects!
         let next_nonce = self.generate_fresh_nonce_for_user_by_key(secp, key)?;
@@ -324,10 +324,8 @@ impl<'a> MsgDBHandle<'a> {
                                             VALUES (?, ?, (SELECT user_id FROM users WHERE key = ?), ?)
                                             ",
         )?;
-        let time = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("System Time OK")
-            .as_millis() as i64;
+        let time = util::now();
+
         stmt.insert(rusqlite::params![
             data,
             data.clone()
