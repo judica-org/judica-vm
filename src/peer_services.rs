@@ -1,4 +1,4 @@
-use tokio::time::MissedTickBehavior;
+use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
 
 use super::*;
 
@@ -31,11 +31,12 @@ pub async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>
                     }
                 },
             );
+            // Open connections to all services on the list and put into our task set.
             for url in create_services.into_iter() {
                 let client = client.clone();
                 task_set.insert(
                     url.clone(),
-                    tokio::spawn(poll_service_for_tips(secp.clone(), client, url, db.clone())),
+                    tokio::spawn(make_peer(secp.clone(), client, url, db.clone())),
                 );
             }
         }
@@ -44,64 +45,43 @@ pub async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
+/// Helps with type inference
 const INFER_UNIT: Result<(), Box<dyn Error + Send + Sync + 'static>> = Ok(());
-async fn poll_service_for_tips<C: Verification + 'static>(
+
+async fn make_peer<C: Verification + 'static>(
     secp: Arc<Secp256k1<C>>,
     client: reqwest::Client,
     url: String,
     conn: MsgDB,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Vec<sha256::Hash>>();
-    let (tx_envelope, mut rx_envelope) = tokio::sync::mpsc::unbounded_channel::<Vec<Envelope>>();
-    // tip_resolver ingests a Vec<Hash> and queries a service for the envelope
-    // of those hashes, then sends those envelopers for processing.
-    let tip_resolver = {
-        let client = client.clone();
-        let url = url.clone();
-        let tx_envelope = tx_envelope.clone();
-        tokio::spawn(async move {
-            loop {
-                if let Some(tips) = rx.recv().await {
-                    let resp: Vec<Envelope> = client
-                        .get(format!("http://{}:{}/tips", url, PORT))
-                        .query(&Tips { tips })
-                        .send()
-                        .await?
-                        .json()
-                        .await?;
-                    tx_envelope.send(resp)?;
-                }
-            }
-            INFER_UNIT
-        })
-    };
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Vec<sha256::Hash>>();
+    let (tx_envelope, rx_envelope) = tokio::sync::mpsc::unbounded_channel::<Vec<Envelope>>();
 
-    // tip_fetcher periodically (randomly)
-    // pings a hidden service for it's latest tips
-    let tip_fetcher = {
-        let client = client.clone();
-        let url = url.clone();
-        tokio::spawn(async move {
-            loop {
-                tracing::debug!("Sending message...");
-                let resp: Vec<Envelope> = client
-                    .get(format!("http://{}:{}/tips", url, PORT))
-                    .send()
-                    .await?
-                    .json()
-                    .await?;
-                tx_envelope.send(resp)?;
-                let d = Duration::from_secs(15)
-                    + Duration::from_millis(rand::thread_rng().gen_range(0, 1000));
-                tokio::time::sleep(d).await;
-            }
-            INFER_UNIT
-        })
+    let mut envelope_processor = envelope_processor(conn, secp, rx_envelope, tx);
+    let mut tip_resolver = tip_resolver(client.clone(), url.clone(), tx_envelope.clone(), rx);
+    let mut tip_fetcher = tip_fetcher(client, url, tx_envelope);
+    let _: () = tokio::select! {
+        a = &mut envelope_processor => {a??}
+        a = &mut tip_fetcher => {a??}
+        a = &mut tip_resolver => {a??}
     };
-    // enevelope processor verifies an envelope and then
-    // forwards any unknown tips to the tip_resolver.
+    // if any of the above selected, shut down this peer.
+    envelope_processor.abort();
+    tip_fetcher.abort();
+    tip_resolver.abort();
+
+    INFER_UNIT
+}
+
+/// enevelope processor verifies an envelope and then forwards any unknown tips
+/// to the tip_resolver.
+fn envelope_processor<C: Verification + 'static>(
+    conn: MsgDB,
+    secp: Arc<Secp256k1<C>>,
+    mut rx_envelope: tokio::sync::mpsc::UnboundedReceiver<Vec<Envelope>>,
+    tx: UnboundedSender<Vec<sha256::Hash>>,
+) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     let envelope_processor = {
-        let secp = secp.clone();
         tokio::spawn(async move {
             loop {
                 if let Some(resp) = rx_envelope.recv().await {
@@ -136,11 +116,59 @@ async fn poll_service_for_tips<C: Verification + 'static>(
             INFER_UNIT
         })
     };
-    let (a, b, c) = tokio::join!(tip_fetcher, tip_resolver, envelope_processor);
-    a??;
-    b??;
-    c??;
-    Ok::<(), Box<dyn Error + Send + Sync + 'static>>(())
+    envelope_processor
+}
+
+/// tip_fetcher periodically (randomly) pings a hidden service for it's
+/// latest tips
+fn tip_fetcher(
+    client: reqwest::Client,
+    url: String,
+    tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
+) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
+    let client = client.clone();
+    let url = url.clone();
+    tokio::spawn(async move {
+        loop {
+            tracing::debug!("Sending message...");
+            let resp: Vec<Envelope> = client
+                .get(format!("http://{}:{}/tips", url, PORT))
+                .send()
+                .await?
+                .json()
+                .await?;
+            tx_envelope.send(resp)?;
+            let d = Duration::from_secs(15)
+                + Duration::from_millis(rand::thread_rng().gen_range(0, 1000));
+            tokio::time::sleep(d).await;
+        }
+        INFER_UNIT
+    })
+}
+
+/// tip_resolver ingests a Vec<Hash> and queries a service for the envelope
+/// of those hashes, then sends those envelopers for processing.
+fn tip_resolver(
+    client: reqwest::Client,
+    url: String,
+    tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<sha256::Hash>>,
+) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
+    tokio::spawn(async move {
+        loop {
+            if let Some(tips) = rx.recv().await {
+                let resp: Vec<Envelope> = client
+                    .get(format!("http://{}:{}/tips", url, PORT))
+                    .query(&Tips { tips })
+                    .send()
+                    .await?
+                    .json()
+                    .await?;
+                tx_envelope.send(resp)?;
+            }
+        }
+        INFER_UNIT
+    })
 }
 
 fn generate_new_user() -> Result<
