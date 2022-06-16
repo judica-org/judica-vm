@@ -21,7 +21,7 @@ use tokio::sync::Mutex;
 use crate::attestations::messages::InnerMessage;
 
 use super::{
-    db::MsgDB,
+    db::connection::MsgDB,
     messages::{Envelope, MessageResponse},
 };
 

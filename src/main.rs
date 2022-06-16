@@ -1,6 +1,6 @@
 use crate::attestations::messages::{Envelope, Header, InnerMessage, Unsigned};
 use crate::attestations::nonce::PrecomittedNonce;
-use attestations::db::MsgDB;
+use attestations::db::connection::MsgDB;
 use attestations::server::Tips;
 use ruma_signatures::Ed25519KeyPair;
 use rusqlite::Connection;
