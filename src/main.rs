@@ -16,9 +16,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 mod attestations;
+mod peer_services;
 mod tor;
 mod util;
-mod peer_services;
 
 const PORT: u16 = 46789;
 #[tokio::main]
@@ -41,9 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let jh2 = attestations::server::run(PORT, mdb.clone()).await;
     let jh = tor::start(data_dir.clone(), PORT);
-    let client =peer_services::client_fetching(mdb.clone());
+    let client = peer_services::client_fetching(mdb.clone());
 
     let (_, _, _) = tokio::join!(jh2, jh, client);
     Ok(())
 }
-

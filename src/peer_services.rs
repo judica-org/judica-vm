@@ -1,3 +1,5 @@
+use tokio::time::MissedTickBehavior;
+
 use super::*;
 
 pub async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>> {
@@ -6,15 +8,20 @@ pub async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>
 
     let secp = Arc::new(Secp256k1::new());
     tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut task_set: HashMap<String, JoinHandle<Result<(), _>>> = HashMap::new();
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+            interval.tick().await;
             let mut create_services: HashSet<_> = db
                 .get_handle()
                 .await
                 .get_all_hidden_services()?
                 .into_iter()
                 .collect();
+            // Drop anything that is finished, we will re-add it later if still in create_services
+            task_set.retain(|k, v| !v.is_finished());
+            // If it is no longer in our services DB, drop it / disconnect
             task_set.retain(
                 |service_id, service| match create_services.take(service_id) {
                     Some(_) => true,
