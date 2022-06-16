@@ -70,6 +70,7 @@ impl<'a> MsgDBHandle<'a> {
             CREATE TABLE IF NOT EXISTS messages
                 (message_id INTEGER PRIMARY KEY,
                     body TEXT NOT NULL,
+                    hash TEXT NOT NULL,
                     user_id INTEGER NOT NULL,
                     received_time INTEGER NOT NULL,
                     height INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.height')) STORED,
@@ -308,6 +309,42 @@ impl<'a> MsgDBHandle<'a> {
         Ok(())
     }
 
+    pub fn message_exists(&self, hash: &sha256::Hash) -> Result<bool, rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare("SELECT EXISTS(SELECT 1 FROM messages WHERE hash = ?)")?;
+        stmt.exists([hash.to_hex()])
+    }
+
+    pub fn messages_by_hash<'i, I>(&self, hashes: I) -> Result<Vec<Envelope>, rusqlite::Error>
+    where
+        I: Iterator<Item = &'i sha256::Hash>,
+    {
+        let mut stmt = self.0.prepare("SELECT body FROM messages WHERE hash = ?")?;
+        let r: Result<Vec<_>, _> = hashes
+            .map(|hash| stmt.query_row([hash.to_hex()], |r| r.get::<_, Envelope>(0)))
+            .collect();
+        r
+    }
+    pub fn message_not_exists_it<'i, I>(
+        &self,
+        hashes: I,
+    ) -> Result<Vec<sha256::Hash>, rusqlite::Error>
+    where
+        I: Iterator<Item = &'i sha256::Hash>,
+    {
+        let mut stmt = self
+            .0
+            .prepare("SELECT EXISTS(SELECT 1 FROM messages WHERE hash = ?)")?;
+        hashes
+            .filter_map(|hash| match stmt.exists([hash.to_hex()]) {
+                Ok(true) => None,
+                Ok(false) => Some(Ok(*hash)),
+                Err(x) => Some(Err(x)),
+            })
+            .collect()
+    }
+
     /// attempts to put an authenticated envelope in the DB
     ///
     /// Will fail if the key is not registered.
@@ -318,15 +355,23 @@ impl<'a> MsgDBHandle<'a> {
         let data = data.inner();
         let mut stmt = self.0.prepare(
             "
-                                            INSERT INTO messages (body, user_id, received_time)
-                                            VALUES (?, (SELECT user_id FROM users WHERE key = ?), ?)
+                                            INSERT INTO messages (body, hash, user_id, received_time)
+                                            VALUES (?, ?, (SELECT user_id FROM users WHERE key = ?), ?)
                                             ",
         )?;
         let time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("System Time OK")
             .as_millis() as i64;
-        stmt.insert(rusqlite::params![data, data.header.key.to_hex(), time])?;
+        stmt.insert(rusqlite::params![
+            data,
+            data.clone()
+                .canonicalized_hash()
+                .expect("Hashing should always succeed?")
+                .to_hex(),
+            data.header.key.to_hex(),
+            time
+        ])?;
         Ok(())
     }
 
