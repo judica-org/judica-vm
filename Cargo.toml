@@ -18,6 +18,7 @@ ruma-signatures = "0.10.0"
 ruma-serde = "0.6.0"
 directories = "3.0.1"
 fallible-iterator = "0.2.0"
+futures = "0.3.21"
 [dependencies.ed25519-dalek]
 version= "1.0.1"
 features=['serde']

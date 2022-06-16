@@ -22,6 +22,23 @@ use super::{
     messages::{Envelope, MessageResponse},
 };
 
+pub async fn get_tip_handler(
+    Extension(db): Extension<MsgDB>,
+) -> Result<(Response<()>, Json<Vec<Envelope>>), (StatusCode, &'static str)> {
+    let r = db
+        .get_handle()
+        .await
+        .get_tip_for_known_keys()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+    Ok((
+        Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(())
+            .expect("Response<()> should always be valid"),
+        Json(r),
+    ))
+}
 pub async fn post_message(
     Extension(db): Extension<MsgDB>,
     Json(envelope): Json<Envelope>,
@@ -65,6 +82,7 @@ pub async fn run(port: u16, db: MsgDB) -> tokio::task::JoinHandle<()> {
         let app = Router::new()
             // `POST /msg` goes to `msg`
             .route("/msg", post(post_message))
+            .route("/tips", get(get_tip_handler))
             .layer(Extension(db));
 
         // run our app with hyper
