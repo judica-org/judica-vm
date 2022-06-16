@@ -60,7 +60,9 @@ impl FromSql for PK {
 }
 pub struct MsgDBHandle<'a>(pub MutexGuard<'a, Connection>);
 impl<'a> MsgDBHandle<'a> {
-    pub fn ensure_created(&mut self) {
+    /// Creates all the required tables for the application.
+    /// Safe to call multiple times
+    pub fn setup_tables(&mut self) {
         self.0.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, nickname TEXT , key TEXT UNIQUE);
@@ -70,19 +72,11 @@ impl<'a> MsgDBHandle<'a> {
                     body TEXT NOT NULL,
                     user_id INTEGER NOT NULL,
                     received_time INTEGER NOT NULL,
+                    height INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.height')) STORED,
+                    sent_time INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.sent_time_ms')) STORED,
                     FOREIGN KEY(user_id) references users(user_id),
                     UNIQUE(received_time, body, user_id)
                 );
-
-            ALTER TABLE messages
-            ADD COLUMN height INTEGER NOT NULL
-            as (json_extract(body, '$.header.height'));
-
-            ALTER TABLE messages
-            ADD COLUMN sent_time INTEGER NOT NULL
-            as (json_extract(body, '$.header.sent_time_ms'));
-                
-            CREATE INDEX messages_json_indexes on messages(height, sent_time);
 
 
             CREATE TABLE IF NOT EXISTS hidden_services (service_id INTEGER PRIMARY KEY, service_url TEXT UNIQUE);
@@ -107,17 +101,19 @@ impl<'a> MsgDBHandle<'a> {
         .unwrap();
     }
 
-    pub fn fresh_nonce_for<C: Signing>(
+    /// Creates a new random nonce and saves it for the given user.
+    pub fn generate_fresh_nonce_for_user_by_key<C: Signing>(
         &self,
         secp: &Secp256k1<C>,
         key: XOnlyPublicKey,
     ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
         let nonce = PrecomittedNonce::new(secp);
-        let pk_nonce = self.save_nonce(nonce, secp, key)?;
+        let pk_nonce = self.save_nonce_for_user_by_key(nonce, secp, key)?;
         Ok(pk_nonce)
     }
 
-    fn save_nonce<C: Signing>(
+    /// Saves an arbitrary nonce for the given user.
+    fn save_nonce_for_user_by_key<C: Signing>(
         &self,
         nonce: PrecomittedNonce,
         secp: &Secp256k1<C>,
@@ -140,7 +136,8 @@ impl<'a> MsgDBHandle<'a> {
         ])?;
         Ok(pk_nonce)
     }
-    pub fn find_nonce_secret(
+    /// Returns the secret nonce for a given public nonce
+    pub fn get_secret_for_public_nonce(
         &self,
         nonce: PrecomittedPublicNonce,
     ) -> Result<PrecomittedNonce, rusqlite::Error> {
@@ -149,7 +146,11 @@ impl<'a> MsgDBHandle<'a> {
             .prepare("SELECT (private_key) FROM message_nonces where public_key = ?")?;
         stmt.query_row([nonce.0.to_hex()], |r| r.get::<_, PrecomittedNonce>(0))
     }
-    pub fn create_envelope<C: Signing>(
+
+    /// given an arbitrary inner message, generates an envelope and signs it.
+    ///
+    /// Calling multiple times with a given nonce would result in nonce reuse.
+    pub fn wrap_message_in_envelope_for_user_by_key<C: Signing>(
         &self,
         msg: InnerMessage,
         keypair: &KeyPair,
@@ -157,12 +158,12 @@ impl<'a> MsgDBHandle<'a> {
     ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {
         let key: XOnlyPublicKey = keypair.x_only_public_key().0;
         // Side effect free...
-        let tips = self.get_tips()?;
-        let my_tip = self.get_tip_for_user(key)?;
+        let tips = self.get_tips_for_all_users()?;
+        let my_tip = self.get_tip_for_user_by_key(key)?;
         let sent_time_ms = util::now().ok_or("Unknown Time").expect("Time is Known");
-        let secret = self.find_nonce_secret(my_tip.header.next_nonce)?;
+        let secret = self.get_secret_for_public_nonce(my_tip.header.next_nonce)?;
         // Has side effects!
-        let next_nonce = self.fresh_nonce_for(secp, key)?;
+        let next_nonce = self.generate_fresh_nonce_for_user_by_key(secp, key)?;
         let mut msg = Envelope {
             header: Header {
                 height: my_tip.header.height + 1,
@@ -187,6 +188,7 @@ impl<'a> MsgDBHandle<'a> {
         Ok(msg.sign_with(keypair, secp, secret).map(move |_| msg))
     }
 
+    /// Returns the message at a given height for a key
     pub fn get_message_at_height_for_user(
         &self,
         key: XOnlyPublicKey,
@@ -195,7 +197,11 @@ impl<'a> MsgDBHandle<'a> {
         let mut stmt = self.0.prepare("SELECT messages.body  FROM messages WHERE user_id = (SELECT user_id from users where key = ?) AND height = ?")?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
-    pub fn get_tip_for_user(&self, key: XOnlyPublicKey) -> Result<Envelope, rusqlite::Error> {
+    /// finds the most recent message for a user by their key
+    pub fn get_tip_for_user_by_key(
+        &self,
+        key: XOnlyPublicKey,
+    ) -> Result<Envelope, rusqlite::Error> {
         let mut stmt = self.0.prepare(
             "SELECT m.body
             FROM messages m
@@ -207,7 +213,9 @@ impl<'a> MsgDBHandle<'a> {
         )?;
         stmt.query_row([key.to_hex()], |r| r.get(0))
     }
-    pub fn get_tips(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+
+    /// finds all most recent messages for all users
+    pub fn get_tips_for_all_users(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare("SELECT body, max(height)  FROM   messages GROUP BY user_id")?;
@@ -215,7 +223,9 @@ impl<'a> MsgDBHandle<'a> {
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
     }
-    pub fn load_all_messages(
+
+    /// loads all the messages from a given user
+    pub fn load_all_messages_for_user_by_key(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
     ) -> Result<Result<Vec<Envelope>, (Envelope, Envelope)>, rusqlite::Error> {
@@ -241,6 +251,8 @@ impl<'a> MsgDBHandle<'a> {
         }
         Ok(Ok(vs))
     }
+
+    /// build a keymap for all known keypairs.
     pub fn get_keymap(&self) -> Result<BTreeMap<PublicKey, SecretKey>, rusqlite::Error> {
         let mut stmt = self
             .0
@@ -249,6 +261,8 @@ impl<'a> MsgDBHandle<'a> {
         rows.map(|r| Ok((r.get::<_, PK>(0)?.0, r.get::<_, SK>(1)?.0)))
             .collect()
     }
+
+    /// adds a hidden service to our connection list
     pub fn insert_hidden_service(&self, s: String) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
@@ -256,6 +270,8 @@ impl<'a> MsgDBHandle<'a> {
         stmt.insert(rusqlite::params![s])?;
         Ok(())
     }
+
+    /// saves a keypair to our keyset
     pub fn save_keypair(&self, kp: KeyPair) -> Result<(), rusqlite::Error> {
         let mut stmt = self.0
                                 .prepare("
@@ -267,6 +283,10 @@ impl<'a> MsgDBHandle<'a> {
         ])?;
         Ok(())
     }
+
+    /// attempts to put an authenticated envelope in the DB
+    ///
+    /// Will fail if the key is not registered.
     pub fn try_insert_authenticated_envelope(
         &self,
         data: Authenticated<Envelope>,
@@ -286,6 +306,7 @@ impl<'a> MsgDBHandle<'a> {
         Ok(())
     }
 
+    /// finds a user by key
     pub fn locate_user(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
@@ -296,6 +317,7 @@ impl<'a> MsgDBHandle<'a> {
         stmt.query_row([key.to_hex()], |row| row.get(0))
     }
 
+    /// creates a new user from a genesis envelope
     pub fn insert_user_by_genesis_envelope(
         &self,
         nickname: String,
@@ -324,7 +346,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_db() {
-        setup_db().await;
+        let conn = setup_db().await;
+        // Tests that setup can be called more than once...
+        conn.get_handle().await.setup_tables();
     }
 
     #[tokio::test]
@@ -342,7 +366,7 @@ mod tests {
         let kp = make_test_user(&secp, &conn, test_user).await;
         let handle = conn.get_handle().await;
         let envelope_1 = handle
-            .create_envelope(InnerMessage::Ping(10), &kp, &secp)
+            .wrap_message_in_envelope_for_user_by_key(InnerMessage::Ping(10), &kp, &secp)
             .unwrap()
             .unwrap();
         let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
@@ -350,24 +374,28 @@ mod tests {
             .try_insert_authenticated_envelope(envelope_1.clone())
             .unwrap();
 
-        let tips = handle.get_tips().unwrap();
+        let tips = handle.get_tips_for_all_users().unwrap();
         assert_eq!(tips.len(), 1);
         assert_eq!(&tips[0], envelope_1.inner_ref());
-        let my_tip = handle.get_tip_for_user(kp.x_only_public_key().0).unwrap();
+        let my_tip = handle
+            .get_tip_for_user_by_key(kp.x_only_public_key().0)
+            .unwrap();
         assert_eq!(&my_tip, envelope_1.inner_ref());
 
         let envelope_2 = handle
-            .create_envelope(InnerMessage::Ping(10), &kp, &secp)
+            .wrap_message_in_envelope_for_user_by_key(InnerMessage::Ping(10), &kp, &secp)
             .unwrap()
             .unwrap();
         let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
         handle
             .try_insert_authenticated_envelope(envelope_2.clone())
             .unwrap();
-        let tips = handle.get_tips().unwrap();
+        let tips = handle.get_tips_for_all_users().unwrap();
         assert_eq!(tips.len(), 1);
         assert_eq!(&tips[0], envelope_2.inner_ref());
-        let my_tip = handle.get_tip_for_user(kp.x_only_public_key().0).unwrap();
+        let my_tip = handle
+            .get_tip_for_user_by_key(kp.x_only_public_key().0)
+            .unwrap();
         assert_eq!(&my_tip, envelope_2.inner_ref());
     }
 
@@ -397,13 +425,13 @@ mod tests {
         handle
             .insert_user_by_genesis_envelope(name, genesis)
             .unwrap();
-        handle.save_nonce(nonce, secp, key).unwrap();
+        handle.save_nonce_for_user_by_key(nonce, secp, key).unwrap();
         kp
     }
 
     async fn setup_db() -> MsgDB {
         let conn = MsgDB::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())));
-        conn.get_handle().await.ensure_created();
+        conn.get_handle().await.setup_tables();
         conn
     }
     #[tokio::test]

@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut mdb = MsgDB::new(Arc::new(tokio::sync::Mutex::new(
         Connection::open(chat_db_file).unwrap(),
     )));
-    mdb.get_handle().await.ensure_created();
+    mdb.get_handle().await.setup_tables();
 
     let jh2 = chat::server::run(PORT, mdb.clone()).await;
     let jh = tor::start(data_dir.clone(), PORT);
