@@ -17,34 +17,50 @@ use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum InnerMessage {
     Data(String),
     Ping(u64),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Unsigned {
     pub signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Header {
     pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
     pub next_nonce: PrecomittedPublicNonce,
+    pub prev_msg: sha256::Hash,
+    pub tips: Vec<(XOnlyPublicKey, u64, sha256::Hash)>,
+    pub height: u64,
     pub sent_time_ms: u64,
     pub unsigned: Unsigned,
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Envelope {
     pub header: Header,
     pub msg: InnerMessage,
 }
+
+impl Envelope {
+    pub fn extract_used_nonce(&self) -> Option<PrecomittedPublicNonce> {
+        XOnlyPublicKey::from_slice(&self.header.unsigned.signature?.as_ref()[..32])
+            .map(PrecomittedPublicNonce)
+            .ok()
+    }
+}
+
 impl ToSql for Envelope {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        let s = serde_json::to_string(self)
+        let s = serde_json::to_value(self)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        Ok(s.into())
+        let c: BTreeMap<String, CanonicalJsonValue> = serde_json::from_value(s)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+        Ok(ruma_signatures::canonical_json(&c)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?
+            .into())
     }
 }
 impl FromSql for Envelope {
@@ -65,10 +81,12 @@ pub enum AuthenticationError {
     SerializerError(serde_json::Error),
     NoSignature,
     ValidationError(sapio_bitcoin::secp256k1::Error),
+    HashingError,
 }
 #[derive(Debug)]
 pub enum SigningError {
     SerializerError(serde_json::Error),
+    HashingError,
 }
 
 impl Display for SigningError {
@@ -97,7 +115,7 @@ impl Envelope {
             .ok_or(AuthenticationError::NoSignature)?;
         let msg = redacted
             .msg_hash()
-            .map_err(AuthenticationError::SerializerError)?;
+            .ok_or(AuthenticationError::HashingError)?;
         secp.verify_schnorr(&sig, &msg, &self.header.key)
             .map_err(AuthenticationError::ValidationError)
     }
@@ -110,24 +128,25 @@ impl Envelope {
     ) -> Result<(), SigningError> {
         self.header.unsigned.signature = None;
 
-        let msg = self
-            .clone()
-            .msg_hash()
-            .map_err(SigningError::SerializerError)?;
+        let msg = self.clone().msg_hash().ok_or(SigningError::HashingError)?;
         self.header.unsigned.signature =
             Some(sign_with_precomitted_nonce(secp, &msg, keypair, nonce));
 
         Ok(())
     }
-    fn msg_hash(self) -> Result<SchnorrMessage, serde_json::Error> {
+    pub fn canonicalized_hash(self) -> Option<sha256::Hash> {
         let msg_str = serde_json::to_value(self)
             .and_then(|reserialized| serde_json::from_value(reserialized))
-            .and_then(|canonicalized: BTreeMap<String, CanonicalJsonValue>| {
-                serde_json::to_string(&canonicalized)
-            })?;
-        let msg_hash = sapio_bitcoin::hashes::sha256::Hash::hash(msg_str.as_bytes());
+            .ok()?;
+        let canonical = ruma_signatures::canonical_json(&msg_str).ok()?;
+        Some(sapio_bitcoin::hashes::sha256::Hash::hash(
+            canonical.as_bytes(),
+        ))
+    }
+    pub fn msg_hash(self) -> Option<SchnorrMessage> {
+        let msg_hash = self.canonicalized_hash()?;
         let msg = SchnorrMessage::from(W(msg_hash));
-        Ok(msg)
+        Some(msg)
     }
 }
 

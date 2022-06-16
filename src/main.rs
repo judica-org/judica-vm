@@ -3,17 +3,18 @@ use crate::chat::nonce::PrecomittedNonce;
 use chat::db::MsgDB;
 use ruma_signatures::Ed25519KeyPair;
 use rusqlite::Connection;
-use sapio_bitcoin::hashes::Hash;
+use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::{rand, Secp256k1};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::{hashes::hex::ToHex, util::key};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::JoinHandle;
-const PORT: u16 = 46789;
 mod chat;
 mod tor;
+mod util;
 
+const PORT: u16 = 46789;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
@@ -45,20 +46,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::debug!("Waiting to send message...");
         tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
         tracing::debug!("Sending message...");
-        let ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_millis() as u64;
         let nonce = PrecomittedNonce::new(&secp);
+        let sent_time_ms = util::now().ok_or("Unknown Time")?;
         let mut msg = Envelope {
             header: Header {
+                height: 0,
+                prev_msg: sha256::Hash::hash(&[]),
+                tips: Vec::new(),
                 next_nonce: nonce.get_public(&secp),
                 key: keypair.public_key().x_only_public_key().0,
-                sent_time_ms: ms,
+                sent_time_ms,
                 unsigned: Unsigned {
                     signature: Default::default(),
                 },
             },
-            msg: InnerMessage::Ping(ms),
+            msg: InnerMessage::Ping(sent_time_ms),
         };
         msg.sign_with(&keypair, &secp, nonce)?;
         let resp = client

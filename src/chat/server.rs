@@ -46,7 +46,7 @@ pub async fn post_message(
     {
         let locked = db.get_handle().await;
         locked
-            .insert_msg(envelope.clone(), envelope.header.sent_time_ms, userid)
+            .insert_msg(envelope.clone())
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     }
     let r = match envelope.msg {

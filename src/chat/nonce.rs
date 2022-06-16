@@ -1,5 +1,8 @@
 use rand::Rng;
 use ruma_serde::CanonicalJsonValue;
+use rusqlite::types::{FromSql, FromSqlError};
+use rusqlite::ToSql;
+use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash, HashEngine, Hmac};
 use sapio_bitcoin::secp256k1::ffi::types::{c_char, c_int, c_uchar, c_void, size_t};
 use sapio_bitcoin::secp256k1::ffi::{CPtr, SchnorrSigExtraParams};
@@ -15,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Display;
+use std::str::FromStr;
 pub unsafe extern "C" fn custom_nonce(
     nonce32: *mut c_uchar,
     msg32: *const c_uchar,
@@ -30,7 +34,7 @@ pub unsafe extern "C" fn custom_nonce(
 }
 
 #[derive(Clone, Copy)]
-pub struct PrecomittedNonce(SecretKey);
+pub struct PrecomittedNonce(pub SecretKey);
 
 impl PrecomittedNonce {
     pub fn new<C: Signing>(secp: &Secp256k1<C>) -> Self {
@@ -48,8 +52,21 @@ impl PrecomittedNonce {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PrecomittedPublicNonce(XOnlyPublicKey);
+impl ToSql for PrecomittedNonce {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(self.0.secret_bytes().to_hex().into())
+    }
+}
+impl FromSql for PrecomittedNonce {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        SecretKey::from_str(value.as_str()?)
+            .map(PrecomittedNonce)
+            .map_err(|e| FromSqlError::Other(Box::new(e)))
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Copy)]
+pub struct PrecomittedPublicNonce(pub XOnlyPublicKey);
 pub fn sign_with_precomitted_nonce<C: Signing>(
     secp: &Secp256k1<C>,
     msg: &SchnorrMessage,
