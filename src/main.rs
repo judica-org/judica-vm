@@ -4,13 +4,16 @@ use chat::db::MsgDB;
 use ruma_signatures::Ed25519KeyPair;
 use rusqlite::Connection;
 use sapio_bitcoin::hashes::{sha256, Hash};
+use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::{hashes::hex::ToHex, util::key};
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread::JoinHandle;
+use std::time::Duration;
+use tokio::task::JoinHandle;
 mod chat;
 mod tor;
 mod util;
@@ -46,25 +49,56 @@ async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>> {
     let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:19050")?;
     let client = reqwest::Client::builder().proxy(proxy).build()?;
 
-    loop {
-        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-        let services = db.get_handle().await.get_all_hidden_services()?;
-        let reqs = services.into_iter().map(|url| {
-            let client = client.clone();
-            async move {
-                tracing::debug!("Sending message...");
-                let resp : Vec<Envelope> = client
-                    .get(format!("http://{}:{}/tips", url, PORT))
-                    .send()
-                    .await?
-                    .json()
-                    .await?;
-                tracing::debug!("Response: {:?}", resp);
-                Ok::<(), Box<dyn Error>>(())
+    tokio::spawn(async move {
+        let mut task_set: HashMap<String, JoinHandle<Result<(), _>>> = HashMap::new();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+            let mut create_services: HashSet<_> = db
+                .get_handle()
+                .await
+                .get_all_hidden_services()?
+                .into_iter()
+                .collect();
+            task_set.retain(
+                |service_id, service| match create_services.take(service_id) {
+                    Some(_) => true,
+                    None => {
+                        service.abort();
+                        false
+                    }
+                },
+            );
+            for url in create_services.into_iter() {
+                let client = client.clone();
+                task_set.insert(
+                    url.clone(),
+                    tokio::spawn(poll_service_for_tips(client, url)),
+                );
             }
-        });
-        futures::future::join_all(reqs).await;
+        }
+        Ok::<(), Box<dyn Error + Send + Sync + 'static>>(())
+    });
+    Ok(())
+}
+
+async fn poll_service_for_tips(
+    client: reqwest::Client,
+    url: String,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    loop {
+        tracing::debug!("Sending message...");
+        let resp: Vec<Envelope> = client
+            .get(format!("http://{}:{}/tips", url, PORT))
+            .send()
+            .await?
+            .json()
+            .await?;
+        tracing::debug!("Response: {:?}", resp);
+        let d =
+            Duration::from_secs(15) + Duration::from_millis(rand::thread_rng().gen_range(0, 1000));
+        tokio::time::sleep(d).await;
     }
+    Ok::<(), Box<dyn Error + Send + Sync + 'static>>(())
 }
 
 fn generate_new_user() -> Result<
