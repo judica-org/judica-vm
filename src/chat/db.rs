@@ -25,7 +25,7 @@ use tokio::sync::{Mutex, MutexGuard};
 use crate::util::{self, now};
 
 use super::{
-    messages::{Envelope, Header, InnerMessage, SigningError, Unsigned},
+    messages::{Authenticated, Envelope, Header, InnerMessage, SigningError, Unsigned},
     nonce::{PrecomittedNonce, PrecomittedPublicNonce},
 };
 
@@ -63,7 +63,7 @@ impl<'a> MsgDBHandle<'a> {
     pub fn ensure_created(&mut self) {
         self.0.execute_batch(
             "
-            CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, nickname TEXT , key TEXT UNIQUE, initial TEXT);
+            CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, nickname TEXT , key TEXT UNIQUE);
 
             CREATE TABLE IF NOT EXISTS messages
                 (message_id INTEGER PRIMARY KEY,
@@ -187,9 +187,13 @@ impl<'a> MsgDBHandle<'a> {
         Ok(msg.sign_with(keypair, secp, secret).map(move |_| msg))
     }
 
-    pub fn get_genesis_for_user(&self, key: XOnlyPublicKey) -> Result<Envelope, rusqlite::Error> {
-        let mut stmt = self.0.prepare("SELECT initial FROM users WHERE key = ?")?;
-        stmt.query_row([key.to_hex()], |r| r.get(0))
+    pub fn get_message_at_height_for_user(
+        &self,
+        key: XOnlyPublicKey,
+        height: u64,
+    ) -> Result<Envelope, rusqlite::Error> {
+        let mut stmt = self.0.prepare("SELECT messages.body  FROM messages WHERE user_id = (SELECT user_id from users where key = ?) AND height = ?")?;
+        stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
     pub fn get_tip_for_user(&self, key: XOnlyPublicKey) -> Result<Envelope, rusqlite::Error> {
         let mut stmt = self.0.prepare(
@@ -201,11 +205,7 @@ impl<'a> MsgDBHandle<'a> {
             LIMIT 1
             ",
         )?;
-        let mut last = stmt.query([key.to_hex()])?;
-        match last.next()? {
-            Some(row) => row.get(0),
-            None => self.get_genesis_for_user(key),
-        }
+        stmt.query_row([key.to_hex()], |r| r.get(0))
     }
     pub fn get_tips(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
@@ -267,7 +267,11 @@ impl<'a> MsgDBHandle<'a> {
         ])?;
         Ok(())
     }
-    pub fn try_insert_authenticated_envelope(&self, data: Envelope) -> Result<(), rusqlite::Error> {
+    pub fn try_insert_authenticated_envelope(
+        &self,
+        data: Authenticated<Envelope>,
+    ) -> Result<(), rusqlite::Error> {
+        let data = data.inner();
         let mut stmt = self.0.prepare(
             "
                                             INSERT INTO messages (body, user_id, received_time)
@@ -292,18 +296,17 @@ impl<'a> MsgDBHandle<'a> {
         stmt.query_row([key.to_hex()], |row| row.get(0))
     }
 
-    pub fn insert_user(
+    pub fn insert_user_by_genesis_envelope(
         &self,
-        key: &XOnlyPublicKey,
         nickname: String,
-        initial: Envelope,
+        envelope: Authenticated<Envelope>,
     ) -> Result<String, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("INSERT INTO users (nickname, key, initial) VALUES (?, ?, ?)")?;
-        let hex_key = key.to_hex();
-        let env = serde_json::to_value(initial).map_err(|e| FromSqlError::Other(Box::new(e)))?;
-        stmt.insert(params![nickname, hex_key, env])?;
+            .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
+        let hex_key = envelope.inner_ref().header.key.to_hex();
+        stmt.insert(params![nickname, hex_key])?;
+        self.try_insert_authenticated_envelope(envelope)?;
         Ok(hex_key)
     }
 }
@@ -342,18 +345,30 @@ mod tests {
             .create_envelope(InnerMessage::Ping(10), &kp, &secp)
             .unwrap()
             .unwrap();
-        envelope_1.clone().self_authenticate(&secp).unwrap();
-        handle.try_insert_authenticated_envelope(envelope_1).unwrap();
+        let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
+        handle
+            .try_insert_authenticated_envelope(envelope_1.clone())
+            .unwrap();
+
+        let tips = handle.get_tips().unwrap();
+        assert_eq!(tips.len(), 1);
+        assert_eq!(&tips[0], envelope_1.inner_ref());
+        let my_tip = handle.get_tip_for_user(kp.x_only_public_key().0).unwrap();
+        assert_eq!(&my_tip, envelope_1.inner_ref());
+
         let envelope_2 = handle
             .create_envelope(InnerMessage::Ping(10), &kp, &secp)
             .unwrap()
             .unwrap();
-        handle.try_insert_authenticated_envelope(envelope_2.clone()).unwrap();
+        let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
+        handle
+            .try_insert_authenticated_envelope(envelope_2.clone())
+            .unwrap();
         let tips = handle.get_tips().unwrap();
         assert_eq!(tips.len(), 1);
-        assert_eq!(tips[0], envelope_2);
+        assert_eq!(&tips[0], envelope_2.inner_ref());
         let my_tip = handle.get_tip_for_user(kp.x_only_public_key().0).unwrap();
-        assert_eq!(my_tip, envelope_2);
+        assert_eq!(&my_tip, envelope_2.inner_ref());
     }
 
     async fn make_test_user(secp: &Secp256k1<All>, conn: &MsgDB, name: String) -> KeyPair {
@@ -362,7 +377,8 @@ mod tests {
         let (sk, pk) = secp.generate_keypair(&mut rng);
         let key = pk.x_only_public_key().0;
         let nonce = PrecomittedNonce::new(secp);
-        let genesis = Envelope {
+        let kp = KeyPair::from_secret_key(secp, &sk);
+        let mut genesis = Envelope {
             header: Header {
                 key,
                 next_nonce: nonce.get_public(secp),
@@ -374,9 +390,15 @@ mod tests {
             },
             msg: InnerMessage::Ping(0),
         };
-        handle.insert_user(&key, name, genesis).unwrap();
+        genesis
+            .sign_with(&kp, secp, PrecomittedNonce::new(secp))
+            .unwrap();
+        let genesis = genesis.self_authenticate(secp).unwrap();
+        handle
+            .insert_user_by_genesis_envelope(name, genesis)
+            .unwrap();
         handle.save_nonce(nonce, secp, key).unwrap();
-        KeyPair::from_secret_key(secp, &sk)
+        kp
     }
 
     async fn setup_db() -> MsgDB {

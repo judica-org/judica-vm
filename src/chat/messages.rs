@@ -44,6 +44,18 @@ pub struct Envelope {
     pub msg: InnerMessage,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub struct Authenticated<T>(T);
+impl<T> Authenticated<T> {
+    pub fn inner(self) -> T {
+        self.0
+    }
+
+    pub fn inner_ref(&self) -> &T {
+        &self.0
+    }
+}
+
 impl Envelope {
     pub fn extract_used_nonce(&self) -> Option<PrecomittedPublicNonce> {
         XOnlyPublicKey::from_slice(&self.header.unsigned.signature?.as_ref()[..32])
@@ -105,7 +117,7 @@ impl Envelope {
     pub fn self_authenticate<C: Verification>(
         &self,
         secp: &Secp256k1<C>,
-    ) -> Result<(), AuthenticationError> {
+    ) -> Result<Authenticated<Self>, AuthenticationError> {
         let mut redacted = self.clone();
         let sig = redacted
             .header
@@ -117,7 +129,8 @@ impl Envelope {
             .msg_hash()
             .ok_or(AuthenticationError::HashingError)?;
         secp.verify_schnorr(&sig, &msg, &self.header.key)
-            .map_err(AuthenticationError::ValidationError)
+            .map_err(AuthenticationError::ValidationError)?;
+        Ok(Authenticated(self.clone()))
     }
 
     pub(crate) fn sign_with<C: Signing>(

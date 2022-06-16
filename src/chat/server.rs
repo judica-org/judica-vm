@@ -27,7 +27,7 @@ pub async fn post_message(
     Json(envelope): Json<Envelope>,
 ) -> Result<(Response<()>, Json<MessageResponse>), (StatusCode, &'static str)> {
     tracing::debug!("Envelope Received: {:?}", envelope);
-    envelope
+    let envelope = envelope
         .self_authenticate(&Secp256k1::new())
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Envelope not valid"))?;
     tracing::debug!("Verified Signatures");
@@ -39,13 +39,13 @@ pub async fn post_message(
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     }
     tracing::debug!("Responding");
-    let r = match envelope.msg {
+    let r = match &envelope.inner_ref().msg {
         InnerMessage::Ping(u) => {
             let ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Clock Error"))?
                 .as_millis() as u64;
-            Json(MessageResponse::Pong(u, ms))
+            Json(MessageResponse::Pong(*u, ms))
         }
         InnerMessage::Data(data) => Json(MessageResponse::None),
     };
