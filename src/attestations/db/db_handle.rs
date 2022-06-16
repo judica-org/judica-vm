@@ -1,48 +1,21 @@
-use std::time::SystemTime;
-
-use super::super::messages::Authenticated;
-use super::sql_serializers;
-
+use super::{
+    super::{
+        messages::{Authenticated, Envelope, Header, InnerMessage, SigningError, Unsigned},
+        nonce::{PrecomittedNonce, PrecomittedPublicNonce},
+    },
+    sql_serializers,
+};
+use crate::util;
 use fallible_iterator::FallibleIterator;
 use rusqlite::params;
-use sapio_bitcoin::hashes::Hash;
-use sapio_bitcoin::hashes::hex::ToHex;
-use sapio_bitcoin::secp256k1::SecretKey;
-
-use std::collections::BTreeMap;
-
-use sapio_bitcoin::hashes::sha256;
-
-use sapio_bitcoin::secp256k1;
-
-use super::super::messages::Unsigned;
-
-use super::super::messages::Header;
-
-use crate::util::now;
-
-use crate::util;
-
-use super::super::messages::SigningError;
-
-use super::super::messages::Envelope;
-
-use sapio_bitcoin::KeyPair;
-
-use super::super::messages::InnerMessage;
-
-use super::super::nonce::PrecomittedNonce;
-
 use rusqlite::Connection;
-
-use super::super::nonce::PrecomittedPublicNonce;
-
-use sapio_bitcoin::XOnlyPublicKey;
-
-use sapio_bitcoin::secp256k1::Secp256k1;
-
-use sapio_bitcoin::secp256k1::Signing;
-
+use sapio_bitcoin::{
+    hashes::{hex::ToHex, sha256, Hash},
+    secp256k1::{Secp256k1, SecretKey, Signing},
+    KeyPair, XOnlyPublicKey,
+};
+use std::collections::BTreeMap;
+use std::time::SystemTime;
 use tokio::sync::MutexGuard;
 
 pub struct MsgDBHandle<'a>(pub MutexGuard<'a, Connection>);
@@ -244,8 +217,8 @@ impl<'a> MsgDBHandle<'a> {
         )?;
         let rows = stmt.query(params![key.to_hex()])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get(0)).collect()?;
-        let mut prev = sha256::Hash::hash(&[]);
-        let mut prev_height = 0;
+        let _prev = sha256::Hash::hash(&[]);
+        let _prev_height = 0;
         for v in vs.windows(2) {
             if v[0].clone().canonicalized_hash().unwrap() != v[1].header.prev_msg
                 || v[0].header.height + 1 != v[1].header.height

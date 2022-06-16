@@ -2,17 +2,12 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Display;
 
-use rand::Rng;
 use ruma_serde::CanonicalJsonValue;
 use rusqlite::types::FromSql;
 use rusqlite::ToSql;
-use sapio_bitcoin::hashes::{sha256, Hash, HashEngine, Hmac};
-use sapio_bitcoin::secp256k1::ffi::types::{c_char, c_int, c_uchar, c_void, size_t};
-use sapio_bitcoin::secp256k1::ffi::{CPtr, SchnorrSigExtraParams};
-use sapio_bitcoin::secp256k1::schnorr::Signature;
-use sapio_bitcoin::secp256k1::{
-    constants, ffi, rand, Message as SchnorrMessage, Secp256k1, SecretKey,
-};
+use sapio_bitcoin::hashes::{sha256, Hash};
+
+use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;

@@ -1,32 +1,28 @@
-use rand::Rng;
-use ruma_serde::CanonicalJsonValue;
 use rusqlite::types::{FromSql, FromSqlError};
 use rusqlite::ToSql;
 use sapio_bitcoin::hashes::hex::ToHex;
-use sapio_bitcoin::hashes::{sha256, Hash, HashEngine, Hmac};
-use sapio_bitcoin::secp256k1::ffi::types::{c_char, c_int, c_uchar, c_void, size_t};
+use sapio_bitcoin::hashes::Hash;
+use sapio_bitcoin::secp256k1::ffi::types::{c_int, c_uchar, c_void, size_t};
 use sapio_bitcoin::secp256k1::ffi::{CPtr, SchnorrSigExtraParams};
 use sapio_bitcoin::secp256k1::schnorr::Signature;
-use sapio_bitcoin::secp256k1::secp256k1_sys::Signature as InnerSig;
+
+use sapio_bitcoin::secp256k1::Signing;
 use sapio_bitcoin::secp256k1::{
     constants, ffi, rand, Message as SchnorrMessage, Secp256k1, SecretKey,
 };
-use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::fmt::Display;
+
 use std::str::FromStr;
 pub unsafe extern "C" fn custom_nonce(
     nonce32: *mut c_uchar,
-    msg32: *const c_uchar,
-    msg_len: size_t,
-    key32: *const c_uchar,
-    xonly_pk32: *const c_uchar,
-    algo16: *const c_uchar,
-    algo_len: size_t,
+    _msg32: *const c_uchar,
+    _msg_len: size_t,
+    _key32: *const c_uchar,
+    _xonly_pk32: *const c_uchar,
+    _algo16: *const c_uchar,
+    _algo_len: size_t,
     data: *mut c_void,
 ) -> c_int {
     nonce32.copy_from_nonoverlapping(data as *const c_uchar, 32);
@@ -89,8 +85,6 @@ pub fn sign_with_precomitted_nonce<C: Signing>(
 
 #[cfg(test)]
 mod test {
-
-    use std::hash::Hash;
 
     use super::*;
     #[test]

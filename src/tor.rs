@@ -1,4 +1,4 @@
-use std::{any::Any, error::Error, path::PathBuf};
+use std::{any::Any, path::PathBuf};
 
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use tokio::task::JoinHandle;

@@ -20,7 +20,7 @@ pub async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>
                 .into_iter()
                 .collect();
             // Drop anything that is finished, we will re-add it later if still in create_services
-            task_set.retain(|k, v| !v.is_finished());
+            task_set.retain(|_k, v| !v.is_finished());
             // If it is no longer in our services DB, drop it / disconnect
             task_set.retain(
                 |service_id, service| match create_services.take(service_id) {

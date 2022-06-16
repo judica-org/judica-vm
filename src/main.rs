@@ -2,13 +2,13 @@ use crate::attestations::messages::{Envelope, Header, InnerMessage, Unsigned};
 use crate::attestations::nonce::PrecomittedNonce;
 use attestations::db::connection::MsgDB;
 use attestations::server::Tips;
-use ruma_signatures::Ed25519KeyPair;
+
 use rusqlite::Connection;
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::rand::Rng;
-use sapio_bitcoin::secp256k1::{rand, Secp256k1, Signing, Verification};
+use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
 use sapio_bitcoin::util::key::KeyPair;
-use sapio_bitcoin::{hashes::hex::ToHex, util::key};
+
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::PathBuf;
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tokio::fs::create_dir(&data_dir).await;
     match dir.as_ref().map_err(std::io::Error::kind) {
         Err(std::io::ErrorKind::AlreadyExists) => (),
-        e => dir?,
+        _e => dir?,
     };
     let mut chat_db_file = data_dir.clone();
     chat_db_file.push("chat.sqlite3");

@@ -1,22 +1,17 @@
 use axum::{
     extract::Query,
+    http::Response,
     http::StatusCode,
-    http::{self, Response},
     routing::{get, post},
     Extension, Json, Router,
 };
-use ruma_serde::{Base64, CanonicalJsonValue};
-use sapio_bitcoin::hashes::{sha256, Hash};
-use sapio_bitcoin::{
-    hashes::hex::ToHex,
-    secp256k1::{Message as SchnorrMessage, Secp256k1, Verification},
-};
+
+use sapio_bitcoin::hashes::sha256;
+use sapio_bitcoin::secp256k1::Secp256k1;
 use serde::Deserialize;
 use serde::Serialize;
-use std::time::SystemTime;
-use std::{collections::BTreeMap, env, net::SocketAddr};
-use std::{collections::HashSet, sync::Arc};
-use tokio::sync::Mutex;
+
+use std::net::SocketAddr;
 
 use crate::attestations::messages::InnerMessage;
 
@@ -78,7 +73,7 @@ pub async fn post_message(
                 .as_millis() as u64;
             Json(MessageResponse::Pong(*u, ms))
         }
-        InnerMessage::Data(data) => Json(MessageResponse::None),
+        InnerMessage::Data(_data) => Json(MessageResponse::None),
     };
     Ok((
         Response::builder()

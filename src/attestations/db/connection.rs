@@ -1,10 +1,7 @@
 use super::db_handle::MsgDBHandle;
-
 use rusqlite::Connection;
-
-use tokio::sync::Mutex;
-
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct MsgDB(Arc<Mutex<Connection>>);

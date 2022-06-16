@@ -1,44 +1,21 @@
-use std::{
-    collections::{HashMap},
-    str::FromStr,
-    sync::Arc,
-    time::SystemTime,
-};
-
-use fallible_iterator::FallibleIterator;
-use ruma_signatures::Ed25519KeyPair;
-use rusqlite::{params, Connection};
-use sapio_bitcoin::{
-    hashes::{
-        hex::{self, ToHex},
-        sha256, Hash,
-    },
-    secp256k1::{Secp256k1, },
-    KeyPair, PublicKey, 
-};
-use tokio::sync::{Mutex};
-
-use crate::util::{self, now};
-
-use super::{
-    messages::{Envelope, Header, InnerMessage, Unsigned},
-    nonce::{PrecomittedNonce},
-};
-
 pub mod connection;
-pub mod sql_serializers;
 pub mod db_handle;
+pub mod sql_serializers;
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-
-    use rusqlite::Connection;
-    use sapio_bitcoin::psbt::raw::Key;
-    use sapio_bitcoin::secp256k1::{rand, All};
-
     use super::connection::MsgDB;
     use super::*;
+    use crate::attestations::messages::{Envelope, Header, InnerMessage, Unsigned};
+    use crate::attestations::nonce::PrecomittedNonce;
+    use crate::util;
+    use fallible_iterator::FallibleIterator;
+    use rusqlite::{params, Connection};
+    use sapio_bitcoin::hashes::{sha256, Hash};
+    use sapio_bitcoin::secp256k1::{rand, All, Secp256k1};
+    use sapio_bitcoin::KeyPair;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
     #[tokio::test]
     async fn test_setup_db() {
@@ -136,7 +113,11 @@ mod tests {
         }
     }
 
-    fn make_test_user(secp: &Secp256k1<All>, handle: &db_handle::MsgDBHandle<'_>, name: String) -> KeyPair {
+    fn make_test_user(
+        secp: &Secp256k1<All>,
+        handle: &db_handle::MsgDBHandle<'_>,
+        name: String,
+    ) -> KeyPair {
         let mut rng = rand::thread_rng();
         let (sk, pk) = secp.generate_keypair(&mut rng);
         let key = pk.x_only_public_key().0;
@@ -173,7 +154,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_tables() {
-        let mut conn = setup_db().await;
+        let conn = setup_db().await;
         let handle = conn.get_handle().await;
         let mut it = handle
             .0
