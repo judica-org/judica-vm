@@ -18,7 +18,7 @@ use std::{collections::BTreeMap, env, net::SocketAddr};
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::Mutex;
 
-use crate::chat::messages::InnerMessage;
+use crate::attestations::messages::InnerMessage;
 
 use super::{
     db::MsgDB,

@@ -1,7 +1,7 @@
-use crate::chat::messages::{Envelope, Header, InnerMessage, Unsigned};
-use crate::chat::nonce::PrecomittedNonce;
-use chat::db::MsgDB;
-use chat::server::Tips;
+use crate::attestations::messages::{Envelope, Header, InnerMessage, Unsigned};
+use crate::attestations::nonce::PrecomittedNonce;
+use attestations::db::MsgDB;
+use attestations::server::Tips;
 use ruma_signatures::Ed25519KeyPair;
 use rusqlite::Connection;
 use sapio_bitcoin::hashes::{sha256, Hash};
@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
-mod chat;
+mod attestations;
 mod tor;
 mod util;
 
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )));
     mdb.get_handle().await.setup_tables();
 
-    let jh2 = chat::server::run(PORT, mdb.clone()).await;
+    let jh2 = attestations::server::run(PORT, mdb.clone()).await;
     let jh = tor::start(data_dir.clone(), PORT);
     let client = client_fetching(mdb.clone());
 
