@@ -5,7 +5,7 @@ use super::{
     },
     sql_serializers,
 };
-use crate::util;
+use crate::{attestations::messages::CanonicalEnvelopeHash, util};
 use fallible_iterator::FallibleIterator;
 use rusqlite::params;
 use rusqlite::Connection;
@@ -89,11 +89,7 @@ impl<'a> MsgDBHandle<'a> {
                                                 ?
                                             )
                                             ")?;
-        stmt.insert(rusqlite::params![
-            key.to_hex(),
-            pk_nonce,
-            nonce,
-        ])?;
+        stmt.insert(rusqlite::params![key.to_hex(), pk_nonce, nonce,])?;
         Ok(pk_nonce)
     }
     /// Returns the secret nonce for a given public nonce
@@ -282,26 +278,26 @@ impl<'a> MsgDBHandle<'a> {
 
     pub fn messages_by_hash<'i, I>(&self, hashes: I) -> Result<Vec<Envelope>, rusqlite::Error>
     where
-        I: Iterator<Item = &'i sha256::Hash>,
+        I: Iterator<Item = &'i CanonicalEnvelopeHash>,
     {
         let mut stmt = self.0.prepare("SELECT body FROM messages WHERE hash = ?")?;
         let r: Result<Vec<_>, _> = hashes
-            .map(|hash| stmt.query_row([hash.to_hex()], |r| r.get::<_, Envelope>(0)))
+            .map(|hash| stmt.query_row([hash], |r| r.get::<_, Envelope>(0)))
             .collect();
         r
     }
     pub fn message_not_exists_it<'i, I>(
         &self,
         hashes: I,
-    ) -> Result<Vec<sha256::Hash>, rusqlite::Error>
+    ) -> Result<Vec<CanonicalEnvelopeHash>, rusqlite::Error>
     where
-        I: Iterator<Item = &'i sha256::Hash>,
+        I: Iterator<Item = &'i CanonicalEnvelopeHash>,
     {
         let mut stmt = self
             .0
             .prepare("SELECT EXISTS(SELECT 1 FROM messages WHERE hash = ?)")?;
         hashes
-            .filter_map(|hash| match stmt.exists([hash.to_hex()]) {
+            .filter_map(|hash| match stmt.exists([hash]) {
                 Ok(true) => None,
                 Ok(false) => Some(Ok(*hash)),
                 Err(x) => Some(Err(x)),
@@ -329,8 +325,7 @@ impl<'a> MsgDBHandle<'a> {
             data,
             data.clone()
                 .canonicalized_hash()
-                .expect("Hashing should always succeed?")
-                .to_hex(),
+                .expect("Hashing should always succeed?"),
             data.header.key.to_hex(),
             time
         ])?;

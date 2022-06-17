@@ -4,7 +4,7 @@ use attestations::db::connection::MsgDB;
 use attestations::server::Tips;
 
 use rusqlite::Connection;
-use sapio_bitcoin::hashes::{sha256, Hash};
+
 use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
 use sapio_bitcoin::util::key::KeyPair;

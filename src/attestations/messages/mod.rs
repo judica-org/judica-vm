@@ -1,4 +1,7 @@
 use super::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
+use rusqlite::types::{FromSql, FromSqlError};
+use rusqlite::ToSql;
+use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
@@ -8,6 +11,7 @@ use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::Display;
+use std::str::FromStr;
 pub mod authenticated;
 pub use authenticated::*;
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
@@ -25,8 +29,8 @@ pub struct Unsigned {
 pub struct Header {
     pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
     pub next_nonce: PrecomittedPublicNonce,
-    pub prev_msg: sha256::Hash,
-    pub tips: Vec<(XOnlyPublicKey, u64, sha256::Hash)>,
+    pub prev_msg: CanonicalEnvelopeHash,
+    pub tips: Vec<(XOnlyPublicKey, u64, CanonicalEnvelopeHash)>,
     pub height: u64,
     pub sent_time_ms: u64,
     pub unsigned: Unsigned,
@@ -62,6 +66,30 @@ impl Display for AuthenticationError {
 }
 impl Error for SigningError {}
 impl Error for AuthenticationError {}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Copy)]
+pub struct CanonicalEnvelopeHash(sha256::Hash);
+impl CanonicalEnvelopeHash {
+    pub fn genesis() -> CanonicalEnvelopeHash {
+        CanonicalEnvelopeHash(sha256::Hash::from_inner([0u8; 32]))
+    }
+}
+
+// Implemented here to keep type opaque
+impl ToSql for CanonicalEnvelopeHash {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(self.0.to_hex().into())
+    }
+}
+impl FromSql for CanonicalEnvelopeHash {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        sha256::Hash::from_str(value.as_str()?)
+            .map(CanonicalEnvelopeHash)
+            .map_err(|e| FromSqlError::Other(Box::new(e)))
+    }
+}
+pub struct SignatureDigest(SchnorrMessage);
+
 impl Envelope {
     /// Returns the nonce used in this [`Envelope`].
     pub fn extract_used_nonce(&self) -> Option<PrecomittedPublicNonce> {
@@ -90,7 +118,7 @@ impl Envelope {
         let msg = redacted
             .signature_digest()
             .ok_or(AuthenticationError::HashingError)?;
-        secp.verify_schnorr(&sig, &msg, &self.header.key)
+        secp.verify_schnorr(&sig, &msg.0, &self.header.key)
             .map_err(AuthenticationError::ValidationError)?;
         Ok(Authenticated(self.clone()))
     }
@@ -118,7 +146,7 @@ impl Envelope {
             .signature_digest()
             .ok_or(SigningError::HashingError)?;
         self.header.unsigned.signature =
-            Some(nonce.sign_with_precomitted_nonce(secp, &msg, keypair));
+            Some(nonce.sign_with_precomitted_nonce(secp, &msg.0, keypair));
 
         Ok(())
     }
@@ -126,25 +154,25 @@ impl Envelope {
     /// Creates the canonicalized_hash for the [`Envelope`].
     ///
     /// This hashes everything, including unsigned data.
-    pub fn canonicalized_hash(self) -> Option<sha256::Hash> {
+    pub fn canonicalized_hash(self) -> Option<CanonicalEnvelopeHash> {
         let msg_str = serde_json::to_value(self)
             .and_then(|reserialized| serde_json::from_value(reserialized))
             .ok()?;
         let canonical = ruma_signatures::canonical_json(&msg_str).ok()?;
-        Some(sapio_bitcoin::hashes::sha256::Hash::hash(
-            canonical.as_bytes(),
+        Some(CanonicalEnvelopeHash(
+            sapio_bitcoin::hashes::sha256::Hash::hash(canonical.as_bytes()),
         ))
     }
     /// Helper to get the [`SchnorrMessage`] from an envelope.
     ///
     /// If Envelope has unsigned data present, must fail
-    pub fn signature_digest(self) -> Option<SchnorrMessage> {
+    pub fn signature_digest(self) -> Option<SignatureDigest> {
         if self.header.unsigned.signature.is_some() {
             return None;
         }
         let msg_hash = self.canonicalized_hash()?;
-        let msg = SchnorrMessage::from(W(msg_hash));
-        Some(msg)
+        let msg = SchnorrMessage::from(W(msg_hash.0));
+        Some(SignatureDigest(msg))
     }
 }
 

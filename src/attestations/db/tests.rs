@@ -1,11 +1,13 @@
 use super::connection::MsgDB;
 use super::*;
-use crate::attestations::messages::{Envelope, Header, InnerMessage, Unsigned};
+use crate::attestations::messages::{
+    CanonicalEnvelopeHash, Envelope, Header, InnerMessage, Unsigned,
+};
 use crate::attestations::nonce::PrecomittedNonce;
 use crate::util;
 use fallible_iterator::FallibleIterator;
 use rusqlite::{params, Connection};
-use sapio_bitcoin::hashes::{sha256, Hash};
+
 use sapio_bitcoin::secp256k1::{rand, All, Secp256k1};
 use sapio_bitcoin::KeyPair;
 use std::sync::Arc;
@@ -122,7 +124,7 @@ fn make_test_user(
         header: Header {
             key,
             next_nonce: nonce.get_public(secp),
-            prev_msg: sha256::Hash::hash(&[]),
+            prev_msg: CanonicalEnvelopeHash::genesis(),
             tips: vec![],
             height: 0,
             sent_time_ms: util::now(),

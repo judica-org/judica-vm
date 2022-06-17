@@ -6,7 +6,6 @@ use axum::{
     Extension, Json, Router,
 };
 
-use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use serde::Deserialize;
 use serde::Serialize;
@@ -22,12 +21,12 @@ pub enum MessageResponse {
 }
 use super::{
     db::connection::MsgDB,
-    messages::{Envelope},
+    messages::{CanonicalEnvelopeHash, Envelope},
 };
 
 #[derive(Deserialize, Serialize)]
 pub struct Tips {
-    pub tips: Vec<sha256::Hash>,
+    pub tips: Vec<CanonicalEnvelopeHash>,
 }
 pub async fn get_tip_handler(
     Extension(db): Extension<MsgDB>,

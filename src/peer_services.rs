@@ -1,5 +1,7 @@
 use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
 
+use crate::attestations::messages::CanonicalEnvelopeHash;
+
 use super::*;
 
 pub async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>> {
@@ -54,7 +56,7 @@ async fn make_peer<C: Verification + 'static>(
     url: String,
     conn: MsgDB,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Vec<sha256::Hash>>();
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Vec<CanonicalEnvelopeHash>>();
     let (tx_envelope, rx_envelope) = tokio::sync::mpsc::unbounded_channel::<Vec<Envelope>>();
 
     let mut envelope_processor = envelope_processor(conn, secp, rx_envelope, tx);
@@ -79,7 +81,7 @@ fn envelope_processor<C: Verification + 'static>(
     conn: MsgDB,
     secp: Arc<Secp256k1<C>>,
     mut rx_envelope: tokio::sync::mpsc::UnboundedReceiver<Vec<Envelope>>,
-    tx: UnboundedSender<Vec<sha256::Hash>>,
+    tx: UnboundedSender<Vec<CanonicalEnvelopeHash>>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     let envelope_processor = {
         tokio::spawn(async move {
@@ -152,7 +154,7 @@ fn tip_resolver(
     client: reqwest::Client,
     url: String,
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
-    mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<sha256::Hash>>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<CanonicalEnvelopeHash>>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     tokio::spawn(async move {
         loop {
@@ -187,7 +189,7 @@ fn generate_new_user() -> Result<
     let mut msg = Envelope {
         header: Header {
             height: 0,
-            prev_msg: sha256::Hash::hash(&[]),
+            prev_msg: CanonicalEnvelopeHash::genesis(),
             tips: Vec::new(),
             next_nonce: nonce.get_public(&secp),
             key: keypair.public_key().x_only_public_key().0,

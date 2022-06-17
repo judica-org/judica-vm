@@ -51,7 +51,6 @@ impl FromSql for Envelope {
     }
 }
 
-
 impl ToSql for PrecomittedNonce {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         Ok(self.0.secret_bytes().to_hex().into())
