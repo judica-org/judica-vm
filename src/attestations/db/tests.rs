@@ -129,6 +129,7 @@ fn make_test_user(
             height: 0,
             sent_time_ms: util::now(),
             unsigned: Unsigned { signature: None },
+            checkpoints: Default::default(),
         },
         msg: InnerMessage::Ping(0),
     };

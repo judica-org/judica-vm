@@ -1,3 +1,5 @@
+use self::checkpoints::BitcoinCheckPoints;
+
 use super::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 use rusqlite::types::{FromSql, FromSqlError};
 use rusqlite::ToSql;
@@ -7,7 +9,7 @@ use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
-use sapio_bitcoin::XOnlyPublicKey;
+use sapio_bitcoin::{Block, BlockHeader, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::Display;
@@ -25,6 +27,7 @@ pub struct Unsigned {
     pub signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
 }
 
+mod checkpoints;
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Header {
     pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
@@ -34,6 +37,7 @@ pub struct Header {
     pub height: u64,
     pub sent_time_ms: u64,
     pub unsigned: Unsigned,
+    pub checkpoints: BitcoinCheckPoints
 }
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Envelope {

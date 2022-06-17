@@ -197,6 +197,7 @@ fn generate_new_user() -> Result<
             unsigned: Unsigned {
                 signature: Default::default(),
             },
+            checkpoints: Default::default(),
         },
         msg: InnerMessage::Ping(sent_time_ms),
     };

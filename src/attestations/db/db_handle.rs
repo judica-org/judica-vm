@@ -138,6 +138,8 @@ impl<'a> MsgDBHandle<'a> {
                 unsigned: Unsigned {
                     signature: Default::default(),
                 },
+                // TODO: Fetch from server.
+                checkpoints: Default::default(),
             },
             msg,
         };
