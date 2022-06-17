@@ -57,6 +57,7 @@ pub struct BitcoinCheckPointCache {
     client: Arc<rpc::Client>,
     frequency: Duration,
     quit: Arc<AtomicBool>,
+    running: Arc<AtomicBool>,
 }
 impl BitcoinCheckPointCache {
     pub async fn new(
@@ -70,17 +71,23 @@ impl BitcoinCheckPointCache {
             client,
             frequency: frequency.unwrap_or(Duration::from_secs(30)),
             quit,
+            running: Arc::new(AtomicBool::new(false)),
         }))
     }
 
-    pub async fn run_cache_service(&self) -> JoinHandle<()> {
-        let mut this = self.clone();
-        tokio::spawn(async move {
-            while !this.quit.load(Ordering::Relaxed) {
-                tokio::time::sleep(this.frequency).await;
-                this.refresh_cache().await;
-            }
-        })
+    pub async fn run_cache_service(&self) -> Option<JoinHandle<()>> {
+        if !self.running.compare_and_swap(false, true, Ordering::SeqCst) {
+            let mut this = self.clone();
+            Some(tokio::spawn(async move {
+                while !this.quit.load(Ordering::Relaxed) {
+                    tokio::time::sleep(this.frequency).await;
+                    this.refresh_cache().await;
+                }
+                this.running.store(false, Ordering::Relaxed);
+            }))
+        } else {
+            None
+        }
     }
     pub async fn read_cache(&self) -> BitcoinCheckPoints {
         self.cache.read().await.clone()
