@@ -15,7 +15,6 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use std::collections::BTreeMap;
-use std::time::SystemTime;
 use tokio::sync::MutexGuard;
 
 pub struct MsgDBHandle<'a>(pub MutexGuard<'a, Connection>);
@@ -92,8 +91,8 @@ impl<'a> MsgDBHandle<'a> {
                                             ")?;
         stmt.insert(rusqlite::params![
             key.to_hex(),
-            pk_nonce.0.to_hex(),
-            nonce.0.secret_bytes().to_hex(),
+            pk_nonce,
+            nonce,
         ])?;
         Ok(pk_nonce)
     }
@@ -105,7 +104,7 @@ impl<'a> MsgDBHandle<'a> {
         let mut stmt = self
             .0
             .prepare("SELECT (private_key) FROM message_nonces where public_key = ?")?;
-        stmt.query_row([nonce.0.to_hex()], |r| r.get::<_, PrecomittedNonce>(0))
+        stmt.query_row([nonce], |r| r.get::<_, PrecomittedNonce>(0))
     }
 
     /// given an arbitrary inner message, generates an envelope and signs it.

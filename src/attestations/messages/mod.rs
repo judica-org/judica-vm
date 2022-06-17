@@ -1,17 +1,15 @@
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::fmt::Display;
-
-use ruma_serde::CanonicalJsonValue;
-use rusqlite::types::FromSql;
-use rusqlite::ToSql;
+use super::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 use sapio_bitcoin::hashes::{sha256, Hash};
-
+use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
+use std::error::Error;
+use std::fmt::Display;
+pub mod authenticated;
+pub use authenticated::*;
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum InnerMessage {
     Data(String),
@@ -37,50 +35,6 @@ pub struct Header {
 pub struct Envelope {
     pub header: Header,
     pub msg: InnerMessage,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
-pub struct Authenticated<T>(T);
-impl<T> Authenticated<T> {
-    pub fn inner(self) -> T {
-        self.0
-    }
-
-    pub fn inner_ref(&self) -> &T {
-        &self.0
-    }
-}
-
-impl Envelope {
-    pub fn extract_used_nonce(&self) -> Option<PrecomittedPublicNonce> {
-        XOnlyPublicKey::from_slice(&self.header.unsigned.signature?.as_ref()[..32])
-            .map(PrecomittedPublicNonce)
-            .ok()
-    }
-}
-
-impl ToSql for Envelope {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        let s = serde_json::to_value(self)
-            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        let c: BTreeMap<String, CanonicalJsonValue> = serde_json::from_value(s)
-            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        Ok(ruma_signatures::canonical_json(&c)
-            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?
-            .into())
-    }
-}
-impl FromSql for Envelope {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        let s = value.as_str()?;
-        serde_json::from_str(s).map_err(|e| rusqlite::types::FromSqlError::Other(e.into()))
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum MessageResponse {
-    Pong(u64, u64),
-    None,
 }
 
 #[derive(Debug)]
@@ -109,6 +63,19 @@ impl Display for AuthenticationError {
 impl Error for SigningError {}
 impl Error for AuthenticationError {}
 impl Envelope {
+    /// Returns the nonce used in this [`Envelope`].
+    pub fn extract_used_nonce(&self) -> Option<PrecomittedPublicNonce> {
+        XOnlyPublicKey::from_slice(&self.header.unsigned.signature?.as_ref()[..32])
+            .map(PrecomittedPublicNonce)
+            .ok()
+    }
+    /// Converts this [`Envelope`] into an [`Authenticated<Envelope>`] by
+    /// checking it's signature. Returns a copy.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the signature could not be
+    /// validated or if one is not present.
     pub fn self_authenticate<C: Verification>(
         &self,
         secp: &Secp256k1<C>,
@@ -121,13 +88,23 @@ impl Envelope {
             .take()
             .ok_or(AuthenticationError::NoSignature)?;
         let msg = redacted
-            .msg_hash()
+            .signature_digest()
             .ok_or(AuthenticationError::HashingError)?;
         secp.verify_schnorr(&sig, &msg, &self.header.key)
             .map_err(AuthenticationError::ValidationError)?;
         Ok(Authenticated(self.clone()))
     }
 
+    /// signs an [`Envelope`] in-place with a given key.
+    ///
+    /// Because keypair is not guaranteed to be the correct keypair for the
+    /// [`Envelope`], the envelope will need to be authenticated separately.
+    ///
+    /// This will clear any existing signatures!
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if hashing or serialization fails.
     pub(crate) fn sign_with<C: Signing>(
         &mut self,
         keypair: &KeyPair,
@@ -136,12 +113,19 @@ impl Envelope {
     ) -> Result<(), SigningError> {
         self.header.unsigned.signature = None;
 
-        let msg = self.clone().msg_hash().ok_or(SigningError::HashingError)?;
+        let msg = self
+            .clone()
+            .signature_digest()
+            .ok_or(SigningError::HashingError)?;
         self.header.unsigned.signature =
-            Some(sign_with_precomitted_nonce(secp, &msg, keypair, nonce));
+            Some(nonce.sign_with_precomitted_nonce(secp, &msg, keypair));
 
         Ok(())
     }
+
+    /// Creates the canonicalized_hash for the [`Envelope`].
+    ///
+    /// This hashes everything, including unsigned data.
     pub fn canonicalized_hash(self) -> Option<sha256::Hash> {
         let msg_str = serde_json::to_value(self)
             .and_then(|reserialized| serde_json::from_value(reserialized))
@@ -151,16 +135,19 @@ impl Envelope {
             canonical.as_bytes(),
         ))
     }
-    pub fn msg_hash(self) -> Option<SchnorrMessage> {
+    /// Helper to get the [`SchnorrMessage`] from an envelope.
+    ///
+    /// If Envelope has unsigned data present, must fail
+    pub fn signature_digest(self) -> Option<SchnorrMessage> {
+        if self.header.unsigned.signature.is_some() {
+            return None;
+        }
         let msg_hash = self.canonicalized_hash()?;
         let msg = SchnorrMessage::from(W(msg_hash));
         Some(msg)
     }
 }
 
-use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
-
-use super::nonce::{sign_with_precomitted_nonce, PrecomittedNonce, PrecomittedPublicNonce};
 struct W(sapio_bitcoin::hashes::sha256::Hash);
 impl ThirtyTwoByteHash for W {
     fn into_32(self) -> [u8; 32] {

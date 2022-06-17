@@ -15,9 +15,14 @@ use std::net::SocketAddr;
 
 use crate::attestations::messages::InnerMessage;
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum MessageResponse {
+    Pong(u64, u64),
+    None,
+}
 use super::{
     db::connection::MsgDB,
-    messages::{Envelope, MessageResponse},
+    messages::{Envelope},
 };
 
 #[derive(Deserialize, Serialize)]
