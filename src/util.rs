@@ -23,3 +23,7 @@ pub fn now() -> u64 {
     let i = unsafe { TIME }.unwrap();
     i.elapsed().as_millis() as u64 + t
 }
+
+/// Helps with type inference
+pub const INFER_UNIT: Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> = Ok(());
+pub type AbstractResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;

@@ -40,7 +40,7 @@ impl<'a> MsgDBHandle<'a> {
                 );
 
 
-            CREATE TABLE IF NOT EXISTS hidden_services (service_id INTEGER PRIMARY KEY, service_url TEXT UNIQUE);
+            CREATE TABLE IF NOT EXISTS hidden_services (service_id INTEGER PRIMARY KEY, service_url TEXT NOT NULL, port INTEGER NOT NULL, UNIQUE(service_url, port));
 
             CREATE TABLE IF NOT EXISTS private_keys
                 (key_id INTEGER PRIMARY KEY,
@@ -243,18 +243,21 @@ impl<'a> MsgDBHandle<'a> {
     }
 
     /// adds a hidden service to our connection list
-    pub fn insert_hidden_service(&self, s: String) -> Result<(), rusqlite::Error> {
+    pub fn insert_hidden_service(&self, s: String, port: u16) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("INSERT INTO hidden_services (service_url) VALUES (?)")?;
-        stmt.insert(rusqlite::params![s])?;
+            .prepare("INSERT INTO hidden_services (service_url, port) VALUES (?,?)")?;
+        stmt.insert(rusqlite::params![s, port])?;
         Ok(())
     }
 
     /// get all added hidden services
-    pub fn get_all_hidden_services(&self) -> Result<Vec<String>, rusqlite::Error> {
+    pub fn get_all_hidden_services(&self) -> Result<Vec<(String, u16)>, rusqlite::Error> {
         let mut stmt = self.0.prepare("SELECT service_url FROM hidden_services")?;
-        let results = stmt.query([])?.map(|r| r.get::<_, String>(0)).collect()?;
+        let results = stmt
+            .query([])?
+            .map(|r| Ok((r.get::<_, String>(0)?, r.get(1)?)))
+            .collect()?;
         Ok(results)
     }
 

@@ -12,7 +12,10 @@ use serde::Serialize;
 
 use std::net::SocketAddr;
 
-use crate::attestations::messages::InnerMessage;
+use crate::{
+    attestations::messages::InnerMessage,
+    util::{AbstractResult, INFER_UNIT},
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum MessageResponse {
@@ -89,7 +92,7 @@ pub async fn post_message(
     ))
 }
 
-pub async fn run(port: u16, db: MsgDB) -> tokio::task::JoinHandle<()> {
+pub async fn run(port: u16, db: MsgDB) -> tokio::task::JoinHandle<AbstractResult<()>> {
     return tokio::spawn(async move {
         // build our application with a route
         let app = Router::new()
@@ -106,5 +109,6 @@ pub async fn run(port: u16, db: MsgDB) -> tokio::task::JoinHandle<()> {
             .serve(app.into_make_service())
             .await
             .unwrap();
+        INFER_UNIT
     });
 }

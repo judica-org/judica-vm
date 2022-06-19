@@ -1,18 +1,20 @@
 use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
 
-use crate::attestations::messages::CanonicalEnvelopeHash;
+use crate::{attestations::messages::CanonicalEnvelopeHash, util::INFER_UNIT};
 
 use super::*;
 
-pub async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>> {
-    let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:19050")?;
-    let client = reqwest::Client::builder().proxy(proxy).build()?;
-
-    let secp = Arc::new(Secp256k1::new());
-    tokio::spawn(async move {
+pub fn client_fetching(
+    config: Arc<Config>,
+    db: MsgDB,
+) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
+    let jh = tokio::spawn(async move {
+        let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:19050")?;
+        let client = reqwest::Client::builder().proxy(proxy).build()?;
+        let secp = Arc::new(Secp256k1::new());
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        let mut task_set: HashMap<String, JoinHandle<Result<(), _>>> = HashMap::new();
+        let mut task_set: HashMap<(String, u16), JoinHandle<Result<(), _>>> = HashMap::new();
         loop {
             interval.tick().await;
             let mut create_services: HashSet<_> = db
@@ -42,18 +44,15 @@ pub async fn client_fetching(db: MsgDB) -> Result<(), Box<dyn std::error::Error>
                 );
             }
         }
-        Ok::<(), Box<dyn Error + Send + Sync + 'static>>(())
+        INFER_UNIT
     });
-    Ok(())
+    jh
 }
-
-/// Helps with type inference
-const INFER_UNIT: Result<(), Box<dyn Error + Send + Sync + 'static>> = Ok(());
 
 async fn make_peer<C: Verification + 'static>(
     secp: Arc<Secp256k1<C>>,
     client: reqwest::Client,
-    url: String,
+    url: (String, u16),
     conn: MsgDB,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Vec<CanonicalEnvelopeHash>>();
@@ -125,7 +124,7 @@ fn envelope_processor<C: Verification + 'static>(
 /// latest tips
 fn tip_fetcher(
     client: reqwest::Client,
-    url: String,
+    (url, port): (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     let client = client.clone();
@@ -134,7 +133,7 @@ fn tip_fetcher(
         loop {
             tracing::debug!("Sending message...");
             let resp: Vec<Envelope> = client
-                .get(format!("http://{}:{}/tips", url, PORT))
+                .get(format!("http://{}:{}/tips", url, port))
                 .send()
                 .await?
                 .json()
@@ -152,7 +151,7 @@ fn tip_fetcher(
 /// of those hashes, then sends those envelopers for processing.
 fn tip_resolver(
     client: reqwest::Client,
-    url: String,
+    (url, port): (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<CanonicalEnvelopeHash>>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
@@ -160,7 +159,7 @@ fn tip_resolver(
         loop {
             if let Some(tips) = rx.recv().await {
                 let resp: Vec<Envelope> = client
-                    .get(format!("http://{}:{}/tips", url, PORT))
+                    .get(format!("http://{}:{}/tips", url, port))
                     .query(&Tips { tips })
                     .send()
                     .await?

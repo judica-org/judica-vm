@@ -17,6 +17,8 @@ use tokio::{
     time::Interval,
 };
 
+use crate::util::{AbstractResult, INFER_UNIT};
+
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct BitcoinCheckPoints {
     /// whatever tip hash we've seen recently present if changed where it should
@@ -75,7 +77,7 @@ impl BitcoinCheckPointCache {
         }))
     }
 
-    pub async fn run_cache_service(&self) -> Option<JoinHandle<()>> {
+    pub async fn run_cache_service(&self) -> Option<JoinHandle<AbstractResult<()>>> {
         if !self.running.compare_and_swap(false, true, Ordering::SeqCst) {
             let mut this = self.clone();
             Some(tokio::spawn(async move {
@@ -84,6 +86,7 @@ impl BitcoinCheckPointCache {
                     this.refresh_cache().await;
                 }
                 this.running.store(false, Ordering::Relaxed);
+                INFER_UNIT
             }))
         } else {
             None

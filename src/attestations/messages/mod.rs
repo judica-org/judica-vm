@@ -16,6 +16,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 pub mod authenticated;
 pub use authenticated::*;
+pub mod checkpoints;
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum InnerMessage {
     Data(String),
@@ -27,7 +28,6 @@ pub struct Unsigned {
     pub signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
 }
 
-mod checkpoints;
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Header {
     pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
@@ -37,7 +37,7 @@ pub struct Header {
     pub height: u64,
     pub sent_time_ms: u64,
     pub unsigned: Unsigned,
-    pub checkpoints: BitcoinCheckPoints
+    pub checkpoints: BitcoinCheckPoints,
 }
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Envelope {
