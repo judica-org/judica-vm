@@ -199,7 +199,7 @@ fn generate_new_user() -> Result<
             },
             checkpoints: Default::default(),
         },
-        msg: Value::Null
+        msg: Value::Null,
     };
     msg.sign_with(&keypair, &secp, nonce)?;
     Ok((secp, keypair, nonce, msg))

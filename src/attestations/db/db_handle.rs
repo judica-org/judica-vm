@@ -15,7 +15,7 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use tokio::sync::MutexGuard;
 
 pub struct MsgDBHandle<'a>(pub MutexGuard<'a, Connection>);
@@ -36,10 +36,10 @@ impl<'a> MsgDBHandle<'a> {
                     received_time INTEGER NOT NULL,
                     height INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.height')) STORED,
                     sent_time INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.sent_time_ms')) STORED,
+                    nonce TEXT NOT NULL GENERATED ALWAYS AS (substr(json_extract(body, '$.header.unsigned.signature'), 0, 64)) STORED,
                     FOREIGN KEY(user_id) references users(user_id),
                     UNIQUE(received_time, body, user_id)
                 );
-
 
             CREATE TABLE IF NOT EXISTS hidden_services (service_id INTEGER PRIMARY KEY, service_url TEXT NOT NULL, port INTEGER NOT NULL, UNIQUE(service_url, port));
 
@@ -47,7 +47,7 @@ impl<'a> MsgDBHandle<'a> {
                 (key_id INTEGER PRIMARY KEY,
                     public_key TEXT UNIQUE,
                     private_key TEXT UNIQUE);
-            
+
             CREATE TABLE IF NOT EXISTS message_nonces (
                 nonce_id INTEGER PRIMARY KEY,
                 key_id INTEGER,
@@ -83,7 +83,7 @@ impl<'a> MsgDBHandle<'a> {
         let pk_nonce = nonce.get_public(secp);
         let mut stmt = self.0
                                 .prepare("
-                                            INSERT INTO message_nonces (key_id, public_key, private_key) 
+                                            INSERT INTO message_nonces (key_id, public_key, private_key)
                                             VALUES (
                                                 (SELECT key_id FROM private_keys WHERE public_key = ?),
                                                 ?,
@@ -186,6 +186,24 @@ impl<'a> MsgDBHandle<'a> {
         )?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        Ok(vs)
+    }
+
+    /// finds a reused nonce
+    pub fn get_reused_nonces(
+        &self,
+    ) -> Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, rusqlite::Error> {
+        let mut stmt = self.0.prepare(
+            "SELECT body from messages WHERE nonce in (SELECT nonce FROM messages GROUP BY nonce, user_id HAVING COUNT(nonce) > 1)"
+        )?;
+        let rows = stmt.query([])?;
+        let vs = rows
+            .map(|r| r.get::<_, Envelope>(0))
+            .fold(HashMap::new(), |mut acc, v| {
+                acc.entry(v.header.key).or_insert(vec![]).push(v);
+                Ok(acc)
+            })?;
+
         Ok(vs)
     }
 
