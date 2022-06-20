@@ -10,7 +10,7 @@ pub fn client_fetching(
     db: MsgDB,
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     let jh = tokio::spawn(async move {
-        let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:19050")?;
+        let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", config.tor.socks_port))?;
         let client = reqwest::Client::builder().proxy(proxy).build()?;
         let secp = Arc::new(Secp256k1::new());
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
