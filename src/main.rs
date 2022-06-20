@@ -70,12 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let application = format!("attestations.{}", config.subname);
     let dirs = directories::ProjectDirs::from("org", "judica", &application).unwrap();
 
-    let data_dir: PathBuf = dirs.data_dir().into();
-    let dir = tokio::fs::create_dir(&data_dir).await;
-    match dir.as_ref().map_err(std::io::Error::kind) {
-        Err(std::io::ErrorKind::AlreadyExists) => (),
-        _e => dir?,
-    };
+    let data_dir: PathBuf = ensure_dir(dirs.data_dir().into()).await?;
     let mut chat_db_file = data_dir.clone();
     chat_db_file.push("chat.sqlite3");
     let mdb = MsgDB::new(Arc::new(tokio::sync::Mutex::new(
@@ -106,4 +101,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ])
     .await;
     Ok(())
+}
+
+async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+    let dir = tokio::fs::create_dir_all(&data_dir).await;
+    match dir.as_ref().map_err(std::io::Error::kind) {
+        Err(std::io::ErrorKind::AlreadyExists) => (),
+        _e => dir?,
+    };
+    Ok(data_dir)
 }
