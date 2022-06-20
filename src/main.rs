@@ -40,12 +40,23 @@ pub struct BitcoinConfig {
     #[serde(with = "Auth")]
     pub auth: rpc::Auth,
 }
+
+fn default_socks_port() -> u16 {
+    19050
+}
+#[derive(Serialize, Deserialize)]
+pub struct TorConfig {
+    directory: PathBuf,
+    #[serde(default = "default_port")]
+    pub attestation_port: u16,
+    #[serde(default = "default_socks_port")]
+    socks_port: u16,
+}
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     bitcoin: BitcoinConfig,
-    #[serde(default = "default_port")]
-    pub attestation_port: u16,
     pub subname: String,
+    pub tor: TorConfig,
 }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -79,8 +90,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     mdb.get_handle().await.setup_tables();
 
     let mut attestation_server =
-        attestations::server::run(config.attestation_port, mdb.clone()).await;
-    let mut tor_service = tor::start(data_dir.clone(), config.attestation_port);
+        attestations::server::run(config.clone(), mdb.clone()).await;
+    let mut tor_service = tor::start(config.clone());
     let mut fetching_client = peer_services::client_fetching(config.clone(), mdb.clone());
 
     tokio::select!(

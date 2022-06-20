@@ -2,7 +2,7 @@ use super::{
     db::connection::MsgDB,
     messages::{CanonicalEnvelopeHash, Envelope},
 };
-use crate::util::{AbstractResult, INFER_UNIT};
+use crate::{util::{AbstractResult, INFER_UNIT}, Config};
 use axum::{
     extract::Query,
     http::Response,
@@ -14,7 +14,7 @@ use sapio_bitcoin::secp256k1::Secp256k1;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 #[derive(Deserialize, Serialize)]
 pub struct Tips {
@@ -70,7 +70,7 @@ pub async fn post_message(
     ))
 }
 
-pub async fn run(port: u16, db: MsgDB) -> tokio::task::JoinHandle<AbstractResult<()>> {
+pub async fn run(config: Arc<Config>, db: MsgDB) -> tokio::task::JoinHandle<AbstractResult<()>> {
     return tokio::spawn(async move {
         // build our application with a route
         let app = Router::new()
@@ -81,7 +81,7 @@ pub async fn run(port: u16, db: MsgDB) -> tokio::task::JoinHandle<AbstractResult
 
         // run our app with hyper
         // `axum::Server` is a re-export of `hyper::Server`
-        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let addr = SocketAddr::from(([127, 0, 0, 1], config.tor.attestation_port));
         tracing::debug!("listening on {}", addr);
         axum::Server::bind(&addr)
             .serve(app.into_make_service())
