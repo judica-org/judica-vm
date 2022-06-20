@@ -50,10 +50,22 @@ async fn test_reused_nonce() {
     handle
         .try_insert_authenticated_envelope(envelope_2.clone())
         .unwrap();
-    let nonces = handle.get_reused_nonces().unwrap();
-    assert_eq!(nonces.len(), 1);
-    let v = nonces.get(&envelope_2.0.header.key).unwrap();
-    assert_eq!(&v[..], &[envelope_1.clone().0, envelope_2.clone().0][..])
+    for i in 0..2 {
+        // Check that only this group is returned
+        let nonces = handle.get_reused_nonces().unwrap();
+        assert_eq!(nonces.len(), 1);
+        let v = nonces.get(&envelope_2.0.header.key).unwrap();
+        assert_eq!(&v[..], &[envelope_1.clone().0, envelope_2.clone().0][..]);
+        // Inserting more messages shouldn't change anything
+        let envelope_i = handle
+            .wrap_message_in_envelope_for_user_by_key(json!({"distinct": i}), &kp, &secp)
+            .unwrap()
+            .unwrap();
+        let envelope_i = envelope_i.clone().self_authenticate(&secp).unwrap();
+        handle
+            .try_insert_authenticated_envelope(envelope_i.clone())
+            .unwrap();
+    }
 }
 
 #[tokio::test]
