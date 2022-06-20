@@ -8,7 +8,7 @@ use rusqlite::{params, Connection};
 
 use sapio_bitcoin::secp256k1::{rand, All, Secp256k1};
 use sapio_bitcoin::KeyPair;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -26,6 +26,36 @@ async fn test_add_user() {
     let test_user = "TestUser".into();
     make_test_user(&secp, &conn.get_handle().await, test_user);
 }
+
+#[tokio::test]
+async fn test_reused_nonce() {
+    let conn = setup_db().await;
+    let secp = Secp256k1::new();
+    let test_user = "TestUser".into();
+    let handle = conn.get_handle().await;
+    let kp = make_test_user(&secp, &handle, test_user);
+    let envelope_1 = handle
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
+        .unwrap()
+        .unwrap();
+    let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
+    let envelope_2 = handle
+        .wrap_message_in_envelope_for_user_by_key(json!("distinct"), &kp, &secp)
+        .unwrap()
+        .unwrap();
+    let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
+    handle
+        .try_insert_authenticated_envelope(envelope_1.clone())
+        .unwrap();
+    handle
+        .try_insert_authenticated_envelope(envelope_2.clone())
+        .unwrap();
+    let nonces = handle.get_reused_nonces().unwrap();
+    assert_eq!(nonces.len(), 1);
+    let v = nonces.get(&envelope_2.0.header.key).unwrap();
+    assert_eq!(&v[..], &[envelope_1.clone().0, envelope_2.clone().0][..])
+}
+
 #[tokio::test]
 async fn test_envelope_creation() {
     let conn = setup_db().await;
