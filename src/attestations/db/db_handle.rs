@@ -1,6 +1,6 @@
 use super::{
     super::{
-        messages::{Authenticated, Envelope, Header, InnerMessage, SigningError, Unsigned},
+        messages::{Authenticated, Envelope, Header, SigningError, Unsigned},
         nonce::{PrecomittedNonce, PrecomittedPublicNonce},
     },
     sql_serializers,
@@ -14,6 +14,7 @@ use sapio_bitcoin::{
     secp256k1::{Secp256k1, SecretKey, Signing},
     KeyPair, XOnlyPublicKey,
 };
+use serde_json::Value;
 use std::collections::BTreeMap;
 use tokio::sync::MutexGuard;
 
@@ -108,7 +109,7 @@ impl<'a> MsgDBHandle<'a> {
     /// Calling multiple times with a given nonce would result in nonce reuse.
     pub fn wrap_message_in_envelope_for_user_by_key<C: Signing>(
         &self,
-        msg: InnerMessage,
+        msg: Value,
         keypair: &KeyPair,
         secp: &Secp256k1<C>,
     ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {

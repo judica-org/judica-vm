@@ -1,4 +1,4 @@
-use crate::attestations::messages::{Envelope, Header, InnerMessage, Unsigned};
+use crate::attestations::messages::{Envelope, Header, Unsigned};
 use crate::attestations::nonce::PrecomittedNonce;
 use attestations::db::connection::MsgDB;
 use attestations::messages::checkpoints::BitcoinCheckPointCache;

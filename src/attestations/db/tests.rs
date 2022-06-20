@@ -1,8 +1,6 @@
 use super::connection::MsgDB;
 use super::*;
-use crate::attestations::messages::{
-    CanonicalEnvelopeHash, Envelope, Header, InnerMessage, Unsigned,
-};
+use crate::attestations::messages::{CanonicalEnvelopeHash, Envelope, Header, Unsigned};
 use crate::attestations::nonce::PrecomittedNonce;
 use crate::util;
 use fallible_iterator::FallibleIterator;
@@ -10,6 +8,7 @@ use rusqlite::{params, Connection};
 
 use sapio_bitcoin::secp256k1::{rand, All, Secp256k1};
 use sapio_bitcoin::KeyPair;
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -35,7 +34,7 @@ async fn test_envelope_creation() {
     let handle = conn.get_handle().await;
     let kp = make_test_user(&secp, &handle, test_user);
     let envelope_1 = handle
-        .wrap_message_in_envelope_for_user_by_key(InnerMessage::Ping(10), &kp, &secp)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
         .unwrap()
         .unwrap();
     let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
@@ -61,7 +60,7 @@ async fn test_envelope_creation() {
     }
 
     let envelope_2 = handle
-        .wrap_message_in_envelope_for_user_by_key(InnerMessage::Ping(10), &kp, &secp)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
         .unwrap()
         .unwrap();
     let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
@@ -88,7 +87,7 @@ async fn test_envelope_creation() {
     let kp_2 = make_test_user(&secp, &handle, "TestUser2".into());
 
     let envelope_3 = handle
-        .wrap_message_in_envelope_for_user_by_key(InnerMessage::Ping(10), &kp_2, &secp)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp_2, &secp)
         .unwrap()
         .unwrap();
     let envelope_3 = envelope_3.clone().self_authenticate(&secp).unwrap();
@@ -131,7 +130,7 @@ fn make_test_user(
             unsigned: Unsigned { signature: None },
             checkpoints: Default::default(),
         },
-        msg: InnerMessage::Ping(0),
+        msg: Value::Null,
     };
     genesis
         .sign_with(&kp, secp, PrecomittedNonce::new(secp))

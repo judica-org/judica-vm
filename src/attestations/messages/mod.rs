@@ -11,17 +11,13 @@ use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::{Block, BlockHeader, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::error::Error;
 use std::fmt::Display;
 use std::str::FromStr;
 pub mod authenticated;
 pub use authenticated::*;
 pub mod checkpoints;
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
-pub enum InnerMessage {
-    Data(String),
-    Ping(u64),
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Unsigned {
@@ -42,7 +38,7 @@ pub struct Header {
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Envelope {
     pub header: Header,
-    pub msg: InnerMessage,
+    pub msg: Value,
 }
 
 #[derive(Debug)]

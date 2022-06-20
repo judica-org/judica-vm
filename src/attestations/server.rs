@@ -1,3 +1,8 @@
+use super::{
+    db::connection::MsgDB,
+    messages::{CanonicalEnvelopeHash, Envelope},
+};
+use crate::util::{AbstractResult, INFER_UNIT};
 use axum::{
     extract::Query,
     http::Response,
@@ -5,27 +10,11 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-
 use sapio_bitcoin::secp256k1::Secp256k1;
 use serde::Deserialize;
 use serde::Serialize;
-
+use serde_json::{json, Value};
 use std::net::SocketAddr;
-
-use crate::{
-    attestations::messages::InnerMessage,
-    util::{AbstractResult, INFER_UNIT},
-};
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum MessageResponse {
-    Pong(u64, u64),
-    None,
-}
-use super::{
-    db::connection::MsgDB,
-    messages::{CanonicalEnvelopeHash, Envelope},
-};
 
 #[derive(Deserialize, Serialize)]
 pub struct Tips {
@@ -58,7 +47,7 @@ pub async fn get_tip_handler(
 pub async fn post_message(
     Extension(db): Extension<MsgDB>,
     Json(envelope): Json<Envelope>,
-) -> Result<(Response<()>, Json<MessageResponse>), (StatusCode, &'static str)> {
+) -> Result<(Response<()>, Json<Value>), (StatusCode, &'static str)> {
     tracing::debug!("Envelope Received: {:?}", envelope);
     let envelope = envelope
         .self_authenticate(&Secp256k1::new())
@@ -71,24 +60,13 @@ pub async fn post_message(
             .try_insert_authenticated_envelope(envelope.clone())
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     }
-    tracing::debug!("Responding");
-    let r = match &envelope.inner_ref().msg {
-        InnerMessage::Ping(u) => {
-            let ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Clock Error"))?
-                .as_millis() as u64;
-            Json(MessageResponse::Pong(*u, ms))
-        }
-        InnerMessage::Data(_data) => Json(MessageResponse::None),
-    };
     Ok((
         Response::builder()
             .status(200)
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        r,
+        Json(json!("Success")),
     ))
 }
 

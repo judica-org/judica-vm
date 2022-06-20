@@ -1,3 +1,4 @@
+use serde_json::Value;
 use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
 
 use crate::{attestations::messages::CanonicalEnvelopeHash, util::INFER_UNIT};
@@ -198,7 +199,7 @@ fn generate_new_user() -> Result<
             },
             checkpoints: Default::default(),
         },
-        msg: InnerMessage::Ping(sent_time_ms),
+        msg: Value::Null
     };
     msg.sign_with(&keypair, &secp, nonce)?;
     Ok((secp, keypair, nonce, msg))
