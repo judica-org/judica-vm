@@ -45,6 +45,7 @@ pub struct Config {
     bitcoin: BitcoinConfig,
     #[serde(default = "default_port")]
     pub attestation_port: u16,
+    pub subname: String,
 }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -66,7 +67,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .run_cache_service()
         .await
         .ok_or("Checkpoint service already started")?;
-    let dirs = directories::ProjectDirs::from("org", "judica", "tor-chat").unwrap();
+    let application = format!("attestations.{}", config.subname);
+    let dirs = directories::ProjectDirs::from("org", "judica", &application).unwrap();
 
     let data_dir: PathBuf = dirs.data_dir().into();
     let dir = tokio::fs::create_dir(&data_dir).await;
