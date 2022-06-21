@@ -67,7 +67,7 @@ impl Display for AuthenticationError {
 impl Error for SigningError {}
 impl Error for AuthenticationError {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Copy, Hash)]
 pub struct CanonicalEnvelopeHash(sha256::Hash);
 impl CanonicalEnvelopeHash {
     pub fn genesis() -> CanonicalEnvelopeHash {
