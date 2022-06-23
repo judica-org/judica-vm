@@ -24,43 +24,9 @@ impl<'a> MsgDBHandle<'a> {
     /// Creates all the required tables for the application.
     /// Safe to call multiple times
     pub fn setup_tables(&mut self) {
-        self.0.execute_batch(
-            "
-            CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, nickname TEXT , key TEXT UNIQUE);
-
-            CREATE TABLE IF NOT EXISTS messages
-                (message_id INTEGER PRIMARY KEY,
-                    body TEXT NOT NULL,
-                    hash TEXT NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    received_time INTEGER NOT NULL,
-                    height INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.height')) STORED,
-                    sent_time INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.sent_time_ms')) STORED,
-                    nonce TEXT NOT NULL GENERATED ALWAYS AS (substr(json_extract(body, '$.header.unsigned.signature'), 0, 64)) STORED,
-                    FOREIGN KEY(user_id) references users(user_id),
-                    UNIQUE(received_time, body, user_id)
-                );
-
-            CREATE TABLE IF NOT EXISTS hidden_services (service_id INTEGER PRIMARY KEY, service_url TEXT NOT NULL, port INTEGER NOT NULL, UNIQUE(service_url, port));
-
-            CREATE TABLE IF NOT EXISTS private_keys
-                (key_id INTEGER PRIMARY KEY,
-                    public_key TEXT UNIQUE,
-                    private_key TEXT UNIQUE);
-
-            CREATE TABLE IF NOT EXISTS message_nonces (
-                nonce_id INTEGER PRIMARY KEY,
-                key_id INTEGER,
-                private_key TEXT,
-                public_key TEXT,
-                FOREIGN KEY(key_id) REFERENCES private_keys(key_id),
-                UNIQUE(key_id, private_key, public_key)
-            );
-
-            PRAGMA journal_mode=WAL;
-            "
-        )
-        .unwrap();
+        self.0
+            .execute_batch(include_str!("sql/create_tables.sql"))
+            .unwrap();
     }
 
     /// Creates a new random nonce and saves it for the given user.
@@ -81,15 +47,7 @@ impl<'a> MsgDBHandle<'a> {
         key: XOnlyPublicKey,
     ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
         let pk_nonce = nonce.get_public(secp);
-        let mut stmt = self.0
-                                .prepare("
-                                            INSERT INTO message_nonces (key_id, public_key, private_key)
-                                            VALUES (
-                                                (SELECT key_id FROM private_keys WHERE public_key = ?),
-                                                ?,
-                                                ?
-                                            )
-                                            ")?;
+        let mut stmt = self.0.prepare(include_str!("sql/insert_nonce.sql"))?;
         stmt.insert(rusqlite::params![key.to_hex(), pk_nonce, nonce,])?;
         Ok(pk_nonce)
     }
@@ -153,7 +111,9 @@ impl<'a> MsgDBHandle<'a> {
         key: XOnlyPublicKey,
         height: u64,
     ) -> Result<Envelope, rusqlite::Error> {
-        let mut stmt = self.0.prepare("SELECT messages.body  FROM messages WHERE user_id = (SELECT user_id from users where key = ?) AND height = ?")?;
+        let mut stmt = self
+            .0
+            .prepare(include_str!("sql/get_message_by_height_and_user.sql"))?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
     /// finds the most recent message for a user by their key
@@ -161,29 +121,17 @@ impl<'a> MsgDBHandle<'a> {
         &self,
         key: XOnlyPublicKey,
     ) -> Result<Envelope, rusqlite::Error> {
-        let mut stmt = self.0.prepare(
-            "SELECT m.body
-            FROM messages m
-            INNER JOIN users u ON m.user_id = u.user_id
-            WHERE m.user_id = (SELECT user_id  FROM users where key = ?)
-            ORDER BY m.height DESC
-            LIMIT 1
-            ",
-        )?;
+        let mut stmt = self
+            .0
+            .prepare(include_str!("sql/message_tips_by_user.sql"))?;
         stmt.query_row([key.to_hex()], |r| r.get(0))
     }
 
     /// finds the most recent message only for messages where we know the key
     pub fn get_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
-        let mut stmt = self.0.prepare(
-            "
-                SELECT M.body, M.user_id, max(M.height)  FROM   messages M
-                INNER JOIN users U
-                ON U.user_id = M.user_id
-                INNER JOIN private_keys K
-                ON K.public_key = U.key
-                GROUP BY U.user_id",
-        )?;
+        let mut stmt = self
+            .0
+            .prepare(include_str!("sql/get_tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
@@ -193,9 +141,7 @@ impl<'a> MsgDBHandle<'a> {
     pub fn get_reused_nonces(
         &self,
     ) -> Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, rusqlite::Error> {
-        let mut stmt = self.0.prepare(
-            "SELECT body from messages WHERE nonce in (SELECT nonce FROM messages GROUP BY nonce, user_id HAVING COUNT(nonce) > 1)"
-        )?;
+        let mut stmt = self.0.prepare("sql/get_reused_nonces.sql")?;
         let rows = stmt.query([])?;
         let vs = rows
             .map(|r| r.get::<_, Envelope>(0))
@@ -222,15 +168,9 @@ impl<'a> MsgDBHandle<'a> {
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
     ) -> Result<Result<Vec<Envelope>, (Envelope, Envelope)>, rusqlite::Error> {
-        let mut stmt = self.0.prepare(
-            "
-        SELECT (messages.body)
-        FROM messages
-        INNER JOIN users ON messages.user_id = users.user_id
-        WHERE users.key = ?
-        ORDER BY messages.height ASC;
-        ",
-        )?;
+        let mut stmt = self
+            .0
+            .prepare(include_str!("sql/load_all_messages_by_key.sql"))?;
         let rows = stmt.query(params![key.to_hex()])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get(0)).collect()?;
         let _prev = sha256::Hash::hash(&[]);
@@ -337,12 +277,7 @@ impl<'a> MsgDBHandle<'a> {
         data: Authenticated<Envelope>,
     ) -> Result<(), rusqlite::Error> {
         let data = data.inner();
-        let mut stmt = self.0.prepare(
-            "
-                                            INSERT INTO messages (body, hash, user_id, received_time)
-                                            VALUES (?, ?, (SELECT user_id FROM users WHERE key = ?), ?)
-                                            ",
-        )?;
+        let mut stmt = self.0.prepare(include_str!("sql/insert_envelope.sql"))?;
         let time = util::now();
 
         stmt.insert(rusqlite::params![
