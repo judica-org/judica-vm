@@ -1,13 +1,14 @@
 use std::collections::BTreeMap;
 
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::erc20::ERC20Registry;
 use crate::entity::EntityIDAllocator;
+use crate::erc20::ERC20Registry;
 
-use super::erc20;
 use super::entity::EntityID;
+use super::erc20;
 
 #[derive(Serialize)]
 pub(crate) struct UniswapPair {
@@ -32,7 +33,7 @@ impl UniswapPair {
     }
 }
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PairID(pub erc20::ERC20Ptr, pub erc20::ERC20Ptr);
 
 #[derive(Serialize, Default)]

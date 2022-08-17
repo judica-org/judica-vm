@@ -11,6 +11,7 @@ use super::nft;
 use crate::sanitize;
 
 use erc20::ERC20Standard;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -129,7 +130,7 @@ impl GameBoard {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GameMove {
     Init,

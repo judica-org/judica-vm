@@ -3,6 +3,18 @@ import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import './App.css';
 import logo from './logo.svg';
+import Form from "@rjsf/core";
+
+
+function MoveForm() {
+  const [schema, set_schema] = React.useState<null | any>(null);
+  React.useEffect(() => {
+    (async () => {
+      set_schema(await invoke("get_move_schema"));
+    })()
+  });
+  return schema && <div className='MoveForm'><Form schema={schema}></Form></div>;
+}
 
 type game_board = {
   erc20s: any,
@@ -73,6 +85,7 @@ function App() {
   return (
     <div className="App">
       {game_board && <GameBoard g={game_board}></GameBoard>}
+      <MoveForm></MoveForm>
     </div>
   );
 }

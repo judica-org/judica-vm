@@ -10,6 +10,7 @@ use mine_with_friends_board::{
     game::{GameBoard, GameMove},
     Verified,
 };
+use schemars::{schema::RootSchema, schema_for};
 use tauri::{
     async_runtime::{spawn, Mutex},
     State, Window,
@@ -30,6 +31,11 @@ async fn game_synchronizer(window: Window, game: State<'_, Game>) -> Result<(), 
     Ok(())
 }
 
+#[tauri::command]
+fn get_move_schema() -> RootSchema {
+    schema_for!(GameMove)
+}
+
 #[derive(Clone)]
 struct Game(Arc<Mutex<GameBoard>>, Arc<Notify>);
 fn main() {
@@ -45,7 +51,7 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(g.clone())
-        .invoke_handler(tauri::generate_handler![game_synchronizer])
+        .invoke_handler(tauri::generate_handler![game_synchronizer, get_move_schema])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

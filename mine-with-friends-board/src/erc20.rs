@@ -1,4 +1,5 @@
 use super::entity::EntityID;
+use schemars::JsonSchema;
 use serde::{ser::SerializeSeq, Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -93,7 +94,7 @@ impl ERC20 for ERC20Standard {
     }
 }
 
-#[derive(Default, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
+#[derive(Default, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema)]
 pub struct ERC20Ptr(usize);
 
 #[derive(Default, Serialize)]

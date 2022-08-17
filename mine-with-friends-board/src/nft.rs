@@ -7,6 +7,7 @@ use std::ops::Index;
 use crate::erc20::ERC20Ptr;
 
 use super::entity::EntityID;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -38,7 +39,7 @@ impl Serialize for NFTRegistry {
     }
 }
 
-#[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy, JsonSchema)]
 pub struct NftPtr(EntityID);
 
 impl NFTRegistry {

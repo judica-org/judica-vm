@@ -1,7 +1,8 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Serialize, Deserialize)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Serialize, Deserialize, JsonSchema)]
 #[serde(try_from = "String", into = "String")]
 pub struct EntityID(pub u128);
 
