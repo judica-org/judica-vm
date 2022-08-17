@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use mine_with_friends_board::{
     game::{GameBoard, GameMove},
-    UserID, Verified,
+    EntityID, Verified,
 };
 use tauri::{
     async_runtime::{spawn, Mutex},
@@ -38,7 +38,7 @@ fn main() {
         let g = g.clone();
         spawn(async move {
             let mut game = g.0.lock().await;
-            game.play(Verified::create(GameMove::Init, 1, "".into(), UserID(0)))
+            game.play(Verified::create(GameMove::Init, 1, "".into(), EntityID(0)))
         });
     }
     tauri::Builder::default()

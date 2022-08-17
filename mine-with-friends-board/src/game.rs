@@ -16,7 +16,7 @@ use super::Verified;
 
 use erc20::ERC20Ptr;
 
-use super::UserID;
+use super::EntityID;
 
 use super::ContractCreator;
 
@@ -29,11 +29,11 @@ pub struct GameBoard {
     /// Make this a vote over the map of users to current vote and let the turn count be dynamic
     pub(crate) turn_count: u64,
     pub(crate) alloc: ContractCreator,
-    pub(crate) users: BTreeMap<UserID, String>,
+    pub(crate) users: BTreeMap<EntityID, String>,
     pub(crate) nfts: nft::NFTRegistry,
     pub(crate) nft_sales: nft::NFTSaleRegistry,
     pub(crate) power_plants: (),
-    pub(crate) player_move_sequence: BTreeMap<UserID, u64>,
+    pub(crate) player_move_sequence: BTreeMap<EntityID, u64>,
     pub(crate) new_users_allowed: bool,
     pub(crate) init: bool,
     /// If init = true, must be Some
@@ -41,7 +41,7 @@ pub struct GameBoard {
     /// If init = true, must be Some
     pub(crate) dollar_token_id: Option<ERC20Ptr>,
 
-    pub(crate) root_user: Option<UserID>,
+    pub(crate) root_user: Option<EntityID>,
 }
 
 impl GameBoard {
@@ -143,7 +143,7 @@ pub enum GameMove {
 }
 
 impl Verified<sanitize::Unsanitized<GameMove>> {
-    pub fn create(g: GameMove, sequence: u64, sig: String, from: UserID) -> Self {
+    pub fn create(g: GameMove, sequence: u64, sig: String, from: EntityID) -> Self {
         Verified {
             d: sanitize::Unsanitized(g),
             sequence,

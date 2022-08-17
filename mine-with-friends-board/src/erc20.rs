@@ -1,26 +1,26 @@
-use super::UserID;
+use super::EntityID;
 use serde::{ser::SerializeSeq, Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     ops::{Index, IndexMut},
 };
 
-pub(crate) trait ERC20 : Send + Sync {
+pub(crate) trait ERC20: Send + Sync {
     fn transaction(&mut self);
     // todo: undo if transaction fails?
     fn end_transaction(&mut self);
-    fn add_balance(&mut self, to: &UserID, amount: u128);
-    fn balance_sub(&mut self, to: &UserID, amount: u128);
-    fn balance_check(&mut self, to: &UserID) -> u128;
+    fn add_balance(&mut self, to: &EntityID, amount: u128);
+    fn balance_sub(&mut self, to: &EntityID, amount: u128);
+    fn balance_check(&mut self, to: &EntityID) -> u128;
     #[must_use]
-    fn transfer(&mut self, sender: &UserID, receiver: &UserID, amount: u128) -> bool;
+    fn transfer(&mut self, sender: &EntityID, receiver: &EntityID, amount: u128) -> bool;
     fn total_coins(&self) -> u128;
     fn to_json(&self) -> serde_json::Value;
 }
 
 #[derive(Default, Serialize)]
 pub(crate) struct ERC20Standard {
-    pub(crate) balances: BTreeMap<UserID, u128>,
+    pub(crate) balances: BTreeMap<EntityID, u128>,
     pub(crate) total: u128,
     #[cfg(test)]
     pub(crate) in_transaction: Option<u128>,
@@ -35,20 +35,20 @@ impl ERC20Standard {
     }
 }
 impl ERC20 for ERC20Standard {
-    fn add_balance(&mut self, to: &UserID, amount: u128) {
+    fn add_balance(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
         let amt = self.balances.entry(to.clone()).or_default();
         *amt += amount;
         self.total += amount;
     }
-    fn balance_sub(&mut self, to: &UserID, amount: u128) {
+    fn balance_sub(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
         let amt = self.balances.entry(to.clone()).or_default();
         *amt += amount;
         self.total += amount;
     }
 
-    fn balance_check(&mut self, to: &UserID) -> u128 {
+    fn balance_check(&mut self, to: &EntityID) -> u128 {
         *self.balances.entry(to.clone()).or_default()
     }
     fn total_coins(&self) -> u128 {
@@ -83,7 +83,7 @@ impl ERC20 for ERC20Standard {
         }
     }
 
-    fn transfer(&mut self, sender: &UserID, receiver: &UserID, amount: u128) -> bool {
+    fn transfer(&mut self, sender: &EntityID, receiver: &EntityID, amount: u128) -> bool {
         if self.balance_check(sender) < amount {
             return false;
         }

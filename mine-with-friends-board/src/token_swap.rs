@@ -7,12 +7,12 @@ use crate::erc20::ERC20Registry;
 use crate::ContractCreator;
 
 use super::erc20;
-use super::UserID;
+use super::EntityID;
 
 #[derive(Serialize)]
 pub(crate) struct UniswapPair {
     pub(crate) pair: PairID,
-    pub(crate) id: UserID,
+    pub(crate) id: EntityID,
     pub(crate) lp: erc20::ERC20Ptr,
 }
 
@@ -50,7 +50,7 @@ impl Uniswap {
         id: PairID,
         amount_a: u128,
         amount_b: u128,
-        from: UserID,
+        from: EntityID,
     ) {
         tokens[id.0].transaction();
         tokens[id.1].transaction();
@@ -102,7 +102,7 @@ impl Uniswap {
         id: PairID,
         amount_a: u128,
         amount_b: u128,
-        from: UserID,
+        from: EntityID,
     ) {
         tokens[id.0].transaction();
         tokens[id.1].transaction();

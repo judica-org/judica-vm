@@ -6,15 +6,15 @@ use std::ops::Index;
 
 use crate::erc20::ERC20Ptr;
 
-use super::UserID;
+use super::EntityID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
 pub(crate) trait NFT : Send + Sync {
-    fn owner(&self) -> UserID;
-    fn transfer(&mut self, to: UserID);
-    fn id(&self) -> UserID;
+    fn owner(&self) -> EntityID;
+    fn transfer(&mut self, to: EntityID);
+    fn id(&self) -> EntityID;
     fn transfer_count(&self) -> u128;
     fn to_json(&self) -> serde_json::Value;
 }
@@ -23,7 +23,7 @@ pub(crate) type Price = u128;
 
 pub type Currency = ERC20Ptr;
 
-pub(crate) type NFTID = UserID;
+pub(crate) type NFTID = EntityID;
 
 
 #[derive(Default)]
@@ -40,7 +40,7 @@ impl Serialize for NFTRegistry {
 }
 
 #[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
-pub struct NftPtr(UserID);
+pub struct NftPtr(EntityID);
 
 impl NFTRegistry {
     pub(crate) fn add(&mut self, nft: Box<dyn NFT>) -> NftPtr {
@@ -69,7 +69,7 @@ impl IndexMut<NftPtr> for NFTRegistry {
 
 #[derive(Serialize, Default)]
 pub(crate) struct NFTSaleRegistry {
-    pub(crate) nfts: BTreeMap<NftPtr, (Price, Currency, UserID, u128)>,
+    pub(crate) nfts: BTreeMap<NftPtr, (Price, Currency, EntityID, u128)>,
 }
 
 impl NFTSaleRegistry {
@@ -92,7 +92,7 @@ impl NFTSaleRegistry {
     }
     pub(crate) fn make_trade(
         &mut self,
-        to: UserID,
+        to: EntityID,
         asset: NftPtr,
         tokens: &mut ERC20Registry,
         nfts: &mut NFTRegistry,
@@ -124,22 +124,22 @@ impl NFTSaleRegistry {
 
 #[derive(Serialize)]
 pub(crate) struct BaseNFT {
-    pub(crate) owner: UserID,
-    pub(crate) nft_id: UserID,
+    pub(crate) owner: EntityID,
+    pub(crate) nft_id: EntityID,
     pub(crate) transfer_count: u128,
 }
 
 impl NFT for BaseNFT {
-    fn owner(&self) -> UserID {
+    fn owner(&self) -> EntityID {
         self.owner
     }
 
-    fn transfer(&mut self, to: UserID) {
+    fn transfer(&mut self, to: EntityID) {
         self.owner = to;
         self.transfer_count += 1;
     }
 
-    fn id(&self) -> UserID {
+    fn id(&self) -> EntityID {
         self.nft_id
     }
 
@@ -157,15 +157,15 @@ pub(crate) struct PowerPlant {
 }
 
 impl NFT for PowerPlant {
-    fn owner(&self) -> UserID {
+    fn owner(&self) -> EntityID {
         self.base.owner()
     }
 
-    fn transfer(&mut self, to: UserID) {
+    fn transfer(&mut self, to: EntityID) {
         self.base.transfer(to)
     }
 
-    fn id(&self) -> UserID {
+    fn id(&self) -> EntityID {
         self.base.id()
     }
 
