@@ -185,7 +185,7 @@ impl GameBoard {
             sequence,
             sig,
             from,
-        }: Verified<GameMove>,
+        }: Verified<Unsanitized<GameMove>>,
     ) {
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from.clone()).or_default();
@@ -195,7 +195,7 @@ impl GameBoard {
             *current_move = sequence;
         }
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
-        match d {
+        match d.sanitize(()) {
             GameMove::Init => {
                 if self.init == false {
                     self.init = true;
@@ -253,6 +253,31 @@ enum GameMove {
     ListNFTForSale(NftPtr, Price, Currency),
     RegisterUser(String),
 }
+
+impl Sanitizable for GameMove {
+    type Output = Self;
+    type Context = ();
+    fn sanitize(self, context: ()) -> Self {
+        todo!()
+    }
+}
+trait Sanitizable {
+    type Output;
+    type Context;
+    fn sanitize(self, context: Self::Context) -> Self::Output;
+}
+struct Unsanitized<D: Sanitizable>(D);
+impl<D> Sanitizable for Unsanitized<D>
+where
+    D: Sanitizable,
+{
+    type Output = D::Output;
+    type Context = D::Context;
+    fn sanitize(self, context: D::Context) -> D::Output {
+        self.0.sanitize(context)
+    }
+}
+
 struct Verified<D> {
     d: D,
     sequence: u64,
