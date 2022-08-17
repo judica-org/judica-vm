@@ -26,6 +26,8 @@ pub enum GameMove {
     ListNFTForSale(ListNFTForSale),
     /// # Register User
     RegisterUser(RegisterUser),
+    /// # Send Coins
+    SendTokens(SendTokens),
 }
 
 macro_rules! derive_from {
@@ -43,6 +45,7 @@ derive_from!(Trade);
 derive_from!(PurchaseNFT);
 derive_from!(ListNFTForSale);
 derive_from!(RegisterUser);
+derive_from!(SendTokens);
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct Init();
@@ -69,6 +72,13 @@ pub struct ListNFTForSale {
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct RegisterUser {
     pub user_id: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct SendTokens {
+    pub to: EntityID,
+    pub amount: nft::Price,
+    pub currency: nft::Currency,
 }
 
 impl Verified<Unsanitized<GameMove>> {

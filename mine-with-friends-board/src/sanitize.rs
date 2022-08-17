@@ -1,7 +1,7 @@
 use crate::{
     erc20::ERC20Ptr,
     game::game_move::{
-        GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, Trade,
+        GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, Trade, SendTokens,
     },
     nft::NftPtr,
     token_swap::PairID,
@@ -70,6 +70,7 @@ impl Sanitizable for GameMove {
             GameMove::PurchaseNFT(x) => x.sanitize(())?.into(),
             GameMove::ListNFTForSale(x) => x.sanitize(())?.into(),
             GameMove::RegisterUser(x) => x.sanitize(())?.into(),
+            GameMove::SendTokens(x) => x.sanitize(())?.into(),
         })
     }
 }
@@ -145,6 +146,15 @@ impl Sanitizable for ListNFTForSale {
     }
 }
 impl Sanitizable for RegisterUser {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        Ok(self)
+    }
+}
+
+impl Sanitizable for SendTokens {
     type Output = Self;
     type Context = ();
     type Error = ();

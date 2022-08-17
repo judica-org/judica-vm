@@ -3,12 +3,12 @@
     windows_subsystem = "windows"
 )]
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
-        game_move::{GameMove, Init},
+        game_move::{GameMove, Init, RegisterUser},
         GameBoard,
     },
     Verified,
@@ -39,6 +39,20 @@ fn get_move_schema() -> RootSchema {
     schema_for!(GameMove)
 }
 
+#[tauri::command]
+async fn make_move_inner(
+    game: State<'_, Game>,
+    nextMove: GameMove,
+    from: EntityID,
+) -> Result<(), ()> {
+    {
+        let mut game = game.0.lock().await;
+        game.play_inner(nextMove, from);
+    }
+    game.1.notify_waiters();
+    Ok(())
+}
+
 #[derive(Clone)]
 struct Game(Arc<Mutex<GameBoard>>, Arc<Notify>);
 fn main() {
@@ -47,20 +61,43 @@ fn main() {
     {
         let g = g.clone();
         spawn(async move {
-            let mut game = g.0.lock().await;
-            game.play(Verified::create(
-                GameMove::Init(Init {}),
-                1,
-                "".into(),
-                EntityID(0),
-            ))
+            let root = {
+                let mut game = g.0.lock().await;
+                game.play_inner(GameMove::Init(Init {}), EntityID(0));
+                game.root_user().unwrap()
+            };
+            g.1.notify_waiters();
+            tokio::time::sleep(Duration::from_secs(3)).await;
+
+            {
+                let mut game = g.0.lock().await;
+                game.play_inner(
+                    GameMove::RegisterUser(RegisterUser {
+                        user_id: "Alice".into(),
+                    }),
+                    root,
+                );
+                game.play_inner(
+                    GameMove::RegisterUser(RegisterUser {
+                        user_id: "Bob".into(),
+                    }),
+                    root,
+                );
+            }
+
+            g.1.notify_waiters();
+            tokio::time::sleep(Duration::from_secs(1)).await;
         });
     }
 
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(g.clone())
-        .invoke_handler(tauri::generate_handler![game_synchronizer, get_move_schema])
+        .invoke_handler(tauri::generate_handler![
+            game_synchronizer,
+            get_move_schema,
+            make_move_inner
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

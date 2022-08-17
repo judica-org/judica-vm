@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api';
 import { appWindow } from '@tauri-apps/api/window';
-import React from 'react';
+import React, { FormEvent } from 'react';
 import './App.css';
 import logo from './logo.svg';
-import Form from "@rjsf/core";
+import Form, { FormSubmit } from "@rjsf/core";
 
 
 function MoveForm() {
@@ -12,8 +12,32 @@ function MoveForm() {
     (async () => {
       set_schema(await invoke("get_move_schema"));
     })()
-  });
-  return schema && <div className='MoveForm'><Form schema={schema}></Form></div>;
+  }, []);
+  console.log(schema);
+  const handle_submit = (data: FormSubmit) => {
+    // TODO: Submit from correct user
+    invoke("make_move_inner", { nextMove: data.formData, from: uid.current?.value })
+
+  };
+  const customFormats = { "uint128": (s: string) => { return true; } };
+  const schema_form = React.useMemo<JSX.Element>(() => {
+    if (schema)
+      return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
+        <button type="submit">Submit</button>
+      </Form>;
+    else
+      return <div></div>
+  }
+    , [schema]
+  )
+  const uid = React.useRef<null | HTMLInputElement>(null);
+  return schema && <div className='MoveForm'>
+    <div>
+      <label>Player ID:</label>
+      <input type={"text"} ref={uid}></input>
+    </div>
+    {schema_form}
+  </div>;
 }
 
 type game_board = {
@@ -67,6 +91,12 @@ function GameBoard(props: { g: game_board }) {
 
   </ul>;
 }
+let invoked = false;
+const invoke_once = () => {
+  if (invoked) return;
+  invoked = true;
+  invoke("game_synchronizer")
+}
 function App() {
   const [game_board, set_game_board] = React.useState<game_board | null>(null);
   React.useEffect(() => {
@@ -74,13 +104,13 @@ function App() {
       console.log(ev);
       set_game_board(JSON.parse(ev.payload as string) as game_board)
     });
-    invoke("game_synchronizer")
+    invoke_once()
     return () => {
       (async () => {
         (await unlisten)()
       })();
     }
-  });
+  }, [game_board]);
 
   return (
     <div className="App">

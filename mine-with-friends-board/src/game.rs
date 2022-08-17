@@ -12,6 +12,7 @@ use self::game_move::ListNFTForSale;
 use self::game_move::NoNewUsers;
 use self::game_move::PurchaseNFT;
 use self::game_move::RegisterUser;
+use self::game_move::SendTokens;
 use self::game_move::Trade;
 
 use super::erc20;
@@ -70,6 +71,12 @@ impl GameBoard {
             root_user: None,
         }
     }
+    pub fn alloc(&mut self) -> EntityID {
+        self.alloc.make()
+    }
+    pub fn root_user(&self) -> Option<EntityID> {
+        self.root_user
+    }
     pub fn play(
         &mut self,
         Verified {
@@ -95,11 +102,19 @@ impl GameBoard {
             GameMove::Init(Init {}) => {
                 if self.init == false {
                     self.init = true;
-                    self.bitcoin_token_id
+                    let _ = self
+                        .bitcoin_token_id
                         .insert(self.erc20s.new_token(Box::new(ERC20Standard::default())));
-                    self.dollar_token_id
+                    let _ = self
+                        .dollar_token_id
                         .insert(self.erc20s.new_token(Box::new(ERC20Standard::default())));
-                    self.root_user.insert(self.alloc.make());
+                    let root = self.alloc.make();
+                    let _ = self.root_user.insert(root);
+
+                    // DEMO CODE:
+                    // REMOVE BEFORE FLIGHT
+                    self.erc20s[self.bitcoin_token_id.unwrap()].mint(&root, 10000000);
+                    self.erc20s[self.dollar_token_id.unwrap()].mint(&root, 30000);
                     // TODO: Initialize Power Plants?
                     let demo_nft = self.nfts.add(Box::new(nft::BaseNFT {
                         owner: self.root_user.unwrap(),
@@ -153,6 +168,15 @@ impl GameBoard {
                 price,
                 currency,
             }) => self.nft_sales.list_nft(nft_id, price, currency, &self.nfts),
+            GameMove::SendTokens(SendTokens {
+                to,
+                amount,
+                currency,
+            }) => {
+                self.erc20s[currency].transaction();
+                self.erc20s[currency].transfer(&from, &to, amount);
+                self.erc20s[currency].end_transaction();
+            }
         }
         return Ok(());
     }
