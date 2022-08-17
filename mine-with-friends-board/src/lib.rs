@@ -4,47 +4,24 @@ use std::collections::btree_map::*;
 
 mod erc20;
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Serialize, Copy, Deserialize)]
-enum UserID {
-    Contract(u128),
-}
+pub struct UserID(pub u128);
 
-mod game;
+pub mod game;
 mod nft;
 mod token_swap;
+pub mod sanitize;
 
+#[derive(Serialize)]
 pub struct ContractCreator(u128);
 impl ContractCreator {
     pub(crate) fn make(&mut self) -> UserID {
         self.0 += 1;
-        UserID::Contract(self.0)
+        UserID(self.0)
     }
 }
 
-trait Sanitizable {
-    type Output;
-    type Context;
-    fn sanitize(self, context: Self::Context) -> Self::Output;
-}
-struct Unsanitized<D: Sanitizable>(D);
-impl<D> Sanitizable for Unsanitized<D>
-where
-    D: Sanitizable,
-{
-    type Output = D::Output;
-    type Context = D::Context;
-    fn sanitize(self, context: D::Context) -> D::Output {
-        self.0.sanitize(context)
-    }
-}
-impl Sanitizable for ERC20Ptr {
-    type Output = ERC20Ptr;
-    type Context = ();
-    fn sanitize(self, context: Self::Context) -> Self::Output {
-        todo!()
-    }
-}
 
-struct Verified<D> {
+pub struct Verified<D> {
     d: D,
     sequence: u64,
     sig: String,

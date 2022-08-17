@@ -1,11 +1,11 @@
 use super::UserID;
-use serde::{ser::SerializeSeq, Serialize, Deserialize};
+use serde::{ser::SerializeSeq, Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     ops::{Index, IndexMut},
 };
 
-pub(crate) trait ERC20 {
+pub(crate) trait ERC20 : Send + Sync {
     fn transaction(&mut self);
     // todo: undo if transaction fails?
     fn end_transaction(&mut self);
@@ -94,7 +94,7 @@ impl ERC20 for ERC20Standard {
 }
 
 #[derive(Default, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
-pub(crate) struct ERC20Ptr(usize);
+pub struct ERC20Ptr(usize);
 
 #[derive(Default, Serialize)]
 pub(crate) struct ERC20Registry(#[serde(serialize_with = "special_erc20")] Vec<Box<dyn ERC20>>);

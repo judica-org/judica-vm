@@ -11,25 +11,36 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-pub(crate) trait NFT {
+pub(crate) trait NFT : Send + Sync {
     fn owner(&self) -> UserID;
     fn transfer(&mut self, to: UserID);
     fn id(&self) -> UserID;
     fn transfer_count(&self) -> u128;
+    fn to_json(&self) -> serde_json::Value;
 }
 
 pub(crate) type Price = u128;
 
-pub(crate) type Currency = ERC20Ptr;
+pub type Currency = ERC20Ptr;
 
 pub(crate) type NFTID = UserID;
 
+
+#[derive(Default)]
 pub(crate) struct NFTRegistry {
     pub(crate) nfts: BTreeMap<NftPtr, Box<dyn NFT>>,
 }
+impl Serialize for NFTRegistry {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_seq(self.nfts.values().map(|n| n.to_json()))
+    }
+}
 
 #[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
-pub(crate) struct NftPtr(UserID);
+pub struct NftPtr(UserID);
 
 impl NFTRegistry {
     pub(crate) fn add(&mut self, nft: Box<dyn NFT>) -> NftPtr {
@@ -56,6 +67,7 @@ impl IndexMut<NftPtr> for NFTRegistry {
     }
 }
 
+#[derive(Serialize, Default)]
 pub(crate) struct NFTSaleRegistry {
     pub(crate) nfts: BTreeMap<NftPtr, (Price, Currency, UserID, u128)>,
 }
@@ -110,9 +122,10 @@ impl NFTSaleRegistry {
     }
 }
 
+#[derive(Serialize)]
 pub(crate) struct BaseNFT {
     pub(crate) owner: UserID,
-    pub(crate) plant_id: UserID,
+    pub(crate) nft_id: UserID,
     pub(crate) transfer_count: u128,
 }
 
@@ -127,11 +140,15 @@ impl NFT for BaseNFT {
     }
 
     fn id(&self) -> UserID {
-        self.plant_id
+        self.nft_id
     }
 
     fn transfer_count(&self) -> u128 {
         self.transfer_count
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap()
     }
 }
 
@@ -154,5 +171,9 @@ impl NFT for PowerPlant {
 
     fn transfer_count(&self) -> u128 {
         self.base.transfer_count()
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        self.base.to_json()
     }
 }

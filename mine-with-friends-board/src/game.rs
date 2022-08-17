@@ -1,16 +1,16 @@
 use std::collections::BTreeMap;
 
+use crate::sanitize::Sanitizable;
 use crate::token_swap;
+use crate::token_swap::Uniswap;
 
 use super::erc20;
 use super::nft;
-use super::Sanitizable;
+use crate::sanitize;
 
 use erc20::ERC20Standard;
 use serde::Deserialize;
 use serde::Serialize;
-
-use super::Unsanitized;
 
 use super::Verified;
 
@@ -22,7 +22,8 @@ use super::ContractCreator;
 
 use erc20::ERC20Registry;
 
-pub(crate) struct GameBoard {
+#[derive(Serialize)]
+pub struct GameBoard {
     pub(crate) erc20s: erc20::ERC20Registry,
     pub(crate) swap: token_swap::Uniswap,
     /// Make this a vote over the map of users to current vote and let the turn count be dynamic
@@ -44,27 +45,42 @@ pub(crate) struct GameBoard {
 }
 
 impl GameBoard {
-    pub(crate) fn setup() -> GameBoard {
-        todo!();
+    pub fn new() -> GameBoard {
+        GameBoard {
+            erc20s: ERC20Registry::default(),
+            swap: Default::default(),
+            turn_count: 0,
+            alloc: ContractCreator(0),
+            users: Default::default(),
+            nfts: Default::default(),
+            nft_sales: Default::default(),
+            power_plants: (),
+            player_move_sequence: Default::default(),
+            new_users_allowed: true,
+            init: false,
+            bitcoin_token_id: None,
+            dollar_token_id: None,
+            root_user: None,
+        }
     }
-    pub(crate) fn play(
+    pub fn play(
         &mut self,
         Verified {
             d,
             sequence,
             sig,
             from,
-        }: Verified<Unsanitized<GameMove>>,
-    ) {
+        }: Verified<sanitize::Unsanitized<GameMove>>,
+    ) -> Result<(), ()> {
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from.clone()).or_default();
         if (*current_move + 1) != sequence {
-            return;
+            return Ok(());
         } else {
             *current_move = sequence;
         }
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
-        match d.sanitize(()) {
+        match d.sanitize(())? {
             GameMove::Init => {
                 if self.init == false {
                     self.init = true;
@@ -76,7 +92,7 @@ impl GameBoard {
                     // TODO: Initialize Power Plants?
                     let demo_nft = self.nfts.add(Box::new(nft::BaseNFT {
                         owner: self.root_user.unwrap(),
-                        plant_id: self.alloc.make(),
+                        nft_id: self.alloc.make(),
                         transfer_count: 0,
                     }));
                     self.nft_sales.list_nft(
@@ -111,11 +127,13 @@ impl GameBoard {
                 self.nft_sales.list_nft(asset, price, currency, &self.nfts)
             }
         }
+        return Ok(());
     }
 }
 
 #[derive(Serialize, Deserialize)]
-pub(crate) enum GameMove {
+#[serde(rename_all = "snake_case")]
+pub enum GameMove {
     Init,
     NoNewUsers,
     Trade(token_swap::PairID, u128, u128),
@@ -124,10 +142,13 @@ pub(crate) enum GameMove {
     RegisterUser(String),
 }
 
-impl Sanitizable for GameMove {
-    type Output = Self;
-    type Context = ();
-    fn sanitize(self, context: ()) -> Self {
-        todo!()
+impl Verified<sanitize::Unsanitized<GameMove>> {
+    pub fn create(g: GameMove, sequence: u64, sig: String, from: UserID) -> Self {
+        Verified {
+            d: sanitize::Unsanitized(g),
+            sequence,
+            sig,
+            from,
+        }
     }
 }

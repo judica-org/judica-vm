@@ -9,6 +9,7 @@ use crate::ContractCreator;
 use super::erc20;
 use super::UserID;
 
+#[derive(Serialize)]
 pub(crate) struct UniswapPair {
     pub(crate) pair: PairID,
     pub(crate) id: UserID,
@@ -32,8 +33,9 @@ impl UniswapPair {
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize)]
-pub(crate) struct PairID(erc20::ERC20Ptr, erc20::ERC20Ptr);
+pub struct PairID(pub erc20::ERC20Ptr, pub erc20::ERC20Ptr);
 
+#[derive(Serialize, Default)]
 pub(crate) struct Uniswap {
     pub(crate) markets: BTreeMap<PairID, UniswapPair>,
 }
