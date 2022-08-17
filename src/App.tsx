@@ -3,11 +3,64 @@ import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import './App.css';
 import logo from './logo.svg';
+
+type game_board = {
+  erc20s: any,
+  swap: any,
+  turn_count: number,
+  alloc: any,
+  users: Record<string, string>,
+  nfts: any,
+  nft_sales: any,
+  player_move_sequences: Record<string, number>,
+  init: boolean,
+  new_users_allowed: boolean,
+  bitcoin_token_id: null | string,
+  dollar_token_id: null | string,
+  root_user: null | string,
+};
+function GameBoard(props: { g: game_board }) {
+  return <ul>
+    <li>
+      Init: {JSON.stringify(props.g.init)}
+    </li>
+    <li>
+      New Users: {JSON.stringify(props.g.new_users_allowed)}
+    </li>
+    <li>
+      User List: {JSON.stringify(props.g.users)}
+    </li>
+    <li>
+      Root User: {JSON.stringify(props.g.root_user)}
+    </li>
+    <li>
+      Bitcoin Token ID: {JSON.stringify(props.g.bitcoin_token_id)}
+    </li>
+    <li>
+      Dollar Token ID: {JSON.stringify(props.g.dollar_token_id)}
+    </li>
+    <li>
+      ERC20s: {JSON.stringify(props.g.erc20s)}
+    </li>
+    <li>
+      Exchanges: {JSON.stringify(props.g.swap)}
+    </li>
+    <li>
+      NFTs: {JSON.stringify(props.g.nfts)}
+    </li>
+    <li>
+      NFT Sales: {JSON.stringify(props.g.nft_sales)}
+    </li>
+
+
+  </ul>;
+}
 function App() {
-  const [game_board, set_game_board] = React.useState<unknown>({});
+  const [game_board, set_game_board] = React.useState<game_board | null>(null);
   React.useEffect(() => {
     const unlisten = appWindow.listen("game-board", (ev) => {
-      set_game_board(ev.payload)
+      console.log(ev);
+      set_game_board(JSON.parse(ev.payload as string) as game_board)
     });
     invoke("game_synchronizer")
     return () => {
@@ -19,20 +72,7 @@ function App() {
 
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          {JSON.stringify(game_board)}
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      {game_board && <GameBoard g={game_board}></GameBoard>}
     </div>
   );
 }
