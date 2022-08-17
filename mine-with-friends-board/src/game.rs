@@ -50,7 +50,7 @@ impl GameBoard {
             erc20s: ERC20Registry::default(),
             swap: Default::default(),
             turn_count: 0,
-            alloc: ContractCreator(0),
+            alloc: ContractCreator(0x00C0DE0000),
             users: Default::default(),
             nfts: Default::default(),
             nft_sales: Default::default(),
