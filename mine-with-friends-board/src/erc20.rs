@@ -1,4 +1,4 @@
-use super::EntityID;
+use super::entity::EntityID;
 use serde::{ser::SerializeSeq, Deserialize, Serialize};
 use std::{
     collections::BTreeMap,

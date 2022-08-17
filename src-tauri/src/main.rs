@@ -6,8 +6,9 @@
 use std::sync::Arc;
 
 use mine_with_friends_board::{
+    entity::EntityID,
     game::{GameBoard, GameMove},
-    EntityID, Verified,
+    Verified,
 };
 use tauri::{
     async_runtime::{spawn, Mutex},

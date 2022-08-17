@@ -4,10 +4,10 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::erc20::ERC20Registry;
-use crate::ContractCreator;
+use crate::entity::EntityIDAllocator;
 
 use super::erc20;
-use super::EntityID;
+use super::entity::EntityID;
 
 #[derive(Serialize)]
 pub(crate) struct UniswapPair {
@@ -17,7 +17,7 @@ pub(crate) struct UniswapPair {
 }
 
 impl UniswapPair {
-    fn new(alloc: &mut ContractCreator, tokens: &mut ERC20Registry, pair: PairID) -> UniswapPair {
+    fn new(alloc: &mut EntityIDAllocator, tokens: &mut ERC20Registry, pair: PairID) -> UniswapPair {
         UniswapPair {
             pair,
             id: alloc.make(),
@@ -46,7 +46,7 @@ impl Uniswap {
     pub(crate) fn deposit(
         &mut self,
         tokens: &mut erc20::ERC20Registry,
-        alloc: &mut ContractCreator,
+        alloc: &mut EntityIDAllocator,
         id: PairID,
         amount_a: u128,
         amount_b: u128,
@@ -98,7 +98,7 @@ impl Uniswap {
     pub(crate) fn do_trade(
         &mut self,
         tokens: &mut erc20::ERC20Registry,
-        alloc: &mut ContractCreator,
+        alloc: &mut EntityIDAllocator,
         id: PairID,
         amount_a: u128,
         amount_b: u128,

@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::entity::EntityID;
+use crate::entity::EntityIDAllocator;
 use crate::sanitize::Sanitizable;
 use crate::token_swap;
 use crate::token_swap::Uniswap;
@@ -16,10 +18,6 @@ use super::Verified;
 
 use erc20::ERC20Ptr;
 
-use super::EntityID;
-
-use super::ContractCreator;
-
 use erc20::ERC20Registry;
 
 #[derive(Serialize)]
@@ -28,7 +26,7 @@ pub struct GameBoard {
     pub(crate) swap: token_swap::Uniswap,
     /// Make this a vote over the map of users to current vote and let the turn count be dynamic
     pub(crate) turn_count: u64,
-    pub(crate) alloc: ContractCreator,
+    pub(crate) alloc: EntityIDAllocator,
     pub(crate) users: BTreeMap<EntityID, String>,
     pub(crate) nfts: nft::NFTRegistry,
     pub(crate) nft_sales: nft::NFTSaleRegistry,
@@ -50,7 +48,7 @@ impl GameBoard {
             erc20s: ERC20Registry::default(),
             swap: Default::default(),
             turn_count: 0,
-            alloc: ContractCreator(0x00C0DE0000),
+            alloc: EntityIDAllocator(0x00C0DE0000),
             users: Default::default(),
             nfts: Default::default(),
             nft_sales: Default::default(),

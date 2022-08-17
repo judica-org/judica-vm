@@ -6,7 +6,7 @@ use std::ops::Index;
 
 use crate::erc20::ERC20Ptr;
 
-use super::EntityID;
+use super::entity::EntityID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
