@@ -60,8 +60,8 @@ impl ERC20 for ERC20Standard {
     fn burn(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
         let amt = self.balances.entry(to.clone()).or_default();
-        *amt += amount;
-        self.total += amount;
+        *amt -= amount;
+        self.total -= amount;
     }
 
     fn balance_check(&mut self, to: &EntityID) -> u128 {
