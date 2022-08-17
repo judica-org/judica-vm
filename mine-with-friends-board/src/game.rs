@@ -102,12 +102,14 @@ impl GameBoard {
             GameMove::Init(Init {}) => {
                 if self.init == false {
                     self.init = true;
-                    let _ = self
-                        .bitcoin_token_id
-                        .insert(self.erc20s.new_token(Box::new(ERC20Standard::new(&mut self.alloc))));
-                    let _ = self
-                        .dollar_token_id
-                        .insert(self.erc20s.new_token(Box::new(ERC20Standard::new(&mut self.alloc))));
+                    let _ = self.bitcoin_token_id.insert(
+                        self.erc20s
+                            .new_token(Box::new(ERC20Standard::new(&mut self.alloc))),
+                    );
+                    let _ = self.dollar_token_id.insert(
+                        self.erc20s
+                            .new_token(Box::new(ERC20Standard::new(&mut self.alloc))),
+                    );
                     let root = self.alloc.make();
                     let _ = self.root_user.insert(root);
 

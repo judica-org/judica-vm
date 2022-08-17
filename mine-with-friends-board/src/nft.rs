@@ -122,13 +122,14 @@ impl NFTSaleRegistry {
             if limit_currency != *currency {
                 return;
             }
-            if limit_price >= *price {
+            if limit_price < *price {
                 return;
             }
             let token = &mut tokens[currency.clone()];
             token.transaction();
             if token.transfer(&to, &nfts[asset.clone()].owner(), *price) {
                 nfts[asset].transfer(to);
+                self.nfts.remove(&asset);
             }
             token.end_transaction();
         }
