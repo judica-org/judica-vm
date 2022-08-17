@@ -87,7 +87,11 @@ impl GameBoard {
             *current_move = sequence;
         }
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
-        match d.sanitize(())? {
+        self.play_inner(d.sanitize(())?, from)
+    }
+    pub fn play_inner(&mut self, d: GameMove, from: EntityID) -> Result<(), ()> {
+        // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
+        match d {
             GameMove::Init(Init {}) => {
                 if self.init == false {
                     self.init = true;
