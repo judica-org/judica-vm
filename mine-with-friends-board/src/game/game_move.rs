@@ -14,11 +14,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GameMove {
+    /// # Initialize Game
     Init(Init),
+    /// # Stop Inviting New Users
     NoNewUsers(NoNewUsers),
+    /// # Trade Coins
     Trade(Trade),
+    /// # Buy NFTs
     PurchaseNFT(PurchaseNFT),
+    /// # Sell NFTs
     ListNFTForSale(ListNFTForSale),
+    /// # Register User
     RegisterUser(RegisterUser),
 }
 
