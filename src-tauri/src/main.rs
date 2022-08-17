@@ -7,7 +7,10 @@ use std::sync::Arc;
 
 use mine_with_friends_board::{
     entity::EntityID,
-    game::{GameBoard, GameMove},
+    game::{
+        game_move::{GameMove, Init},
+        GameBoard,
+    },
     Verified,
 };
 use schemars::{schema::RootSchema, schema_for};
@@ -45,7 +48,12 @@ fn main() {
         let g = g.clone();
         spawn(async move {
             let mut game = g.0.lock().await;
-            game.play(Verified::create(GameMove::Init, 1, "".into(), EntityID(0)))
+            game.play(Verified::create(
+                GameMove::Init(Init {}),
+                1,
+                "".into(),
+                EntityID(0),
+            ))
         });
     }
     tauri::Builder::default()

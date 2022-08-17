@@ -6,6 +6,14 @@ use crate::sanitize::Sanitizable;
 use crate::token_swap;
 use crate::token_swap::Uniswap;
 
+use self::game_move::GameMove;
+use self::game_move::Init;
+use self::game_move::ListNFTForSale;
+use self::game_move::NoNewUsers;
+use self::game_move::PurchaseNFT;
+use self::game_move::RegisterUser;
+use self::game_move::Trade;
+
 use super::erc20;
 use super::nft;
 use crate::sanitize;
@@ -80,7 +88,7 @@ impl GameBoard {
         }
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         match d.sanitize(())? {
-            GameMove::Init => {
+            GameMove::Init(Init {}) => {
                 if self.init == false {
                     self.init = true;
                     self.bitcoin_token_id
@@ -102,52 +110,48 @@ impl GameBoard {
                     );
                 }
             }
-            GameMove::RegisterUser(user) => {
+            GameMove::RegisterUser(RegisterUser { user_id }) => {
                 if self.new_users_allowed {
-                    self.users.insert(self.alloc.make(), user);
+                    self.users.insert(self.alloc.make(), user_id);
                 }
             }
-            GameMove::NoNewUsers => {
+            GameMove::NoNewUsers(NoNewUsers {}) => {
                 self.new_users_allowed = false;
             }
-            GameMove::Trade(pair, a, b) => {
-                self.swap
-                    .do_trade(&mut self.erc20s, &mut self.alloc, pair, a, b, from);
+            GameMove::Trade(Trade {
+                pair,
+                amount_a,
+                amount_b,
+            }) => {
+                self.swap.do_trade(
+                    &mut self.erc20s,
+                    &mut self.alloc,
+                    pair,
+                    amount_a,
+                    amount_b,
+                    from,
+                );
             }
-            GameMove::PurchaseNFT(asset, limit_price, currency) => self.nft_sales.make_trade(
+            GameMove::PurchaseNFT(PurchaseNFT {
+                nft_id,
+                limit_price,
+                currency,
+            }) => self.nft_sales.make_trade(
                 from,
-                asset,
+                nft_id,
                 &mut self.erc20s,
                 &mut self.nfts,
                 limit_price,
                 currency,
             ),
-            GameMove::ListNFTForSale(asset, price, currency) => {
-                self.nft_sales.list_nft(asset, price, currency, &self.nfts)
-            }
+            GameMove::ListNFTForSale(ListNFTForSale {
+                nft_id,
+                price,
+                currency,
+            }) => self.nft_sales.list_nft(nft_id, price, currency, &self.nfts),
         }
         return Ok(());
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum GameMove {
-    Init,
-    NoNewUsers,
-    Trade(token_swap::PairID, u128, u128),
-    PurchaseNFT(nft::NftPtr, nft::Price, nft::Currency),
-    ListNFTForSale(nft::NftPtr, nft::Price, nft::Currency),
-    RegisterUser(String),
-}
-
-impl Verified<sanitize::Unsanitized<GameMove>> {
-    pub fn create(g: GameMove, sequence: u64, sig: String, from: EntityID) -> Self {
-        Verified {
-            d: sanitize::Unsanitized(g),
-            sequence,
-            sig,
-            from,
-        }
-    }
-}
+pub mod game_move;

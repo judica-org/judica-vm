@@ -1,4 +1,11 @@
-use crate::{erc20::ERC20Ptr, game::GameMove, nft::NftPtr, token_swap::PairID};
+use crate::{
+    erc20::ERC20Ptr,
+    game::game_move::{
+        GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, Trade,
+    },
+    nft::NftPtr,
+    token_swap::PairID,
+};
 
 pub trait Sanitizable {
     type Output;
@@ -42,7 +49,12 @@ impl Sanitizable for PairID {
     type Context = <ERC20Ptr as Sanitizable>::Context;
     type Error = <ERC20Ptr as Sanitizable>::Error;
     fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
-        Ok(PairID(self.0.sanitize(())?, self.1.sanitize(())?))
+        let mut pair = PairID {
+            asset_a: self.asset_a.sanitize(())?,
+            asset_b: self.asset_b.sanitize(())?,
+        };
+        pair.normalize();
+        Ok(pair)
     }
 }
 
@@ -51,19 +63,92 @@ impl Sanitizable for GameMove {
     type Context = ();
     type Error = ();
     fn sanitize(self, context: ()) -> Result<Self, Self::Error> {
-        match self {
-            GameMove::Init => Ok(self),
-            GameMove::NoNewUsers => Ok(self),
-            GameMove::Trade(a, b, c) => Ok(GameMove::Trade(a.sanitize(())?, b, c)),
-            GameMove::PurchaseNFT(a, b, c) => {
-                Ok(GameMove::PurchaseNFT(a.sanitize(())?, b, c.sanitize(())?))
-            }
-            GameMove::ListNFTForSale(a, b, c) => Ok(GameMove::ListNFTForSale(
-                a.sanitize(())?,
-                b,
-                c.sanitize(())?,
-            )),
-            GameMove::RegisterUser(u) => Ok(GameMove::RegisterUser(u)),
-        }
+        Ok(match self {
+            GameMove::Init(x) => x.sanitize(())?.into(),
+            GameMove::NoNewUsers(x) => x.sanitize(())?.into(),
+            GameMove::Trade(x) => x.sanitize(())?.into(),
+            GameMove::PurchaseNFT(x) => x.sanitize(())?.into(),
+            GameMove::ListNFTForSale(x) => x.sanitize(())?.into(),
+            GameMove::RegisterUser(x) => x.sanitize(())?.into(),
+        })
+    }
+}
+
+impl Sanitizable for Init {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        Ok(self)
+    }
+}
+
+impl Sanitizable for NoNewUsers {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        Ok(self)
+    }
+}
+
+impl Sanitizable for Trade {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        let Self {
+            pair,
+            amount_a,
+            amount_b,
+        } = self;
+        Ok(Self {
+            pair: pair.sanitize(())?,
+            amount_a,
+            amount_b,
+        })
+    }
+}
+
+impl Sanitizable for PurchaseNFT {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        let Self {
+            nft_id,
+            limit_price,
+            currency,
+        } = self;
+        Ok(Self {
+            nft_id: nft_id.sanitize(())?,
+            limit_price,
+            currency: currency.sanitize(())?,
+        })
+    }
+}
+impl Sanitizable for ListNFTForSale {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        let Self {
+            nft_id,
+            price,
+            currency,
+        } = self;
+        Ok(Self {
+            nft_id: nft_id.sanitize(())?,
+            price,
+            currency: currency.sanitize(())?,
+        })
+    }
+}
+impl Sanitizable for RegisterUser {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        Ok(self)
     }
 }
