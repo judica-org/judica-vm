@@ -1,5 +1,5 @@
 use super::UserID;
-use serde::{ser::SerializeSeq, Serialize};
+use serde::{ser::SerializeSeq, Serialize, Deserialize};
 use std::{
     collections::BTreeMap,
     ops::{Index, IndexMut},
@@ -93,7 +93,7 @@ impl ERC20 for ERC20Standard {
     }
 }
 
-#[derive(Default, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
+#[derive(Default, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
 pub(crate) struct ERC20Ptr(usize);
 
 #[derive(Default, Serialize)]

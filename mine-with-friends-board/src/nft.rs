@@ -7,8 +7,9 @@ use std::ops::Index;
 use crate::erc20::ERC20Ptr;
 
 use super::UserID;
-use std::collections::BTreeMap;
+use serde::Deserialize;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 pub(crate) trait NFT {
     fn owner(&self) -> UserID;
@@ -27,7 +28,7 @@ pub(crate) struct NFTRegistry {
     pub(crate) nfts: BTreeMap<NftPtr, Box<dyn NFT>>,
 }
 
-#[derive(Serialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 pub(crate) struct NftPtr(UserID);
 
 impl NFTRegistry {

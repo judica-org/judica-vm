@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
 
+use serde::Deserialize;
+use serde::Serialize;
+
 use crate::erc20::ERC20Registry;
 use crate::ContractCreator;
 
@@ -28,7 +31,7 @@ impl UniswapPair {
     }
 }
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize)]
 pub(crate) struct PairID(erc20::ERC20Ptr, erc20::ERC20Ptr);
 
 pub(crate) struct Uniswap {
@@ -37,7 +40,7 @@ pub(crate) struct Uniswap {
 
 impl Uniswap {
     // TODO: Better math in this whole module
-    
+
     pub(crate) fn deposit(
         &mut self,
         tokens: &mut erc20::ERC20Registry,
