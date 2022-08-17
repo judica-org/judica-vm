@@ -10,8 +10,8 @@ pub(crate) trait ERC20: Send + Sync {
     fn transaction(&mut self);
     // todo: undo if transaction fails?
     fn end_transaction(&mut self);
-    fn add_balance(&mut self, to: &EntityID, amount: u128);
-    fn balance_sub(&mut self, to: &EntityID, amount: u128);
+    fn mint(&mut self, to: &EntityID, amount: u128);
+    fn burn(&mut self, to: &EntityID, amount: u128);
     fn balance_check(&mut self, to: &EntityID) -> u128;
     #[must_use]
     fn transfer(&mut self, sender: &EntityID, receiver: &EntityID, amount: u128) -> bool;
@@ -36,13 +36,13 @@ impl ERC20Standard {
     }
 }
 impl ERC20 for ERC20Standard {
-    fn add_balance(&mut self, to: &EntityID, amount: u128) {
+    fn mint(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
         let amt = self.balances.entry(to.clone()).or_default();
         *amt += amount;
         self.total += amount;
     }
-    fn balance_sub(&mut self, to: &EntityID, amount: u128) {
+    fn burn(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
         let amt = self.balances.entry(to.clone()).or_default();
         *amt += amount;
@@ -88,13 +88,15 @@ impl ERC20 for ERC20Standard {
         if self.balance_check(sender) < amount {
             return false;
         }
-        self.balance_sub(sender, amount);
-        self.add_balance(receiver, amount);
+        self.burn(sender, amount);
+        self.mint(receiver, amount);
         return true;
     }
 }
 
-#[derive(Default, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema)]
+#[derive(
+    Default, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema,
+)]
 pub struct ERC20Ptr(usize);
 
 #[derive(Default, Serialize)]

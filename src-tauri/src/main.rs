@@ -56,6 +56,7 @@ fn main() {
             ))
         });
     }
+
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(g.clone())

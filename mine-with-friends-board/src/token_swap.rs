@@ -42,7 +42,6 @@ pub struct PairID {
 impl PairID {
     pub fn normalize(&mut self) {
         if self.asset_a <= self.asset_b {
-            
         } else {
             *self = Self {
                 asset_a: self.asset_b,
@@ -85,18 +84,16 @@ impl Uniswap {
             return;
         }
 
-        if !(tokens[id.asset_a].balance_check(&from) >= amount_a
-            && tokens[id.asset_b].balance_check(&from) >= amount_b)
-        {
+        if !tokens[id.asset_a].transfer(&from, &mkt.id, amount_a) {
             return;
         }
 
-        tokens[id.asset_a].balance_sub(&from, amount_a);
-        tokens[id.asset_b].balance_sub(&from, amount_b);
-
-        tokens[id.asset_a].add_balance(&mkt.id, amount_a);
-        // TODO: Bugfix: add_balance amount_b
-        tokens[id.asset_b].add_balance(&mkt.id, amount_a);
+        if !tokens[id.asset_b].transfer(&from, &mkt.id, amount_b) {
+            // attempt to return asset a if asset b transfer fails...
+            // if the return transfer fails then??
+            let _ = tokens[id.asset_a].transfer(&mkt.id, &from, amount_a);
+            return;
+        }
 
         let coins = tokens[mkt.lp].total_coins();
 
@@ -104,7 +101,7 @@ impl Uniswap {
 
         let lp_tokens = &mut tokens[mkt.lp];
         lp_tokens.transaction();
-        lp_tokens.add_balance(&from, to_mint);
+        lp_tokens.mint(&from, to_mint);
         lp_tokens.end_transaction();
         tokens[id.asset_a].end_transaction();
         tokens[id.asset_b].end_transaction();
@@ -144,22 +141,14 @@ impl Uniswap {
             return;
         }
 
-        // One of these is 0
-        tokens[id.asset_a].balance_sub(&from, amount_a);
-        tokens[id.asset_b].balance_sub(&from, amount_b);
-
         if amount_a == 0 {
             let new_amount_a = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
-            tokens[id.asset_a].add_balance(&from, new_amount_a);
-            // modify market
-            tokens[id.asset_a].balance_sub(&mkt.id, new_amount_a);
-            tokens[id.asset_b].add_balance(&mkt.id, amount_b);
+            let _ = tokens[id.asset_b].transfer(&from, &mkt.id, amount_b);
+            let _ = tokens[id.asset_a].transfer(&mkt.id, &from, new_amount_a);
         } else {
             let new_amount_b = (mkt.amt_b(tokens) * amount_a) / mkt.amt_a(tokens);
-            tokens[id.asset_b].add_balance(&from, new_amount_b);
-            // modify market
-            tokens[id.asset_b].balance_sub(&mkt.id, new_amount_b);
-            tokens[id.asset_a].add_balance(&mkt.id, amount_a);
+            let _ = tokens[id.asset_a].transfer(&from, &mkt.id, amount_a);
+            let _ = tokens[id.asset_b].transfer(&mkt.id, &from, new_amount_b);
         }
 
         tokens[id.asset_a].end_transaction();
