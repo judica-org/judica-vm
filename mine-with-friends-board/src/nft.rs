@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-pub(crate) trait NFT : Send + Sync {
+pub(crate) trait NFT: Send + Sync {
     fn owner(&self) -> EntityID;
     fn transfer(&mut self, to: EntityID);
     fn id(&self) -> EntityID;
@@ -24,7 +24,6 @@ pub(crate) type Price = u128;
 pub type Currency = ERC20Ptr;
 
 pub(crate) type NFTID = EntityID;
-
 
 #[derive(Default)]
 pub(crate) struct NFTRegistry {
@@ -67,9 +66,16 @@ impl IndexMut<NftPtr> for NFTRegistry {
     }
 }
 
+#[derive(Serialize)]
+pub struct NFTSale {
+    price: Price,
+    currency: Currency,
+    seller: EntityID,
+    transfer_count: u128,
+}
 #[derive(Serialize, Default)]
 pub(crate) struct NFTSaleRegistry {
-    pub(crate) nfts: BTreeMap<NftPtr, (Price, Currency, EntityID, u128)>,
+    pub(crate) nfts: BTreeMap<NftPtr, NFTSale>,
 }
 
 impl NFTSaleRegistry {
@@ -82,12 +88,12 @@ impl NFTSaleRegistry {
     ) {
         self.nfts.insert(
             asset,
-            (
+            NFTSale {
                 price,
                 currency,
-                nfts[asset].owner(),
-                nfts[asset].transfer_count(),
-            ),
+                seller: nfts[asset].owner(),
+                transfer_count: nfts[asset].transfer_count(),
+            },
         );
     }
     pub(crate) fn make_trade(
@@ -99,8 +105,14 @@ impl NFTSaleRegistry {
         limit_price: Price,
         limit_currency: Currency,
     ) {
-        if let Some((price, currency, who, transfer_count)) = self.nfts.get(&asset) {
-            if *who != nfts[asset.clone()].owner() {
+        if let Some(NFTSale {
+            price,
+            currency,
+            seller,
+            transfer_count,
+        }) = self.nfts.get(&asset)
+        {
+            if *seller != nfts[asset.clone()].owner() {
                 return;
             }
             if *transfer_count != nfts[asset.clone()].transfer_count() {
