@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
 pub struct EntityID(pub u64);
 
 impl EntityID {

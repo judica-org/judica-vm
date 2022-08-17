@@ -22,7 +22,13 @@ impl UniswapPair {
         UniswapPair {
             pair,
             id: alloc.make(),
-            lp: tokens.new_token(Box::new(erc20::ERC20Standard::default())),
+            lp: tokens.new_token(Box::new(erc20::ERC20Standard {
+                balances: Default::default(),
+                total: Default::default(),
+                this: alloc.make(),
+                #[cfg(test)]
+                in_transaction: None,
+            })),
         }
     }
     fn amt_a(&self, tokens: &mut ERC20Registry) -> u128 {

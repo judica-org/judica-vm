@@ -1,3 +1,5 @@
+use crate::entity::EntityIDAllocator;
+
 use super::entity::EntityID;
 use schemars::JsonSchema;
 use serde::{ser::SerializeSeq, Deserialize, Serialize};
@@ -17,14 +19,16 @@ pub(crate) trait ERC20: Send + Sync {
     fn transfer(&mut self, sender: &EntityID, receiver: &EntityID, amount: u128) -> bool;
     fn total_coins(&self) -> u128;
     fn to_json(&self) -> serde_json::Value;
+    fn id(&self) -> EntityID;
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 pub(crate) struct ERC20Standard {
     pub(crate) balances: BTreeMap<EntityID, u128>,
     pub(crate) total: u128,
     #[cfg(test)]
     pub(crate) in_transaction: Option<u128>,
+    pub this: EntityID,
 }
 
 impl ERC20Standard {
@@ -32,6 +36,17 @@ impl ERC20Standard {
         #[cfg(test)]
         if !self.in_transaction.is_some() {
             panic!("Not In Transaction Currently");
+        }
+    }
+}
+impl ERC20Standard {
+    pub fn new(alloc: &mut EntityIDAllocator) -> Self {
+        Self {
+            balances: Default::default(),
+            total: Default::default(),
+            this: alloc.make(),
+            #[cfg(test)]
+            in_transaction: None,
         }
     }
 }
@@ -92,31 +107,36 @@ impl ERC20 for ERC20Standard {
         self.mint(receiver, amount);
         return true;
     }
+
+    fn id(&self) -> EntityID {
+        self.this
+    }
 }
 
-#[derive(
-    Default, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema,
-)]
-pub struct ERC20Ptr(usize);
+#[derive(Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema)]
+#[serde(transparent)]
+pub struct ERC20Ptr(EntityID);
 
 #[derive(Default, Serialize)]
-pub(crate) struct ERC20Registry(#[serde(serialize_with = "special_erc20")] Vec<Box<dyn ERC20>>);
+pub(crate) struct ERC20Registry(
+    #[serde(serialize_with = "special_erc20")] BTreeMap<EntityID, Box<dyn ERC20>>,
+);
 
-pub(crate) fn special_erc20<S>(v: &Vec<Box<dyn ERC20>>, s: S) -> Result<S::Ok, S::Error>
+pub(crate) fn special_erc20<S>(
+    v: &BTreeMap<EntityID, Box<dyn ERC20>>,
+    s: S,
+) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    let mut seq = s.serialize_seq(Some(v.len()))?;
-    for elt in v.iter().map(|b| b.to_json()) {
-        seq.serialize_element(&elt)?;
-    }
-    seq.end()
+    s.collect_map(v.iter().map(|b| (b.0, b.1.to_json())))
 }
 
 impl ERC20Registry {
     pub(crate) fn new_token(&mut self, new: Box<dyn ERC20>) -> ERC20Ptr {
-        self.0.push(new);
-        ERC20Ptr(self.0.len() - 1)
+        let p = ERC20Ptr(new.id());
+        self.0.insert(new.id(), new);
+        p
     }
 }
 
@@ -124,12 +144,12 @@ impl Index<ERC20Ptr> for ERC20Registry {
     type Output = Box<dyn ERC20>;
 
     fn index(&self, index: ERC20Ptr) -> &Self::Output {
-        &self.0[index.0]
+        self.0.get(&index.0).unwrap()
     }
 }
 
 impl IndexMut<ERC20Ptr> for ERC20Registry {
     fn index_mut(&mut self, index: ERC20Ptr) -> &mut Self::Output {
-        &mut self.0[index.0]
+        self.0.get_mut(&index.0).unwrap()
     }
 }

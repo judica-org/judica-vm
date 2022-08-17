@@ -16,7 +16,7 @@ function MoveForm() {
   console.log(schema);
   const handle_submit = (data: FormSubmit) => {
     // TODO: Submit from correct user
-    invoke("make_move_inner", { nextMove: data.formData, from: uid.current?.value })
+    invoke("make_move_inner", { nextMove: data.formData, from: uid.current?.valueAsNumber })
 
   };
   const customFormats = { "uint128": (s: string) => { return true; } };
@@ -34,7 +34,7 @@ function MoveForm() {
   return schema && <div className='MoveForm'>
     <div>
       <label>Player ID:</label>
-      <input type={"text"} ref={uid}></input>
+      <input type={"number"} ref={uid}></input>
     </div>
     {schema_form}
   </div>;
