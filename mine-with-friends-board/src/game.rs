@@ -4,12 +4,12 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 
-use crate::tokens::ASICProducer;
-use crate::tokens::HashBoardData;
 use crate::nft::PowerPlantEvent;
 use crate::sanitize::Sanitizable;
 use crate::token_swap;
 use crate::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::ASICProducer;
+use crate::tokens::HashBoardData;
 
 use self::game_move::GameMove;
 use self::game_move::Init;
@@ -20,8 +20,8 @@ use self::game_move::RegisterUser;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
 
-use super::tokens;
 use super::nft;
+use super::tokens;
 use crate::sanitize;
 
 use tokens::TokenBase;
@@ -40,7 +40,7 @@ pub struct GameBoard {
     pub(crate) swap: token_swap::ConstantFunctionMarketMaker,
     /// Make this a vote over the map of users to current vote and let the turn count be dynamic
     pub(crate) turn_count: u64,
-    pub(crate) alloc: EntityIDAllocator,
+    alloc: EntityIDAllocator,
     pub(crate) users: BTreeMap<EntityID, String>,
     pub(crate) nfts: nft::NFTRegistry,
     pub(crate) nft_sales: nft::NFTSaleRegistry,
@@ -119,9 +119,10 @@ impl GameBoard {
             GameMove::Init(Init {}) => {
                 if self.init == false {
                     self.init = true;
-                    let _ = self.bitcoin_token_id.insert(self.tokens.new_token(Box::new(
-                        TokenBase::new(&mut self.alloc, "Bitcoin".into()),
-                    )));
+                    let _ = self.bitcoin_token_id.insert(
+                        self.tokens
+                            .new_token(Box::new(TokenBase::new(&mut self.alloc, "Bitcoin".into()))),
+                    );
                     let _ = self.dollar_token_id.insert(self.tokens.new_token(Box::new(
                         TokenBase::new(&mut self.alloc, "US Dollars".into()),
                     )));

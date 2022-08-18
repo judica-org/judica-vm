@@ -1,15 +1,11 @@
-use std::collections::BTreeMap;
-
+use super::entity::EntityID;
+use super::tokens;
+use crate::game::GameBoard;
+use crate::tokens::TokenRegistry;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-
-use crate::entity::EntityIDAllocator;
-use crate::tokens::TokenRegistry;
-use crate::game::GameBoard;
-
-use super::entity::EntityID;
-use super::tokens;
+use std::collections::BTreeMap;
 
 #[derive(Serialize)]
 pub(crate) struct ConstantFunctionMarketMakerPair {
@@ -19,29 +15,36 @@ pub(crate) struct ConstantFunctionMarketMakerPair {
 }
 
 impl ConstantFunctionMarketMakerPair {
-    fn new(
-        alloc: &mut EntityIDAllocator,
-        tokens: &mut TokenRegistry,
-        mut pair: TradingPairID,
-    ) -> ConstantFunctionMarketMakerPair {
+    fn ensure(game: &mut GameBoard, mut pair: TradingPairID) -> TradingPairID {
         pair.normalize();
-        let name_a = tokens[pair.asset_a]
-            .nickname()
-            .unwrap_or(format!("{}", pair.asset_a.inner()));
-        let name_b = tokens[pair.asset_b]
-            .nickname()
-            .unwrap_or(format!("{}", pair.asset_b.inner()));
-        ConstantFunctionMarketMakerPair {
-            pair,
-            id: alloc.make(),
-            lp: tokens.new_token(Box::new(tokens::TokenBase {
-                balances: Default::default(),
-                total: Default::default(),
-                this: alloc.make(),
-                #[cfg(test)]
-                in_transaction: None,
-                nickname: Some(format!("swap({},{})::shares", name_a, name_b)),
-            })),
+        match game.swap.markets.entry(pair) {
+            std::collections::btree_map::Entry::Vacant(a) => {
+                let name_a = game.tokens[pair.asset_a]
+                    .nickname()
+                    .unwrap_or(format!("{}", pair.asset_a.inner()));
+                let name_b = game.tokens[pair.asset_b]
+                    .nickname()
+                    .unwrap_or(format!("{}", pair.asset_b.inner()));
+                let base_id = game.alloc();
+                let id = game.alloc();
+                game.swap.markets.insert(
+                    pair,
+                    ConstantFunctionMarketMakerPair {
+                        pair,
+                        id,
+                        lp: game.tokens.new_token(Box::new(tokens::TokenBase {
+                            balances: Default::default(),
+                            total: Default::default(),
+                            this: base_id,
+                            #[cfg(test)]
+                            in_transaction: None,
+                            nickname: Some(format!("swap({},{})::shares", name_a, name_b)),
+                        })),
+                    },
+                );
+                pair
+            }
+            std::collections::btree_map::Entry::Occupied(a) => pair,
         }
     }
     fn amt_a(&self, tokens: &mut TokenRegistry) -> u128 {
@@ -90,18 +93,15 @@ impl ConstantFunctionMarketMaker {
         if id != unnormalized_id {
             std::mem::swap(&mut amount_a, &mut amount_b);
         }
-        let tokens: &mut tokens::TokenRegistry = &mut game.tokens;
-        let alloc: &mut EntityIDAllocator = &mut game.alloc;
-        tokens[id.asset_a].transaction();
-        tokens[id.asset_b].transaction();
         if amount_a == 0 || amount_b == 0 {
             return;
         }
-        let mkt = game
-            .swap
-            .markets
-            .entry(id)
-            .or_insert_with(|| ConstantFunctionMarketMakerPair::new(alloc, tokens, id));
+        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
+        let mkt = &game.swap.markets[&id];
+
+        let tokens: &mut tokens::TokenRegistry = &mut game.tokens;
+        tokens[id.asset_a].transaction();
+        tokens[id.asset_b].transaction();
 
         //        amount_a / amount_b = mkt.amt_a / mkt.amt_b
         if amount_a * mkt.amt_b(tokens) != mkt.amt_a(tokens) * amount_b {
@@ -147,26 +147,20 @@ impl ConstantFunctionMarketMaker {
         if id != unnormalized_id {
             std::mem::swap(&mut amount_a, &mut amount_b);
         }
-        let tokens: &mut tokens::TokenRegistry = &mut game.tokens;
-        let alloc: &mut EntityIDAllocator = &mut game.alloc;
-        tokens[id.asset_a].transaction();
-        tokens[id.asset_b].transaction();
         // the zero is the one to be computed
         if !(amount_a == 0 || amount_b == 0) {
             return;
         }
-
+        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
+        let mkt = &game.swap.markets[&id];
+        let tokens: &mut tokens::TokenRegistry = &mut game.tokens;
+        tokens[id.asset_a].transaction();
+        tokens[id.asset_b].transaction();
         if !(tokens[id.asset_a].balance_check(&from) >= amount_a
             && tokens[id.asset_b].balance_check(&from) >= amount_b)
         {
             return;
         }
-
-        let mkt = game
-            .swap
-            .markets
-            .entry(id)
-            .or_insert_with(|| ConstantFunctionMarketMakerPair::new(alloc, tokens, id));
 
         if !(amount_a <= mkt.amt_a(tokens) && amount_b <= mkt.amt_b(tokens)) {
             return;
