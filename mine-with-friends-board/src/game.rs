@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 
+use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
+use crate::nft::PowerPlant;
+use crate::nft::PowerPlantEvent;
 use crate::sanitize::Sanitizable;
 use crate::token_swap;
 use crate::token_swap::Uniswap;
@@ -40,7 +43,6 @@ pub struct GameBoard {
     pub(crate) users: BTreeMap<EntityID, String>,
     pub(crate) nfts: nft::NFTRegistry,
     pub(crate) nft_sales: nft::NFTSaleRegistry,
-    pub(crate) power_plants: (),
     pub(crate) player_move_sequence: BTreeMap<EntityID, u64>,
     pub(crate) new_users_allowed: bool,
     pub(crate) init: bool,
@@ -49,7 +51,11 @@ pub struct GameBoard {
     /// If init = true, must be Some
     pub(crate) dollar_token_id: Option<ERC20Ptr>,
 
+    /// If init = true, must be Some
     pub(crate) root_user: Option<EntityID>,
+    pub(crate) callbacks: CallbackRegistry,
+    pub(crate) current_time: u64,
+    pub(crate) mining_subsidy: u128,
 }
 
 impl GameBoard {
@@ -62,13 +68,15 @@ impl GameBoard {
             users: Default::default(),
             nfts: Default::default(),
             nft_sales: Default::default(),
-            power_plants: (),
             player_move_sequence: Default::default(),
             new_users_allowed: true,
             init: false,
             bitcoin_token_id: None,
             dollar_token_id: None,
             root_user: None,
+            callbacks: Default::default(),
+            current_time: 0,
+            mining_subsidy: 100_000_000_000 * 50,
         }
     }
     pub fn alloc(&mut self) -> EntityID {
@@ -129,6 +137,11 @@ impl GameBoard {
                         self.bitcoin_token_id.unwrap(),
                         &self.nfts,
                     );
+
+                    self.callbacks.schedule(Box::new(PowerPlantEvent {
+                        time: self.current_time + 100,
+                        period: 100,
+                    }));
                 }
             }
             GameMove::RegisterUser(RegisterUser { user_id }) => {

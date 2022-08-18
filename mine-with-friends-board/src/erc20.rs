@@ -4,6 +4,7 @@ use super::entity::EntityID;
 use schemars::JsonSchema;
 use serde::{ser::SerializeSeq, Deserialize, Serialize};
 use std::{
+    any::Any,
     collections::BTreeMap,
     ops::{Index, IndexMut},
 };
@@ -117,10 +118,19 @@ impl ERC20 for ERC20Standard {
 #[serde(transparent)]
 pub struct ERC20Ptr(EntityID);
 
+#[derive(Serialize)]
+pub struct HashBoardData {
+    pub hash_per_watt: u128,
+    // out of 100, currently not used for anything.
+    // Could be used to determine "burn out"
+    pub reliability: u8,
+}
 #[derive(Default, Serialize)]
-pub(crate) struct ERC20Registry(
-    #[serde(serialize_with = "special_erc20")] BTreeMap<EntityID, Box<dyn ERC20>>,
-);
+pub(crate) struct ERC20Registry {
+    #[serde(serialize_with = "special_erc20")]
+    pub tokens: BTreeMap<EntityID, Box<dyn ERC20>>,
+    pub hashboards: BTreeMap<ERC20Ptr, HashBoardData>,
+}
 
 pub(crate) fn special_erc20<S>(
     v: &BTreeMap<EntityID, Box<dyn ERC20>>,
@@ -135,21 +145,22 @@ where
 impl ERC20Registry {
     pub(crate) fn new_token(&mut self, new: Box<dyn ERC20>) -> ERC20Ptr {
         let p = ERC20Ptr(new.id());
-        self.0.insert(new.id(), new);
+        self.tokens.insert(new.id(), new);
         p
     }
 }
+
 
 impl Index<ERC20Ptr> for ERC20Registry {
     type Output = Box<dyn ERC20>;
 
     fn index(&self, index: ERC20Ptr) -> &Self::Output {
-        self.0.get(&index.0).unwrap()
+        self.tokens.get(&index.0).unwrap()
     }
 }
 
 impl IndexMut<ERC20Ptr> for ERC20Registry {
     fn index_mut(&mut self, index: ERC20Ptr) -> &mut Self::Output {
-        self.0.get_mut(&index.0).unwrap()
+        self.tokens.get_mut(&index.0).unwrap()
     }
 }
