@@ -1,10 +1,10 @@
 use crate::{
-    tokens::TokenPointer,
     game::game_move::{
         GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,
     },
     nft::NftPtr,
     tokens::token_swap::TradingPairID,
+    tokens::TokenPointer,
 };
 
 pub trait Sanitizable {

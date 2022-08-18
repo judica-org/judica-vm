@@ -6,10 +6,10 @@ use crate::entity::EntityIDAllocator;
 
 use crate::nft::PowerPlantEvent;
 use crate::sanitize::Sanitizable;
+use crate::tokens::instances::asics::ASICProducer;
+use crate::tokens::instances::asics::HashBoardData;
 use crate::tokens::token_swap;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
-use crate::tokens::ASICProducer;
-use crate::tokens::HashBoardData;
 
 use self::game_move::GameMove;
 use self::game_move::Init;
