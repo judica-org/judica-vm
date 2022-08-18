@@ -1,4 +1,9 @@
-use crate::entity::EntityIDAllocator;
+use crate::{
+    callbacks::Callback,
+    entity::EntityIDAllocator,
+    nft::Price,
+    token_swap::{PairID, Uniswap},
+};
 
 use super::entity::EntityID;
 use schemars::JsonSchema;
@@ -20,6 +25,7 @@ pub(crate) trait ERC20: Send + Sync {
     fn total_coins(&self) -> u128;
     fn to_json(&self) -> serde_json::Value;
     fn id(&self) -> EntityID;
+    fn nickname(&self) -> Option<String>;
 }
 
 #[derive(Serialize)]
@@ -29,6 +35,7 @@ pub(crate) struct ERC20Standard {
     #[cfg(test)]
     pub(crate) in_transaction: Option<u128>,
     pub this: EntityID,
+    pub nickname: Option<String>,
 }
 
 impl ERC20Standard {
@@ -40,13 +47,14 @@ impl ERC20Standard {
     }
 }
 impl ERC20Standard {
-    pub fn new(alloc: &mut EntityIDAllocator) -> Self {
+    pub fn new(alloc: &mut EntityIDAllocator, nickname: String) -> Self {
         Self {
             balances: Default::default(),
             total: Default::default(),
             this: alloc.make(),
             #[cfg(test)]
             in_transaction: None,
+            nickname: Some(nickname),
         }
     }
 }
@@ -111,11 +119,20 @@ impl ERC20 for ERC20Standard {
     fn id(&self) -> EntityID {
         self.this
     }
+
+    fn nickname(&self) -> Option<String> {
+        self.nickname.clone()
+    }
 }
 
 #[derive(Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema)]
 #[serde(transparent)]
 pub struct ERC20Ptr(EntityID);
+impl ERC20Ptr {
+    pub fn inner(&self) -> u64 {
+        self.0 .0
+    }
+}
 
 #[derive(Serialize)]
 pub struct HashBoardData {
@@ -124,6 +141,63 @@ pub struct HashBoardData {
     // Could be used to determine "burn out"
     pub reliability: u8,
 }
+
+#[derive(Clone)]
+pub struct ASICProducer {
+    pub id: EntityID,
+    pub total_units: u128,
+    pub base_price: Price,
+    pub price_asset: ERC20Ptr,
+    pub hash_asset: ERC20Ptr,
+    pub adjusts_every: u64,
+    pub current_time: u64,
+    pub first: bool,
+}
+impl Callback for ASICProducer {
+    fn time(&self) -> u64 {
+        self.current_time
+    }
+
+    fn action(&mut self, game: &mut crate::game::GameBoard) {
+        let pair = PairID {
+            asset_a: self.hash_asset,
+            asset_b: self.price_asset,
+        };
+        if self.first {
+            {
+                let coin = &mut game.erc20s[self.hash_asset];
+                coin.transaction();
+                coin.mint(&self.id, self.total_units);
+                coin.end_transaction();
+            }
+            let start = self.total_units / 10;
+            let base = self.base_price * start;
+            {
+                let coin = &mut game.erc20s[self.price_asset];
+                coin.transaction();
+                coin.mint(&self.id, base);
+                coin.end_transaction();
+            }
+            Uniswap::deposit(game, pair, start, base, self.id);
+            self.first = false;
+            self.total_units -= start;
+        }
+        let balance = game.erc20s[self.hash_asset].balance_check(&self.id);
+        // TODO: Something more clever here?
+        Uniswap::do_trade(game, pair, balance / 10, 0, self.id);
+
+        self.current_time += self.adjusts_every;
+        let balance = game.erc20s[self.hash_asset].balance_check(&self.id);
+        if balance > 0 {
+            game.callbacks.schedule(Box::new(self.clone()))
+        }
+    }
+
+    fn purpose(&self) -> String {
+        format!("Adjusting the market for ASICs")
+    }
+}
+
 #[derive(Default, Serialize)]
 pub(crate) struct ERC20Registry {
     #[serde(serialize_with = "special_erc20")]

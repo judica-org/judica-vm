@@ -4,9 +4,12 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 
+use crate::erc20::ASICProducer;
+use crate::erc20::HashBoardData;
 use crate::nft::PowerPlantEvent;
 use crate::sanitize::Sanitizable;
 use crate::token_swap;
+use crate::token_swap::Uniswap;
 
 use self::game_move::GameMove;
 use self::game_move::Init;
@@ -116,14 +119,34 @@ impl GameBoard {
             GameMove::Init(Init {}) => {
                 if self.init == false {
                     self.init = true;
-                    let _ = self.bitcoin_token_id.insert(
-                        self.erc20s
-                            .new_token(Box::new(ERC20Standard::new(&mut self.alloc))),
+                    let _ = self.bitcoin_token_id.insert(self.erc20s.new_token(Box::new(
+                        ERC20Standard::new(&mut self.alloc, "Bitcoin".into()),
+                    )));
+                    let _ = self.dollar_token_id.insert(self.erc20s.new_token(Box::new(
+                        ERC20Standard::new(&mut self.alloc, "US Dollars".into()),
+                    )));
+
+                    let asic = self.erc20s.new_token(Box::new(ERC20Standard::new(
+                        &mut self.alloc,
+                        "US Dollars".into(),
+                    )));
+                    let _ = self.erc20s.hashboards.insert(
+                        asic,
+                        HashBoardData {
+                            hash_per_watt: (3.0 * 10e12) as u128,
+                            reliability: 100,
+                        },
                     );
-                    let _ = self.dollar_token_id.insert(
-                        self.erc20s
-                            .new_token(Box::new(ERC20Standard::new(&mut self.alloc))),
-                    );
+                    self.callbacks.schedule(Box::new(ASICProducer {
+                        id: self.alloc.make(),
+                        total_units: 100_000,
+                        base_price: 20,
+                        price_asset: self.dollar_token_id.unwrap(),
+                        hash_asset: asic,
+                        adjusts_every: 100, // what units?
+                        current_time: self.current_time,
+                        first: true,
+                    }));
                     let root = self.alloc.make();
                     let _ = self.root_user.insert(root);
 
@@ -163,14 +186,7 @@ impl GameBoard {
                 amount_a,
                 amount_b,
             }) => {
-                self.swap.do_trade(
-                    &mut self.erc20s,
-                    &mut self.alloc,
-                    pair,
-                    amount_a,
-                    amount_b,
-                    from,
-                );
+                Uniswap::do_trade(self, pair, amount_a, amount_b, from);
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,

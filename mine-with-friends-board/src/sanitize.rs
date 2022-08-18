@@ -49,11 +49,10 @@ impl Sanitizable for PairID {
     type Context = <ERC20Ptr as Sanitizable>::Context;
     type Error = <ERC20Ptr as Sanitizable>::Error;
     fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
-        let mut pair = PairID {
+        let pair = PairID {
             asset_a: self.asset_a.sanitize(())?,
             asset_b: self.asset_b.sanitize(())?,
         };
-        pair.normalize();
         Ok(pair)
     }
 }

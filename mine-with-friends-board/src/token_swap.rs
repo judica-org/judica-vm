@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::entity::EntityIDAllocator;
 use crate::erc20::ERC20Registry;
+use crate::game::GameBoard;
 
 use super::entity::EntityID;
 use super::erc20;
@@ -18,7 +19,18 @@ pub(crate) struct UniswapPair {
 }
 
 impl UniswapPair {
-    fn new(alloc: &mut EntityIDAllocator, tokens: &mut ERC20Registry, pair: PairID) -> UniswapPair {
+    fn new(
+        alloc: &mut EntityIDAllocator,
+        tokens: &mut ERC20Registry,
+        mut pair: PairID,
+    ) -> UniswapPair {
+        pair.normalize();
+        let name_a = tokens[pair.asset_a]
+            .nickname()
+            .unwrap_or(format!("{}", pair.asset_a.inner()));
+        let name_b = tokens[pair.asset_b]
+            .nickname()
+            .unwrap_or(format!("{}", pair.asset_b.inner()));
         UniswapPair {
             pair,
             id: alloc.make(),
@@ -28,6 +40,7 @@ impl UniswapPair {
                 this: alloc.make(),
                 #[cfg(test)]
                 in_transaction: None,
+                nickname: Some(format!("swap({},{})::shares", name_a, name_b)),
             })),
         }
     }
@@ -46,7 +59,7 @@ pub struct PairID {
 }
 
 impl PairID {
-    pub fn normalize(&mut self) {
+    fn normalize(&mut self) {
         if self.asset_a <= self.asset_b {
         } else {
             *self = Self {
@@ -66,20 +79,26 @@ impl Uniswap {
     // TODO: Better math in this whole module
 
     pub(crate) fn deposit(
-        &mut self,
-        tokens: &mut erc20::ERC20Registry,
-        alloc: &mut EntityIDAllocator,
-        id: PairID,
-        amount_a: u128,
-        amount_b: u128,
+        game: &mut GameBoard,
+        mut id: PairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
         from: EntityID,
     ) {
+        let unnormalized_id = id;
+        id.normalize();
+        if id != unnormalized_id {
+            std::mem::swap(&mut amount_a, &mut amount_b);
+        }
+        let tokens: &mut erc20::ERC20Registry = &mut game.erc20s;
+        let alloc: &mut EntityIDAllocator = &mut game.alloc;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();
         if amount_a == 0 || amount_b == 0 {
             return;
         }
-        let mkt = self
+        let mkt = game
+            .swap
             .markets
             .entry(id)
             .or_insert_with(|| UniswapPair::new(alloc, tokens, id));
@@ -117,14 +136,19 @@ impl Uniswap {
     }
     // One of amount_a or amount_b should be 0
     pub(crate) fn do_trade(
-        &mut self,
-        tokens: &mut erc20::ERC20Registry,
-        alloc: &mut EntityIDAllocator,
-        id: PairID,
-        amount_a: u128,
-        amount_b: u128,
+        game: &mut GameBoard,
+        mut id: PairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
         from: EntityID,
     ) {
+        let unnormalized_id = id;
+        id.normalize();
+        if id != unnormalized_id {
+            std::mem::swap(&mut amount_a, &mut amount_b);
+        }
+        let tokens: &mut erc20::ERC20Registry = &mut game.erc20s;
+        let alloc: &mut EntityIDAllocator = &mut game.alloc;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();
         // the zero is the one to be computed
@@ -138,7 +162,8 @@ impl Uniswap {
             return;
         }
 
-        let mkt = self
+        let mkt = game
+            .swap
             .markets
             .entry(id)
             .or_insert_with(|| UniswapPair::new(alloc, tokens, id));
