@@ -41,6 +41,6 @@ impl Callback for PowerPlantEvent {
     }
 
     fn purpose(&self) -> String {
-        todo!()
+        "Periodic Mining Payout Delivery".into()
     }
 }
