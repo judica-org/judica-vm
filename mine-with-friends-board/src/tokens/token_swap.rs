@@ -1,5 +1,6 @@
-use super::entity::EntityID;
-use super::tokens;
+use super::TokenBase;
+use super::TokenPointer;
+use crate::entity::EntityID;
 use crate::game::GameBoard;
 use crate::tokens::TokenRegistry;
 use schemars::JsonSchema;
@@ -11,7 +12,7 @@ use std::collections::BTreeMap;
 pub(crate) struct ConstantFunctionMarketMakerPair {
     pub(crate) pair: TradingPairID,
     pub(crate) id: EntityID,
-    pub(crate) lp: tokens::TokenPointer,
+    pub(crate) lp: TokenPointer,
 }
 
 impl ConstantFunctionMarketMakerPair {
@@ -32,7 +33,7 @@ impl ConstantFunctionMarketMakerPair {
                     ConstantFunctionMarketMakerPair {
                         pair,
                         id,
-                        lp: game.tokens.new_token(Box::new(tokens::TokenBase {
+                        lp: game.tokens.new_token(Box::new(TokenBase {
                             balances: Default::default(),
                             total: Default::default(),
                             this: base_id,
@@ -57,8 +58,8 @@ impl ConstantFunctionMarketMakerPair {
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TradingPairID {
-    pub asset_a: tokens::TokenPointer,
-    pub asset_b: tokens::TokenPointer,
+    pub asset_a: TokenPointer,
+    pub asset_b: TokenPointer,
 }
 
 impl TradingPairID {
@@ -99,7 +100,7 @@ impl ConstantFunctionMarketMaker {
         let id = ConstantFunctionMarketMakerPair::ensure(game, id);
         let mkt = &game.swap.markets[&id];
 
-        let tokens: &mut tokens::TokenRegistry = &mut game.tokens;
+        let tokens: &mut TokenRegistry = &mut game.tokens;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();
 
@@ -153,7 +154,7 @@ impl ConstantFunctionMarketMaker {
         }
         let id = ConstantFunctionMarketMakerPair::ensure(game, id);
         let mkt = &game.swap.markets[&id];
-        let tokens: &mut tokens::TokenRegistry = &mut game.tokens;
+        let tokens: &mut TokenRegistry = &mut game.tokens;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();
         if !(tokens[id.asset_a].balance_check(&from) >= amount_a

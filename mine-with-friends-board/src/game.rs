@@ -6,8 +6,8 @@ use crate::entity::EntityIDAllocator;
 
 use crate::nft::PowerPlantEvent;
 use crate::sanitize::Sanitizable;
-use crate::token_swap;
-use crate::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::token_swap;
+use crate::tokens::token_swap::ConstantFunctionMarketMaker;
 use crate::tokens::ASICProducer;
 use crate::tokens::HashBoardData;
 

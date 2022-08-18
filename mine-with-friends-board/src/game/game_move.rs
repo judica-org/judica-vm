@@ -2,7 +2,7 @@ use crate::entity::EntityID;
 
 use crate::sanitize;
 use crate::sanitize::Unsanitized;
-use crate::token_swap::TradingPairID;
+use crate::tokens::token_swap::TradingPairID;
 
 use super::super::Verified;
 

@@ -4,7 +4,6 @@ pub mod tokens;
 pub mod game;
 pub mod nft;
 pub mod sanitize;
-pub mod token_swap;
 
 pub struct Verified<D> {
     d: D,

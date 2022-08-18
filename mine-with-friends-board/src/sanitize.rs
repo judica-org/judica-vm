@@ -4,7 +4,7 @@ use crate::{
         GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,
     },
     nft::NftPtr,
-    token_swap::TradingPairID,
+    tokens::token_swap::TradingPairID,
 };
 
 pub trait Sanitizable {

@@ -1,11 +1,5 @@
-use crate::{
-    callbacks::Callback,
-    entity::EntityIDAllocator,
-    nft::Price,
-    token_swap::{TradingPairID, ConstantFunctionMarketMaker},
-};
-
 use super::entity::EntityID;
+use crate::{callbacks::Callback, entity::EntityIDAllocator, nft::Price};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -13,7 +7,9 @@ use std::{
     collections::BTreeMap,
     ops::{Index, IndexMut},
 };
+use token_swap::{ConstantFunctionMarketMaker, TradingPairID};
 
+pub mod token_swap;
 pub(crate) trait Token: Send + Sync {
     fn transaction(&mut self);
     // todo: undo if transaction fails?
