@@ -15,8 +15,10 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum GameMove {
     /// # Initialize Game
+    #[schemars(skip)]
     Init(Init),
     /// # Stop Inviting New Users
+    #[schemars(skip)]
     NoNewUsers(NoNewUsers),
     /// # Trade Coins
     Trade(Trade),
@@ -25,9 +27,22 @@ pub enum GameMove {
     /// # Sell NFTs
     ListNFTForSale(ListNFTForSale),
     /// # Register User
+    #[schemars(skip)]
     RegisterUser(RegisterUser),
     /// # Send Coins
     SendTokens(SendTokens),
+}
+
+impl GameMove {
+    pub fn is_priviledged(&self) -> bool {
+        match self {
+            GameMove::Trade(_)
+            | GameMove::PurchaseNFT(_)
+            | GameMove::ListNFTForSale(_)
+            | GameMove::SendTokens(_) => false,
+            GameMove::Init(_) | GameMove::RegisterUser(_) | GameMove::NoNewUsers(_) => true,
+        }
+    }
 }
 
 macro_rules! derive_from {

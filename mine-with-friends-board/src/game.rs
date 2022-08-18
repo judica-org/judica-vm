@@ -83,6 +83,10 @@ impl GameBoard {
     pub fn root_user(&self) -> Option<EntityID> {
         self.root_user
     }
+    pub fn user_is_admin(&self, user: EntityID) -> bool {
+        Some(user) == self.root_user
+    }
+
     pub fn play(
         &mut self,
         Verified {
@@ -99,8 +103,12 @@ impl GameBoard {
         } else {
             *current_move = sequence;
         }
+        let mv = d.sanitize(())?;
+        if !self.user_is_admin(from) && mv.is_priviledged() {
+            return Ok(());
+        }
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
-        self.play_inner(d.sanitize(())?, from)
+        self.play_inner(mv, from)
     }
     pub fn play_inner(&mut self, d: GameMove, from: EntityID) -> Result<(), ()> {
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
