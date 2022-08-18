@@ -45,7 +45,7 @@ pub(crate) trait Callback: Send + Sync {
 
 impl CallbackRegistry {
     /// run drains the event queue of all events happening at or before the current time, and processes them all
-    fn run(game: &mut GameBoard) {
+    pub fn run(game: &mut GameBoard) {
         let s = &mut game.callbacks;
         // get everything that is to_do in the future and remove it...
         let mut to_do = s.callbacks.split_off(&(game.current_time + 1));

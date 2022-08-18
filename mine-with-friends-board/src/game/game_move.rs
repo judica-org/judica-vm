@@ -6,7 +6,7 @@ use crate::sanitize;
 use crate::sanitize::Unsanitized;
 use crate::tokens::token_swap::TradingPairID;
 
-use super::super::Verified;
+use super::super::MoveEnvelope;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -106,13 +106,14 @@ pub struct SendTokens {
     pub currency: Currency,
 }
 
-impl Verified<Unsanitized<GameMove>> {
-    pub fn create(g: GameMove, sequence: u64, sig: String, from: EntityID) -> Self {
-        Verified {
+impl MoveEnvelope {
+    pub fn create(g: GameMove, sequence: u64, sig: String, from: EntityID, time: u64) -> Self {
+        MoveEnvelope {
             d: sanitize::Unsanitized(g),
             sequence,
             sig,
             from,
+            time,
         }
     }
 }

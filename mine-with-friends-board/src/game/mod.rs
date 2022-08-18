@@ -20,9 +20,11 @@ use crate::tokens::instances::asics::ASICProducer;
 use crate::tokens::instances::asics::HashBoardData;
 use crate::tokens::token_swap;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
-use crate::Verified;
+use crate::MoveEnvelope;
 use serde::Serialize;
+use std::cmp::max;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
@@ -51,6 +53,7 @@ pub struct GameBoard {
     pub(crate) callbacks: CallbackRegistry,
     pub(crate) current_time: u64,
     pub(crate) mining_subsidy: u128,
+    pub ticks: BTreeMap<EntityID, u64>,
 }
 
 pub struct CallContext {
@@ -77,6 +80,7 @@ impl GameBoard {
             callbacks: Default::default(),
             current_time: 0,
             mining_subsidy: 100_000_000_000 * 50,
+            ticks: Default::default(),
         }
     }
     /// Creates a new EntityID
@@ -95,12 +99,13 @@ impl GameBoard {
     /// and sanitizing it.
     pub fn play(
         &mut self,
-        Verified {
+        MoveEnvelope {
             d,
             sequence,
             sig: _,
             from,
-        }: Verified<sanitize::Unsanitized<GameMove>>,
+            time,
+        }: MoveEnvelope,
     ) -> Result<(), ()> {
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from.clone()).or_default();
@@ -113,8 +118,27 @@ impl GameBoard {
         if !self.user_is_admin(from) && mv.is_priviledged() {
             return Ok(());
         }
+
+        self.update_current_time(Some((from, time)));
+        self.process_ticks();
+
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         self.play_inner(mv, from)
+    }
+
+    pub fn process_ticks(&mut self) {
+        CallbackRegistry::run(self);
+    }
+
+    fn update_current_time(&mut self, update_from: Option<(EntityID, u64)>) {
+        if let Some((from, time)) = update_from {
+            let tick = self.ticks.entry(from).or_default();
+            *tick = max(*tick, time);
+        }
+        let mut ticks: Vec<u64> = self.ticks.values().cloned().collect();
+        ticks.sort_unstable();
+        let median_time = ticks.get(ticks.len() / 2).cloned().unwrap_or_default();
+        self.current_time = median_time;
     }
 
     /// Processes a GameMove without any sanitization
