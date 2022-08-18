@@ -1,6 +1,7 @@
 use super::TokenBase;
 use super::TokenPointer;
 use crate::entity::EntityID;
+use crate::game::CallContext;
 use crate::game::GameBoard;
 use crate::tokens::TokenRegistry;
 use schemars::JsonSchema;
@@ -168,7 +169,7 @@ impl ConstantFunctionMarketMaker {
         mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
-        from: EntityID,
+        CallContext { ref sender }: &CallContext,
     ) {
         let unnormalized_id = id;
         id.normalize();
@@ -184,8 +185,8 @@ impl ConstantFunctionMarketMaker {
         let tokens: &mut TokenRegistry = &mut game.tokens;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();
-        if !(tokens[id.asset_a].balance_check(&from) >= amount_a
-            && tokens[id.asset_b].balance_check(&from) >= amount_b)
+        if !(tokens[id.asset_a].balance_check(sender) >= amount_a
+            && tokens[id.asset_b].balance_check(sender) >= amount_b)
         {
             return;
         }
@@ -196,12 +197,12 @@ impl ConstantFunctionMarketMaker {
 
         if amount_a == 0 {
             let new_amount_a = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
-            let _ = tokens[id.asset_b].transfer(&from, &mkt.id, amount_b);
-            let _ = tokens[id.asset_a].transfer(&mkt.id, &from, new_amount_a);
+            let _ = tokens[id.asset_b].transfer(sender, &mkt.id, amount_b);
+            let _ = tokens[id.asset_a].transfer(&mkt.id, sender, new_amount_a);
         } else {
             let new_amount_b = (mkt.amt_b(tokens) * amount_a) / mkt.amt_a(tokens);
-            let _ = tokens[id.asset_a].transfer(&from, &mkt.id, amount_a);
-            let _ = tokens[id.asset_b].transfer(&mkt.id, &from, new_amount_b);
+            let _ = tokens[id.asset_a].transfer(sender, &mkt.id, amount_a);
+            let _ = tokens[id.asset_b].transfer(&mkt.id, sender, new_amount_b);
         }
 
         tokens[id.asset_a].end_transaction();

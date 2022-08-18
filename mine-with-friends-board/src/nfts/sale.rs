@@ -1,6 +1,7 @@
 use super::NFTRegistry;
 use super::NftPtr;
 use crate::entity::EntityID;
+use crate::game::CallContext;
 use crate::tokens::TokenRegistry;
 use crate::util::Currency;
 use crate::util::Price;
@@ -36,13 +37,13 @@ impl NFTSaleRegistry {
     /// List a sale of an NFT if the user is the owner
     pub(crate) fn list_nft(
         &mut self,
+        CallContext { ref sender }: &CallContext,
         asset: NftPtr,
         price: Price,
         currency: Currency,
         nfts: &NFTRegistry,
-        user: EntityID,
     ) {
-        if user == nfts[asset].owner() {
+        if *sender == nfts[asset].owner() {
             self.nfts.insert(
                 asset,
                 NFTSale {
@@ -58,7 +59,7 @@ impl NFTSaleRegistry {
     /// Execute the Purchase of an NFT
     pub(crate) fn purchase(
         &mut self,
-        to: EntityID,
+        CallContext { ref sender }: &CallContext,
         asset: NftPtr,
         tokens: &mut TokenRegistry,
         nfts: &mut NFTRegistry,
@@ -86,10 +87,10 @@ impl NFTSaleRegistry {
             }
             let token = &mut tokens[currency.clone()];
             token.transaction();
-            if token.transfer(&to, &nfts[asset.clone()].owner(), *price) {
-                /// NOTE: transfer may fail, so revert if so.
-                /// Check is_transferable
-                nfts[asset].transfer(to);
+            if token.transfer(sender, &nfts[asset.clone()].owner(), *price) {
+                // NOTE: transfer may fail, so revert if so.
+                // Check is_transferable
+                nfts[asset].transfer(*sender);
                 self.nfts.remove(&asset);
             }
             token.end_transaction();

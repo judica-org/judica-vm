@@ -5,6 +5,7 @@ use serde::Serialize;
 
 use crate::callbacks::Callback;
 use crate::entity::EntityID;
+use crate::game::CallContext;
 use crate::tokens::TokenPointer;
 
 use crate::tokens::token_swap::{ConstantFunctionMarketMaker, TradingPairID};
@@ -75,7 +76,13 @@ impl Callback for ASICProducer {
         // the current price is above the current price, then sell enough to get
         // the price back to base_price.
         // Maybe worth implementing logic inside the swap contract directly for these.
-        ConstantFunctionMarketMaker::do_trade(game, pair, min(balance / 100, balance), 0, self.id);
+        ConstantFunctionMarketMaker::do_trade(
+            game,
+            pair,
+            min(balance / 100, balance),
+            0,
+            &CallContext { sender: self.id },
+        );
 
         self.current_time += self.adjusts_every;
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);

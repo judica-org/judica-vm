@@ -53,6 +53,10 @@ pub struct GameBoard {
     pub(crate) mining_subsidy: u128,
 }
 
+pub struct CallContext {
+    pub sender: EntityID,
+}
+
 impl GameBoard {
     /// Creates a new GameBoard
     pub fn new() -> GameBoard {
@@ -116,6 +120,7 @@ impl GameBoard {
     /// Processes a GameMove without any sanitization
     pub fn play_inner(&mut self, d: GameMove, from: EntityID) -> Result<(), ()> {
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
+        let context = CallContext { sender: from };
         match d {
             GameMove::Init(Init {}) => {
                 if self.init == false {
@@ -158,11 +163,13 @@ impl GameBoard {
                         transfer_count: 0,
                     }));
                     self.nft_sales.list_nft(
+                        &CallContext {
+                            sender: self.root_user().unwrap(),
+                        },
                         demo_nft,
                         1000,
                         self.bitcoin_token_id.unwrap(),
                         &self.nfts,
-                        self.root_user.unwrap(),
                     );
 
                     self.callbacks.schedule(Box::new(PowerPlantEvent {
@@ -184,14 +191,14 @@ impl GameBoard {
                 amount_a,
                 amount_b,
             }) => {
-                ConstantFunctionMarketMaker::do_trade(self, pair, amount_a, amount_b, from);
+                ConstantFunctionMarketMaker::do_trade(self, pair, amount_a, amount_b, &context);
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,
                 limit_price,
                 currency,
             }) => self.nft_sales.purchase(
-                from,
+                &context,
                 nft_id,
                 &mut self.tokens,
                 &mut self.nfts,
@@ -204,7 +211,7 @@ impl GameBoard {
                 currency,
             }) => self
                 .nft_sales
-                .list_nft(nft_id, price, currency, &self.nfts, from),
+                .list_nft(&context, nft_id, price, currency, &self.nfts),
             GameMove::SendTokens(SendTokens {
                 to,
                 amount,
