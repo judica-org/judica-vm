@@ -2,11 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::{
-    erc20::ERC20Registry,
-    game::GameBoard,
-    nft::{NFTRegistry, NFT},
-};
+use crate::game::GameBoard;
 
 #[derive(Default)]
 pub struct CallbackRegistry {
@@ -45,7 +41,7 @@ impl CallbackRegistry {
         let mut to_do = s.callbacks.split_off(&(game.current_time + 1));
         // swap it with the things in the present
         std::mem::swap(&mut s.callbacks, &mut to_do);
-        for (k, v) in to_do {
+        for (_k, v) in to_do {
             for mut x in v.into_iter() {
                 x.action(game);
             }

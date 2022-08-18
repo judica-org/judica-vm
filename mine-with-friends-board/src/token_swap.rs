@@ -79,7 +79,7 @@ impl Uniswap {
         if amount_a == 0 || amount_b == 0 {
             return;
         }
-        let mut mkt = self
+        let mkt = self
             .markets
             .entry(id)
             .or_insert_with(|| UniswapPair::new(alloc, tokens, id));
@@ -138,7 +138,7 @@ impl Uniswap {
             return;
         }
 
-        let mut mkt = self
+        let mkt = self
             .markets
             .entry(id)
             .or_insert_with(|| UniswapPair::new(alloc, tokens, id));

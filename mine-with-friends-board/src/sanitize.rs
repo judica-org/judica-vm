@@ -1,7 +1,7 @@
 use crate::{
     erc20::ERC20Ptr,
     game::game_move::{
-        GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, Trade, SendTokens,
+        GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,
     },
     nft::NftPtr,
     token_swap::PairID,
@@ -32,7 +32,7 @@ impl Sanitizable for ERC20Ptr {
     type Output = ERC20Ptr;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
 }
@@ -40,7 +40,7 @@ impl Sanitizable for NftPtr {
     type Output = NftPtr;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
 }
@@ -48,7 +48,7 @@ impl Sanitizable for PairID {
     type Output = PairID;
     type Context = <ERC20Ptr as Sanitizable>::Context;
     type Error = <ERC20Ptr as Sanitizable>::Error;
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         let mut pair = PairID {
             asset_a: self.asset_a.sanitize(())?,
             asset_b: self.asset_b.sanitize(())?,
@@ -62,7 +62,7 @@ impl Sanitizable for GameMove {
     type Output = Self;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: ()) -> Result<Self, Self::Error> {
+    fn sanitize(self, _context: ()) -> Result<Self, Self::Error> {
         Ok(match self {
             GameMove::Init(x) => x.sanitize(())?.into(),
             GameMove::NoNewUsers(x) => x.sanitize(())?.into(),
@@ -79,7 +79,7 @@ impl Sanitizable for Init {
     type Output = Self;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
 }
@@ -88,7 +88,7 @@ impl Sanitizable for NoNewUsers {
     type Output = Self;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
 }
@@ -97,7 +97,7 @@ impl Sanitizable for Trade {
     type Output = Self;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         let Self {
             pair,
             amount_a,
@@ -115,7 +115,7 @@ impl Sanitizable for PurchaseNFT {
     type Output = Self;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         let Self {
             nft_id,
             limit_price,
@@ -132,7 +132,7 @@ impl Sanitizable for ListNFTForSale {
     type Output = Self;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         let Self {
             nft_id,
             price,
@@ -149,7 +149,7 @@ impl Sanitizable for RegisterUser {
     type Output = Self;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
 }
@@ -158,7 +158,7 @@ impl Sanitizable for SendTokens {
     type Output = Self;
     type Context = ();
     type Error = ();
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
 }

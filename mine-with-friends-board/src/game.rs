@@ -3,11 +3,10 @@ use std::collections::BTreeMap;
 use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
-use crate::nft::PowerPlant;
+
 use crate::nft::PowerPlantEvent;
 use crate::sanitize::Sanitizable;
 use crate::token_swap;
-use crate::token_swap::Uniswap;
 
 use self::game_move::GameMove;
 use self::game_move::Init;
@@ -23,8 +22,7 @@ use super::nft;
 use crate::sanitize;
 
 use erc20::ERC20Standard;
-use schemars::JsonSchema;
-use serde::Deserialize;
+
 use serde::Serialize;
 
 use super::Verified;
@@ -90,7 +88,7 @@ impl GameBoard {
         Verified {
             d,
             sequence,
-            sig,
+            sig: _,
             from,
         }: Verified<sanitize::Unsanitized<GameMove>>,
     ) -> Result<(), ()> {

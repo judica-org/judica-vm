@@ -1,26 +1,19 @@
+use super::entity::EntityID;
 use crate::callbacks::Callback;
-use crate::callbacks::CallbackRegistry;
+
 use crate::entity::EntityIDAllocator;
+use crate::erc20::ERC20Ptr;
 use crate::erc20::ERC20Registry;
 use crate::game::GameBoard;
-
-use std::any::Any;
-use std::cmp::min;
-use std::fmt::format;
-use std::hash::Hash;
-use std::ops::IndexMut;
-
-use std::ops::Index;
-use std::rc::Rc;
-use std::sync::Arc;
-
-use crate::erc20::ERC20Ptr;
-
-use super::entity::EntityID;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
+
+use std::cmp::min;
 use std::collections::BTreeMap;
+
+use std::ops::Index;
+use std::ops::IndexMut;
 
 pub(crate) trait NFT: Send + Sync {
     fn owner(&self) -> EntityID;
@@ -269,7 +262,7 @@ pub(crate) struct PowerPlant {
 impl PowerPlant {
     fn compute_hashrate(&self, game: &mut GameBoard) -> u128 {
         // TODO: Some algo that uses watts / coordinates / plant_type to compute a scalar?
-        let scale = 1000;
+        let _scale = 1000;
         let mut hash = Vec::with_capacity(game.erc20s.hashboards.len());
         let hashers: Vec<_> = game.erc20s.hashboards.keys().cloned().collect();
         for token in hashers {

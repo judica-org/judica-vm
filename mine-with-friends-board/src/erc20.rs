@@ -2,9 +2,8 @@ use crate::entity::EntityIDAllocator;
 
 use super::entity::EntityID;
 use schemars::JsonSchema;
-use serde::{ser::SerializeSeq, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::{
-    any::Any,
     collections::BTreeMap,
     ops::{Index, IndexMut},
 };
@@ -78,7 +77,7 @@ impl ERC20 for ERC20Standard {
     fn transaction(&mut self) {
         #[cfg(test)]
         {
-            if (self.in_transaction.is_some()) {
+            if self.in_transaction.is_some() {
                 panic!("Should Not Be Called, currently in transaction");
             } else {
                 self.in_transaction = Some(self.total);
@@ -89,7 +88,7 @@ impl ERC20 for ERC20Standard {
     fn end_transaction(&mut self) {
         #[cfg(test)]
         {
-            if (self.in_transaction.is_none()) {
+            if self.in_transaction.is_none() {
                 panic!("Should Not Be Called, was not in transaction");
             } else {
                 if self.in_transaction != Some(self.total) {
@@ -149,7 +148,6 @@ impl ERC20Registry {
         p
     }
 }
-
 
 impl Index<ERC20Ptr> for ERC20Registry {
     type Output = Box<dyn ERC20>;
