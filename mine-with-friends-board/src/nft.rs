@@ -266,7 +266,6 @@ pub(crate) struct PowerPlant {
     pub coordinates: (u64, u64),
 }
 
-struct Hashboard();
 impl PowerPlant {
     fn compute_hashrate(&self, game: &mut GameBoard) -> u128 {
         // TODO: Some algo that uses watts / coordinates / plant_type to compute a scalar?
@@ -311,43 +310,30 @@ impl PowerPlant {
         game: &mut GameBoard,
     ) {
         let owner = game.nfts[self.id].owner();
+        let lockup_base = BaseNFT {
+            owner: owner,
+            nft_id: alloc.make(),
+            // Non Transferrable
+            transfer_count: u128::max_value(),
+        };
+        let id = nfts.add(Box::new(lockup_base.clone()));
         let lockup = CoinLockup {
-            base: BaseNFT {
-                owner: owner,
-                nft_id: alloc.make(),
-                // Non Transferrable
-                transfer_count: u128::max_value(),
-            },
             time_when_free: shipping_time,
             asset: miners,
+            id,
         };
-        let p = nfts.add(Box::new(lockup.clone()));
         game.callbacks.schedule(Box::new(lockup.clone()));
         tokens[miners].transaction();
-        let _ = tokens[miners].transfer(&self.id.0, &p.0, amount);
+        let _ = tokens[miners].transfer(&self.id.0, &id.0, amount);
         tokens[miners].end_transaction();
     }
 }
 
 #[derive(Serialize, Clone)]
 pub(crate) struct CoinLockup {
-    pub(crate) base: BaseNFT,
+    id: NftPtr,
     time_when_free: u64,
     asset: ERC20Ptr,
-}
-NFT_BASE!(CoinLockup);
-impl CoinLockup {
-    // Note: just reads immutable fields, modifies external state
-    fn unlock(&self, tokens: &mut ERC20Registry, current_time: u64) {
-        if current_time < self.time_when_free {
-            return;
-        }
-        let token = &mut tokens[self.asset];
-        token.transaction();
-        let balance = token.balance_check(&self.id());
-        let _ = token.transfer(&self.id(), &self.owner(), balance);
-        token.end_transaction();
-    }
 }
 
 impl Callback for CoinLockup {
@@ -355,8 +341,17 @@ impl Callback for CoinLockup {
         self.time_when_free
     }
 
+    // Note: just reads immutable fields, modifies external state
     fn action(&mut self, game: &mut GameBoard) {
-        self.unlock(&mut game.erc20s, game.current_time)
+        let owner = game.nfts[self.id].owner();
+        if game.current_time < self.time_when_free {
+            return;
+        }
+        let token = &mut game.erc20s[self.asset];
+        token.transaction();
+        let balance = token.balance_check(&self.id.0);
+        let _ = token.transfer(&self.id.0, &owner, balance);
+        token.end_transaction();
     }
 
     fn purpose(&self) -> String {
