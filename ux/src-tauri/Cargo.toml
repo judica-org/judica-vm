@@ -26,7 +26,7 @@ features = ["time"]
 version = "1.0"
 features = ["arbitrary_precision"]
 [dependencies.mine-with-friends-board]
-path = "../mine-with-friends-board"
+path = "../../common/mine-with-friends-board"
 
 [features]
 # by default Tauri runs in production mode

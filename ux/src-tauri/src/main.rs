@@ -11,7 +11,7 @@ use mine_with_friends_board::{
         game_move::{GameMove, Init, RegisterUser},
         GameBoard,
     },
-    Verified,
+    MoveEnvelope,
 };
 use schemars::{schema::RootSchema, schema_for};
 use tauri::{
