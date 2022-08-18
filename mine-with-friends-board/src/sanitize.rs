@@ -1,10 +1,10 @@
 use crate::{
-    tokens::ERC20Ptr,
+    tokens::TokenPointer,
     game::game_move::{
         GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,
     },
     nft::NftPtr,
-    token_swap::PairID,
+    token_swap::TradingPairID,
 };
 
 pub trait Sanitizable {
@@ -28,8 +28,8 @@ where
     }
 }
 
-impl Sanitizable for ERC20Ptr {
-    type Output = ERC20Ptr;
+impl Sanitizable for TokenPointer {
+    type Output = TokenPointer;
     type Context = ();
     type Error = ();
     fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
@@ -44,12 +44,12 @@ impl Sanitizable for NftPtr {
         Ok(self)
     }
 }
-impl Sanitizable for PairID {
-    type Output = PairID;
-    type Context = <ERC20Ptr as Sanitizable>::Context;
-    type Error = <ERC20Ptr as Sanitizable>::Error;
+impl Sanitizable for TradingPairID {
+    type Output = TradingPairID;
+    type Context = <TokenPointer as Sanitizable>::Context;
+    type Error = <TokenPointer as Sanitizable>::Error;
     fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
-        let pair = PairID {
+        let pair = TradingPairID {
             asset_a: self.asset_a.sanitize(())?,
             asset_b: self.asset_b.sanitize(())?,
         };

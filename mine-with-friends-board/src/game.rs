@@ -9,7 +9,7 @@ use crate::tokens::HashBoardData;
 use crate::nft::PowerPlantEvent;
 use crate::sanitize::Sanitizable;
 use crate::token_swap;
-use crate::token_swap::Uniswap;
+use crate::token_swap::ConstantFunctionMarketMaker;
 
 use self::game_move::GameMove;
 use self::game_move::Init;
@@ -24,20 +24,20 @@ use super::tokens;
 use super::nft;
 use crate::sanitize;
 
-use tokens::ERC20Standard;
+use tokens::TokenBase;
 
 use serde::Serialize;
 
 use super::Verified;
 
-use tokens::ERC20Ptr;
+use tokens::TokenPointer;
 
-use tokens::ERC20Registry;
+use tokens::TokenRegistry;
 
 #[derive(Serialize)]
 pub struct GameBoard {
-    pub(crate) tokens: tokens::ERC20Registry,
-    pub(crate) swap: token_swap::Uniswap,
+    pub(crate) tokens: tokens::TokenRegistry,
+    pub(crate) swap: token_swap::ConstantFunctionMarketMaker,
     /// Make this a vote over the map of users to current vote and let the turn count be dynamic
     pub(crate) turn_count: u64,
     pub(crate) alloc: EntityIDAllocator,
@@ -48,9 +48,9 @@ pub struct GameBoard {
     pub(crate) new_users_allowed: bool,
     pub(crate) init: bool,
     /// If init = true, must be Some
-    pub(crate) bitcoin_token_id: Option<ERC20Ptr>,
+    pub(crate) bitcoin_token_id: Option<TokenPointer>,
     /// If init = true, must be Some
-    pub(crate) dollar_token_id: Option<ERC20Ptr>,
+    pub(crate) dollar_token_id: Option<TokenPointer>,
 
     /// If init = true, must be Some
     pub(crate) root_user: Option<EntityID>,
@@ -62,7 +62,7 @@ pub struct GameBoard {
 impl GameBoard {
     pub fn new() -> GameBoard {
         GameBoard {
-            tokens: ERC20Registry::default(),
+            tokens: TokenRegistry::default(),
             swap: Default::default(),
             turn_count: 0,
             alloc: EntityIDAllocator(0x00C0DE0000),
@@ -120,13 +120,13 @@ impl GameBoard {
                 if self.init == false {
                     self.init = true;
                     let _ = self.bitcoin_token_id.insert(self.tokens.new_token(Box::new(
-                        ERC20Standard::new(&mut self.alloc, "Bitcoin".into()),
+                        TokenBase::new(&mut self.alloc, "Bitcoin".into()),
                     )));
                     let _ = self.dollar_token_id.insert(self.tokens.new_token(Box::new(
-                        ERC20Standard::new(&mut self.alloc, "US Dollars".into()),
+                        TokenBase::new(&mut self.alloc, "US Dollars".into()),
                     )));
 
-                    let asic = self.tokens.new_token(Box::new(ERC20Standard::new(
+                    let asic = self.tokens.new_token(Box::new(TokenBase::new(
                         &mut self.alloc,
                         "US Dollars".into(),
                     )));
@@ -186,7 +186,7 @@ impl GameBoard {
                 amount_a,
                 amount_b,
             }) => {
-                Uniswap::do_trade(self, pair, amount_a, amount_b, from);
+                ConstantFunctionMarketMaker::do_trade(self, pair, amount_a, amount_b, from);
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,

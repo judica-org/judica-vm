@@ -2,7 +2,7 @@ use crate::{
     callbacks::Callback,
     entity::EntityIDAllocator,
     nft::Price,
-    token_swap::{PairID, Uniswap},
+    token_swap::{TradingPairID, ConstantFunctionMarketMaker},
 };
 
 use super::entity::EntityID;
@@ -14,7 +14,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-pub(crate) trait ERC20: Send + Sync {
+pub(crate) trait Token: Send + Sync {
     fn transaction(&mut self);
     // todo: undo if transaction fails?
     fn end_transaction(&mut self);
@@ -30,7 +30,7 @@ pub(crate) trait ERC20: Send + Sync {
 }
 
 #[derive(Serialize)]
-pub(crate) struct ERC20Standard {
+pub(crate) struct TokenBase {
     pub(crate) balances: BTreeMap<EntityID, u128>,
     pub(crate) total: u128,
     #[cfg(test)]
@@ -39,7 +39,7 @@ pub(crate) struct ERC20Standard {
     pub nickname: Option<String>,
 }
 
-impl ERC20Standard {
+impl TokenBase {
     fn check_in_transaction(&self) {
         #[cfg(test)]
         if !self.in_transaction.is_some() {
@@ -47,7 +47,7 @@ impl ERC20Standard {
         }
     }
 }
-impl ERC20Standard {
+impl TokenBase {
     pub fn new(alloc: &mut EntityIDAllocator, nickname: String) -> Self {
         Self {
             balances: Default::default(),
@@ -59,7 +59,7 @@ impl ERC20Standard {
         }
     }
 }
-impl ERC20 for ERC20Standard {
+impl Token for TokenBase {
     fn mint(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
         let amt = self.balances.entry(to.clone()).or_default();
@@ -128,8 +128,8 @@ impl ERC20 for ERC20Standard {
 
 #[derive(Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema)]
 #[serde(transparent)]
-pub struct ERC20Ptr(EntityID);
-impl ERC20Ptr {
+pub struct TokenPointer(EntityID);
+impl TokenPointer {
     pub fn inner(&self) -> u64 {
         self.0 .0
     }
@@ -148,8 +148,8 @@ pub struct ASICProducer {
     pub id: EntityID,
     pub total_units: u128,
     pub base_price: Price,
-    pub price_asset: ERC20Ptr,
-    pub hash_asset: ERC20Ptr,
+    pub price_asset: TokenPointer,
+    pub hash_asset: TokenPointer,
     pub adjusts_every: u64,
     pub current_time: u64,
     pub first: bool,
@@ -160,7 +160,7 @@ impl Callback for ASICProducer {
     }
 
     fn action(&mut self, game: &mut crate::game::GameBoard) {
-        let pair = PairID {
+        let pair = TradingPairID {
             asset_a: self.hash_asset,
             asset_b: self.price_asset,
         };
@@ -179,13 +179,13 @@ impl Callback for ASICProducer {
                 coin.mint(&self.id, base);
                 coin.end_transaction();
             }
-            Uniswap::deposit(game, pair, start, base, self.id);
+            ConstantFunctionMarketMaker::deposit(game, pair, start, base, self.id);
             self.first = false;
             self.total_units -= start;
         }
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);
         // TODO: Something more clever here?
-        Uniswap::do_trade(game, pair, min(balance / 100, balance), 0, self.id);
+        ConstantFunctionMarketMaker::do_trade(game, pair, min(balance / 100, balance), 0, self.id);
 
         self.current_time += self.adjusts_every;
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);
@@ -200,14 +200,14 @@ impl Callback for ASICProducer {
 }
 
 #[derive(Default, Serialize)]
-pub(crate) struct ERC20Registry {
-    #[serde(serialize_with = "special_erc20")]
-    pub tokens: BTreeMap<EntityID, Box<dyn ERC20>>,
-    pub hashboards: BTreeMap<ERC20Ptr, HashBoardData>,
+pub(crate) struct TokenRegistry {
+    #[serde(serialize_with = "special_serializer")]
+    pub tokens: BTreeMap<EntityID, Box<dyn Token>>,
+    pub hashboards: BTreeMap<TokenPointer, HashBoardData>,
 }
 
-pub(crate) fn special_erc20<S>(
-    v: &BTreeMap<EntityID, Box<dyn ERC20>>,
+pub(crate) fn special_serializer<S>(
+    v: &BTreeMap<EntityID, Box<dyn Token>>,
     s: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -216,24 +216,24 @@ where
     s.collect_map(v.iter().map(|b| (b.0, b.1.to_json())))
 }
 
-impl ERC20Registry {
-    pub(crate) fn new_token(&mut self, new: Box<dyn ERC20>) -> ERC20Ptr {
-        let p = ERC20Ptr(new.id());
+impl TokenRegistry {
+    pub(crate) fn new_token(&mut self, new: Box<dyn Token>) -> TokenPointer {
+        let p = TokenPointer(new.id());
         self.tokens.insert(new.id(), new);
         p
     }
 }
 
-impl Index<ERC20Ptr> for ERC20Registry {
-    type Output = Box<dyn ERC20>;
+impl Index<TokenPointer> for TokenRegistry {
+    type Output = Box<dyn Token>;
 
-    fn index(&self, index: ERC20Ptr) -> &Self::Output {
+    fn index(&self, index: TokenPointer) -> &Self::Output {
         self.tokens.get(&index.0).unwrap()
     }
 }
 
-impl IndexMut<ERC20Ptr> for ERC20Registry {
-    fn index_mut(&mut self, index: ERC20Ptr) -> &mut Self::Output {
+impl IndexMut<TokenPointer> for TokenRegistry {
+    fn index_mut(&mut self, index: TokenPointer) -> &mut Self::Output {
         self.tokens.get_mut(&index.0).unwrap()
     }
 }

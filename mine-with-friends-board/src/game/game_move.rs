@@ -2,7 +2,7 @@ use crate::entity::EntityID;
 
 use crate::sanitize;
 use crate::sanitize::Unsanitized;
-use crate::token_swap::PairID;
+use crate::token_swap::TradingPairID;
 
 use super::super::Verified;
 
@@ -68,7 +68,7 @@ pub struct Init();
 pub struct NoNewUsers();
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct Trade {
-    pub pair: PairID,
+    pub pair: TradingPairID,
     pub amount_a: u128,
     pub amount_b: u128,
 }

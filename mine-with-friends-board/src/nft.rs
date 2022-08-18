@@ -2,8 +2,8 @@ use super::entity::EntityID;
 use crate::callbacks::Callback;
 
 use crate::entity::EntityIDAllocator;
-use crate::tokens::ERC20Ptr;
-use crate::tokens::ERC20Registry;
+use crate::tokens::TokenPointer;
+use crate::tokens::TokenRegistry;
 use crate::game::GameBoard;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -25,7 +25,7 @@ pub(crate) trait NFT: Send + Sync {
 
 pub(crate) type Price = u128;
 
-pub type Currency = ERC20Ptr;
+pub type Currency = TokenPointer;
 
 pub(crate) type NFTID = EntityID;
 
@@ -105,7 +105,7 @@ impl NFTSaleRegistry {
         &mut self,
         to: EntityID,
         asset: NftPtr,
-        tokens: &mut ERC20Registry,
+        tokens: &mut TokenRegistry,
         nfts: &mut NFTRegistry,
         limit_price: Price,
         limit_currency: Currency,
@@ -285,7 +285,7 @@ impl PowerPlant {
         }
         hashrate
     }
-    fn colocate_hashrate(&self, game: &mut GameBoard, miners: ERC20Ptr, amount: Price) {
+    fn colocate_hashrate(&self, game: &mut GameBoard, miners: TokenPointer, amount: Price) {
         let owner = game.nfts[self.id].owner();
         game.tokens[miners].transaction();
         let _ = game.tokens[miners].transfer(&owner, &self.id.0, amount);
@@ -294,8 +294,8 @@ impl PowerPlant {
     /// Withdrawals are processed via a CoinLockup which emulates shipping
     fn ship_hashrate(
         &self,
-        tokens: &mut ERC20Registry,
-        miners: ERC20Ptr,
+        tokens: &mut TokenRegistry,
+        miners: TokenPointer,
         amount: Price,
         nfts: &mut NFTRegistry,
         alloc: &mut EntityIDAllocator,
@@ -326,7 +326,7 @@ impl PowerPlant {
 pub(crate) struct CoinLockup {
     id: NftPtr,
     time_when_free: u64,
-    asset: ERC20Ptr,
+    asset: TokenPointer,
 }
 
 impl Callback for CoinLockup {

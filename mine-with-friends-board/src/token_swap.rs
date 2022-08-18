@@ -5,25 +5,25 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::entity::EntityIDAllocator;
-use crate::tokens::ERC20Registry;
+use crate::tokens::TokenRegistry;
 use crate::game::GameBoard;
 
 use super::entity::EntityID;
 use super::tokens;
 
 #[derive(Serialize)]
-pub(crate) struct UniswapPair {
-    pub(crate) pair: PairID,
+pub(crate) struct ConstantFunctionMarketMakerPair {
+    pub(crate) pair: TradingPairID,
     pub(crate) id: EntityID,
-    pub(crate) lp: tokens::ERC20Ptr,
+    pub(crate) lp: tokens::TokenPointer,
 }
 
-impl UniswapPair {
+impl ConstantFunctionMarketMakerPair {
     fn new(
         alloc: &mut EntityIDAllocator,
-        tokens: &mut ERC20Registry,
-        mut pair: PairID,
-    ) -> UniswapPair {
+        tokens: &mut TokenRegistry,
+        mut pair: TradingPairID,
+    ) -> ConstantFunctionMarketMakerPair {
         pair.normalize();
         let name_a = tokens[pair.asset_a]
             .nickname()
@@ -31,10 +31,10 @@ impl UniswapPair {
         let name_b = tokens[pair.asset_b]
             .nickname()
             .unwrap_or(format!("{}", pair.asset_b.inner()));
-        UniswapPair {
+        ConstantFunctionMarketMakerPair {
             pair,
             id: alloc.make(),
-            lp: tokens.new_token(Box::new(tokens::ERC20Standard {
+            lp: tokens.new_token(Box::new(tokens::TokenBase {
                 balances: Default::default(),
                 total: Default::default(),
                 this: alloc.make(),
@@ -44,21 +44,21 @@ impl UniswapPair {
             })),
         }
     }
-    fn amt_a(&self, tokens: &mut ERC20Registry) -> u128 {
+    fn amt_a(&self, tokens: &mut TokenRegistry) -> u128 {
         tokens[self.pair.asset_a].balance_check(&self.id)
     }
-    fn amt_b(&self, tokens: &mut ERC20Registry) -> u128 {
+    fn amt_b(&self, tokens: &mut TokenRegistry) -> u128 {
         tokens[self.pair.asset_b].balance_check(&self.id)
     }
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct PairID {
-    pub asset_a: tokens::ERC20Ptr,
-    pub asset_b: tokens::ERC20Ptr,
+pub struct TradingPairID {
+    pub asset_a: tokens::TokenPointer,
+    pub asset_b: tokens::TokenPointer,
 }
 
-impl PairID {
+impl TradingPairID {
     fn normalize(&mut self) {
         if self.asset_a <= self.asset_b {
         } else {
@@ -71,16 +71,16 @@ impl PairID {
 }
 
 #[derive(Serialize, Default)]
-pub(crate) struct Uniswap {
-    pub(crate) markets: BTreeMap<PairID, UniswapPair>,
+pub(crate) struct ConstantFunctionMarketMaker {
+    pub(crate) markets: BTreeMap<TradingPairID, ConstantFunctionMarketMakerPair>,
 }
 
-impl Uniswap {
+impl ConstantFunctionMarketMaker {
     // TODO: Better math in this whole module
 
     pub(crate) fn deposit(
         game: &mut GameBoard,
-        mut id: PairID,
+        mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
         from: EntityID,
@@ -90,7 +90,7 @@ impl Uniswap {
         if id != unnormalized_id {
             std::mem::swap(&mut amount_a, &mut amount_b);
         }
-        let tokens: &mut tokens::ERC20Registry = &mut game.tokens;
+        let tokens: &mut tokens::TokenRegistry = &mut game.tokens;
         let alloc: &mut EntityIDAllocator = &mut game.alloc;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();
@@ -101,7 +101,7 @@ impl Uniswap {
             .swap
             .markets
             .entry(id)
-            .or_insert_with(|| UniswapPair::new(alloc, tokens, id));
+            .or_insert_with(|| ConstantFunctionMarketMakerPair::new(alloc, tokens, id));
 
         //        amount_a / amount_b = mkt.amt_a / mkt.amt_b
         if amount_a * mkt.amt_b(tokens) != mkt.amt_a(tokens) * amount_b {
@@ -137,7 +137,7 @@ impl Uniswap {
     // One of amount_a or amount_b should be 0
     pub(crate) fn do_trade(
         game: &mut GameBoard,
-        mut id: PairID,
+        mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
         from: EntityID,
@@ -147,7 +147,7 @@ impl Uniswap {
         if id != unnormalized_id {
             std::mem::swap(&mut amount_a, &mut amount_b);
         }
-        let tokens: &mut tokens::ERC20Registry = &mut game.tokens;
+        let tokens: &mut tokens::TokenRegistry = &mut game.tokens;
         let alloc: &mut EntityIDAllocator = &mut game.alloc;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();
@@ -166,7 +166,7 @@ impl Uniswap {
             .swap
             .markets
             .entry(id)
-            .or_insert_with(|| UniswapPair::new(alloc, tokens, id));
+            .or_insert_with(|| ConstantFunctionMarketMakerPair::new(alloc, tokens, id));
 
         if !(amount_a <= mkt.amt_a(tokens) && amount_b <= mkt.amt_b(tokens)) {
             return;
