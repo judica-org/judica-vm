@@ -2,7 +2,7 @@ use crate::{
     game::game_move::{
         GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,
     },
-    nft::NftPtr,
+    nfts::NftPtr,
     tokens::token_swap::TradingPairID,
     tokens::TokenPointer,
 };

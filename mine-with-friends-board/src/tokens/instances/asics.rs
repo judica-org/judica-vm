@@ -6,8 +6,8 @@ use crate::callbacks::Callback;
 use crate::entity::EntityID;
 use crate::tokens::TokenPointer;
 
-use crate::nft::Price;
 use crate::tokens::token_swap::{TradingPairID, ConstantFunctionMarketMaker};
+use crate::util::Price;
 
 #[derive(Serialize)]
 pub struct HashBoardData {

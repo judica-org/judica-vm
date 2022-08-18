@@ -1,9 +1,10 @@
 mod callbacks;
 pub mod entity;
-pub mod tokens;
 pub mod game;
-pub mod nft;
+pub mod nfts;
 pub mod sanitize;
+pub mod tokens;
+pub mod util;
 
 pub struct Verified<D> {
     d: D,

@@ -1,12 +1,12 @@
-use crate::entity::EntityID;
+use crate::nfts::NftPtr;
+use crate::util::Currency;
+use crate::{entity::EntityID, util::Price};
 
 use crate::sanitize;
 use crate::sanitize::Unsanitized;
 use crate::tokens::token_swap::TradingPairID;
 
 use super::super::Verified;
-
-use super::super::nft;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -74,15 +74,15 @@ pub struct Trade {
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct PurchaseNFT {
-    pub nft_id: nft::NftPtr,
-    pub limit_price: nft::Price,
-    pub currency: nft::Currency,
+    pub nft_id: NftPtr,
+    pub limit_price: Price,
+    pub currency: Currency,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct ListNFTForSale {
-    pub nft_id: nft::NftPtr,
-    pub price: nft::Price,
-    pub currency: nft::Currency,
+    pub nft_id: NftPtr,
+    pub price: Price,
+    pub currency: Currency,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct RegisterUser {
@@ -92,8 +92,8 @@ pub struct RegisterUser {
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct SendTokens {
     pub to: EntityID,
-    pub amount: nft::Price,
-    pub currency: nft::Currency,
+    pub amount: Price,
+    pub currency: Currency,
 }
 
 impl Verified<Unsanitized<GameMove>> {

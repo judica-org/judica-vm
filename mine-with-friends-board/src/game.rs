@@ -4,7 +4,10 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 
-use crate::nft::PowerPlantEvent;
+use crate::nfts::NFTRegistry;
+use crate::nfts::instances::powerplant::events::PowerPlantEvent;
+use crate::nfts::BaseNFT;
+use crate::nfts::sale::NFTSaleRegistry;
 use crate::sanitize::Sanitizable;
 use crate::tokens::instances::asics::ASICProducer;
 use crate::tokens::instances::asics::HashBoardData;
@@ -20,7 +23,6 @@ use self::game_move::RegisterUser;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
 
-use super::nft;
 use super::tokens;
 use crate::sanitize;
 
@@ -42,8 +44,8 @@ pub struct GameBoard {
     pub(crate) turn_count: u64,
     alloc: EntityIDAllocator,
     pub(crate) users: BTreeMap<EntityID, String>,
-    pub(crate) nfts: nft::NFTRegistry,
-    pub(crate) nft_sales: nft::NFTSaleRegistry,
+    pub(crate) nfts: NFTRegistry,
+    pub(crate) nft_sales: NFTSaleRegistry,
     pub(crate) player_move_sequence: BTreeMap<EntityID, u64>,
     pub(crate) new_users_allowed: bool,
     pub(crate) init: bool,
@@ -156,7 +158,7 @@ impl GameBoard {
                     self.tokens[self.bitcoin_token_id.unwrap()].mint(&root, 10000000);
                     self.tokens[self.dollar_token_id.unwrap()].mint(&root, 30000);
                     // TODO: Initialize Power Plants?
-                    let demo_nft = self.nfts.add(Box::new(nft::BaseNFT {
+                    let demo_nft = self.nfts.add(Box::new(BaseNFT {
                         owner: self.root_user.unwrap(),
                         nft_id: self.alloc.make(),
                         transfer_count: 0,

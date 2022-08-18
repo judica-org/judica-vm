@@ -1,7 +1,7 @@
 use self::instances::asics::HashBoardData;
 
 use super::entity::EntityID;
-use crate::{callbacks::Callback, entity::EntityIDAllocator, nft::Price};
+use crate::{callbacks::Callback, entity::EntityIDAllocator};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
