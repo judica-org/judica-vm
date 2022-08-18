@@ -9,6 +9,7 @@ use super::entity::EntityID;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::min,
     collections::BTreeMap,
     ops::{Index, IndexMut},
 };
@@ -184,7 +185,7 @@ impl Callback for ASICProducer {
         }
         let balance = game.erc20s[self.hash_asset].balance_check(&self.id);
         // TODO: Something more clever here?
-        Uniswap::do_trade(game, pair, balance / 10, 0, self.id);
+        Uniswap::do_trade(game, pair, min(balance / 100, balance), 0, self.id);
 
         self.current_time += self.adjusts_every;
         let balance = game.erc20s[self.hash_asset].balance_check(&self.id);
