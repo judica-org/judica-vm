@@ -4,10 +4,10 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 
-use crate::nfts::NFTRegistry;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
-use crate::nfts::BaseNFT;
 use crate::nfts::sale::NFTSaleRegistry;
+use crate::nfts::BaseNFT;
+use crate::nfts::NFTRegistry;
 use crate::sanitize::Sanitizable;
 use crate::tokens::instances::asics::ASICProducer;
 use crate::tokens::instances::asics::HashBoardData;
