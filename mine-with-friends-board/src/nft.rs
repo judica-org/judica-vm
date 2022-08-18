@@ -260,12 +260,11 @@ pub enum PlantType {
 }
 #[derive(Serialize, Clone)]
 pub(crate) struct PowerPlant {
-    pub(crate) base: BaseNFT,
+    pub id: NftPtr,
     pub plant_type: PlantType,
     pub watts: u128,
     pub coordinates: (u64, u64),
 }
-NFT_BASE!(PowerPlant);
 
 struct Hashboard();
 impl PowerPlant {
@@ -277,7 +276,7 @@ impl PowerPlant {
         for token in hashers {
             if let Some(hbd) = game.erc20s.hashboards.get(&token) {
                 let hpw = hbd.hash_per_watt;
-                let count = game.erc20s[token].balance_check(&self.id());
+                let count = game.erc20s[token].balance_check(&self.id.0);
                 hash.push((hpw, count));
             }
         }
@@ -294,10 +293,11 @@ impl PowerPlant {
         }
         hashrate
     }
-    fn colocate_hashrate(&self, tokens: &mut ERC20Registry, miners: ERC20Ptr, amount: Price) {
-        tokens[miners].transaction();
-        let _ = tokens[miners].transfer(&self.owner(), &self.id(), amount);
-        tokens[miners].end_transaction();
+    fn colocate_hashrate(&self, game: &mut GameBoard, miners: ERC20Ptr, amount: Price) {
+        let owner = game.nfts[self.id].owner();
+        game.erc20s[miners].transaction();
+        let _ = game.erc20s[miners].transfer(&owner, &self.id.0, amount);
+        game.erc20s[miners].end_transaction();
     }
     /// Withdrawals are processed via a CoinLockup which emulates shipping
     fn ship_hashrate(
@@ -310,9 +310,10 @@ impl PowerPlant {
         shipping_time: u64,
         game: &mut GameBoard,
     ) {
+        let owner = game.nfts[self.id].owner();
         let lockup = CoinLockup {
             base: BaseNFT {
-                owner: self.owner(),
+                owner: owner,
                 nft_id: alloc.make(),
                 // Non Transferrable
                 transfer_count: u128::max_value(),
@@ -323,7 +324,7 @@ impl PowerPlant {
         let p = nfts.add(Box::new(lockup.clone()));
         game.callbacks.schedule(Box::new(lockup.clone()));
         tokens[miners].transaction();
-        let _ = tokens[miners].transfer(&self.id(), &p.0, amount);
+        let _ = tokens[miners].transfer(&self.id.0, &p.0, amount);
         tokens[miners].end_transaction();
     }
 }
