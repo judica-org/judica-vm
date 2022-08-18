@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{callbacks::Callback, game::GameBoard, entity::EntityID};
+use crate::{callbacks::Callback, entity::EntityID, game::GameBoard};
 
 #[derive(Clone)]
 pub struct PowerPlantEvent {

@@ -19,7 +19,7 @@ impl ConstantFunctionMarketMakerPair {
     fn ensure(game: &mut GameBoard, mut pair: TradingPairID) -> TradingPairID {
         pair.normalize();
         match game.swap.markets.entry(pair) {
-            std::collections::btree_map::Entry::Vacant(a) => {
+            std::collections::btree_map::Entry::Vacant(_a) => {
                 let name_a = game.tokens[pair.asset_a]
                     .nickname()
                     .unwrap_or(format!("{}", pair.asset_a.inner()));
@@ -45,7 +45,7 @@ impl ConstantFunctionMarketMakerPair {
                 );
                 pair
             }
-            std::collections::btree_map::Entry::Occupied(a) => pair,
+            std::collections::btree_map::Entry::Occupied(_a) => pair,
         }
     }
     fn amt_a(&self, tokens: &mut TokenRegistry) -> u128 {

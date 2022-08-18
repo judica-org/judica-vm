@@ -11,7 +11,7 @@ use crate::{
     util::Price,
 };
 
-use super::lockup::{CoinLockup};
+use super::lockup::CoinLockup;
 
 #[derive(Serialize, Clone)]
 pub enum PlantType {
