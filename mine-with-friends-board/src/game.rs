@@ -4,8 +4,8 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 
-use crate::erc20::ASICProducer;
-use crate::erc20::HashBoardData;
+use crate::tokens::ASICProducer;
+use crate::tokens::HashBoardData;
 use crate::nft::PowerPlantEvent;
 use crate::sanitize::Sanitizable;
 use crate::token_swap;
@@ -20,23 +20,23 @@ use self::game_move::RegisterUser;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
 
-use super::erc20;
+use super::tokens;
 use super::nft;
 use crate::sanitize;
 
-use erc20::ERC20Standard;
+use tokens::ERC20Standard;
 
 use serde::Serialize;
 
 use super::Verified;
 
-use erc20::ERC20Ptr;
+use tokens::ERC20Ptr;
 
-use erc20::ERC20Registry;
+use tokens::ERC20Registry;
 
 #[derive(Serialize)]
 pub struct GameBoard {
-    pub(crate) erc20s: erc20::ERC20Registry,
+    pub(crate) tokens: tokens::ERC20Registry,
     pub(crate) swap: token_swap::Uniswap,
     /// Make this a vote over the map of users to current vote and let the turn count be dynamic
     pub(crate) turn_count: u64,
@@ -62,7 +62,7 @@ pub struct GameBoard {
 impl GameBoard {
     pub fn new() -> GameBoard {
         GameBoard {
-            erc20s: ERC20Registry::default(),
+            tokens: ERC20Registry::default(),
             swap: Default::default(),
             turn_count: 0,
             alloc: EntityIDAllocator(0x00C0DE0000),
@@ -119,18 +119,18 @@ impl GameBoard {
             GameMove::Init(Init {}) => {
                 if self.init == false {
                     self.init = true;
-                    let _ = self.bitcoin_token_id.insert(self.erc20s.new_token(Box::new(
+                    let _ = self.bitcoin_token_id.insert(self.tokens.new_token(Box::new(
                         ERC20Standard::new(&mut self.alloc, "Bitcoin".into()),
                     )));
-                    let _ = self.dollar_token_id.insert(self.erc20s.new_token(Box::new(
+                    let _ = self.dollar_token_id.insert(self.tokens.new_token(Box::new(
                         ERC20Standard::new(&mut self.alloc, "US Dollars".into()),
                     )));
 
-                    let asic = self.erc20s.new_token(Box::new(ERC20Standard::new(
+                    let asic = self.tokens.new_token(Box::new(ERC20Standard::new(
                         &mut self.alloc,
                         "US Dollars".into(),
                     )));
-                    let _ = self.erc20s.hashboards.insert(
+                    let _ = self.tokens.hashboards.insert(
                         asic,
                         HashBoardData {
                             hash_per_watt: (3.0 * 10e12) as u128,
@@ -152,8 +152,8 @@ impl GameBoard {
 
                     // DEMO CODE:
                     // REMOVE BEFORE FLIGHT
-                    self.erc20s[self.bitcoin_token_id.unwrap()].mint(&root, 10000000);
-                    self.erc20s[self.dollar_token_id.unwrap()].mint(&root, 30000);
+                    self.tokens[self.bitcoin_token_id.unwrap()].mint(&root, 10000000);
+                    self.tokens[self.dollar_token_id.unwrap()].mint(&root, 30000);
                     // TODO: Initialize Power Plants?
                     let demo_nft = self.nfts.add(Box::new(nft::BaseNFT {
                         owner: self.root_user.unwrap(),
@@ -195,7 +195,7 @@ impl GameBoard {
             }) => self.nft_sales.make_trade(
                 from,
                 nft_id,
-                &mut self.erc20s,
+                &mut self.tokens,
                 &mut self.nfts,
                 limit_price,
                 currency,
@@ -210,9 +210,9 @@ impl GameBoard {
                 amount,
                 currency,
             }) => {
-                self.erc20s[currency].transaction();
-                self.erc20s[currency].transfer(&from, &to, amount);
-                self.erc20s[currency].end_transaction();
+                self.tokens[currency].transaction();
+                self.tokens[currency].transfer(&from, &to, amount);
+                self.tokens[currency].end_transaction();
             }
         }
         return Ok(());

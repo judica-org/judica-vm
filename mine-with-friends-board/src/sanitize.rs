@@ -1,5 +1,5 @@
 use crate::{
-    erc20::ERC20Ptr,
+    tokens::ERC20Ptr,
     game::game_move::{
         GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,
     },

@@ -1,6 +1,6 @@
 mod callbacks;
 pub mod entity;
-pub mod erc20;
+pub mod tokens;
 pub mod game;
 pub mod nft;
 pub mod sanitize;

@@ -5,17 +5,17 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::entity::EntityIDAllocator;
-use crate::erc20::ERC20Registry;
+use crate::tokens::ERC20Registry;
 use crate::game::GameBoard;
 
 use super::entity::EntityID;
-use super::erc20;
+use super::tokens;
 
 #[derive(Serialize)]
 pub(crate) struct UniswapPair {
     pub(crate) pair: PairID,
     pub(crate) id: EntityID,
-    pub(crate) lp: erc20::ERC20Ptr,
+    pub(crate) lp: tokens::ERC20Ptr,
 }
 
 impl UniswapPair {
@@ -34,7 +34,7 @@ impl UniswapPair {
         UniswapPair {
             pair,
             id: alloc.make(),
-            lp: tokens.new_token(Box::new(erc20::ERC20Standard {
+            lp: tokens.new_token(Box::new(tokens::ERC20Standard {
                 balances: Default::default(),
                 total: Default::default(),
                 this: alloc.make(),
@@ -54,8 +54,8 @@ impl UniswapPair {
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PairID {
-    pub asset_a: erc20::ERC20Ptr,
-    pub asset_b: erc20::ERC20Ptr,
+    pub asset_a: tokens::ERC20Ptr,
+    pub asset_b: tokens::ERC20Ptr,
 }
 
 impl PairID {
@@ -90,7 +90,7 @@ impl Uniswap {
         if id != unnormalized_id {
             std::mem::swap(&mut amount_a, &mut amount_b);
         }
-        let tokens: &mut erc20::ERC20Registry = &mut game.erc20s;
+        let tokens: &mut tokens::ERC20Registry = &mut game.tokens;
         let alloc: &mut EntityIDAllocator = &mut game.alloc;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();
@@ -147,7 +147,7 @@ impl Uniswap {
         if id != unnormalized_id {
             std::mem::swap(&mut amount_a, &mut amount_b);
         }
-        let tokens: &mut erc20::ERC20Registry = &mut game.erc20s;
+        let tokens: &mut tokens::ERC20Registry = &mut game.tokens;
         let alloc: &mut EntityIDAllocator = &mut game.alloc;
         tokens[id.asset_a].transaction();
         tokens[id.asset_b].transaction();

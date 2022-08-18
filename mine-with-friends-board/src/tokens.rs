@@ -166,7 +166,7 @@ impl Callback for ASICProducer {
         };
         if self.first {
             {
-                let coin = &mut game.erc20s[self.hash_asset];
+                let coin = &mut game.tokens[self.hash_asset];
                 coin.transaction();
                 coin.mint(&self.id, self.total_units);
                 coin.end_transaction();
@@ -174,7 +174,7 @@ impl Callback for ASICProducer {
             let start = self.total_units / 10;
             let base = self.base_price * start;
             {
-                let coin = &mut game.erc20s[self.price_asset];
+                let coin = &mut game.tokens[self.price_asset];
                 coin.transaction();
                 coin.mint(&self.id, base);
                 coin.end_transaction();
@@ -183,12 +183,12 @@ impl Callback for ASICProducer {
             self.first = false;
             self.total_units -= start;
         }
-        let balance = game.erc20s[self.hash_asset].balance_check(&self.id);
+        let balance = game.tokens[self.hash_asset].balance_check(&self.id);
         // TODO: Something more clever here?
         Uniswap::do_trade(game, pair, min(balance / 100, balance), 0, self.id);
 
         self.current_time += self.adjusts_every;
-        let balance = game.erc20s[self.hash_asset].balance_check(&self.id);
+        let balance = game.tokens[self.hash_asset].balance_check(&self.id);
         if balance > 0 {
             game.callbacks.schedule(Box::new(self.clone()))
         }

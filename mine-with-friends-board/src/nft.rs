@@ -2,8 +2,8 @@ use super::entity::EntityID;
 use crate::callbacks::Callback;
 
 use crate::entity::EntityIDAllocator;
-use crate::erc20::ERC20Ptr;
-use crate::erc20::ERC20Registry;
+use crate::tokens::ERC20Ptr;
+use crate::tokens::ERC20Registry;
 use crate::game::GameBoard;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -225,7 +225,7 @@ impl Callback for PowerPlantEvent {
             .values_mut()
             .for_each(|v| *v = ((*v * 1024 * game.mining_subsidy) / total) / 1024);
 
-        let btc = &mut game.erc20s[game.bitcoin_token_id.unwrap()];
+        let btc = &mut game.tokens[game.bitcoin_token_id.unwrap()];
         btc.transaction();
         for (to, amount) in shares {
             btc.mint(&to, amount)
@@ -263,12 +263,12 @@ impl PowerPlant {
     fn compute_hashrate(&self, game: &mut GameBoard) -> u128 {
         // TODO: Some algo that uses watts / coordinates / plant_type to compute a scalar?
         let _scale = 1000;
-        let mut hash = Vec::with_capacity(game.erc20s.hashboards.len());
-        let hashers: Vec<_> = game.erc20s.hashboards.keys().cloned().collect();
+        let mut hash = Vec::with_capacity(game.tokens.hashboards.len());
+        let hashers: Vec<_> = game.tokens.hashboards.keys().cloned().collect();
         for token in hashers {
-            if let Some(hbd) = game.erc20s.hashboards.get(&token) {
+            if let Some(hbd) = game.tokens.hashboards.get(&token) {
                 let hpw = hbd.hash_per_watt;
-                let count = game.erc20s[token].balance_check(&self.id.0);
+                let count = game.tokens[token].balance_check(&self.id.0);
                 hash.push((hpw, count));
             }
         }
@@ -287,9 +287,9 @@ impl PowerPlant {
     }
     fn colocate_hashrate(&self, game: &mut GameBoard, miners: ERC20Ptr, amount: Price) {
         let owner = game.nfts[self.id].owner();
-        game.erc20s[miners].transaction();
-        let _ = game.erc20s[miners].transfer(&owner, &self.id.0, amount);
-        game.erc20s[miners].end_transaction();
+        game.tokens[miners].transaction();
+        let _ = game.tokens[miners].transfer(&owner, &self.id.0, amount);
+        game.tokens[miners].end_transaction();
     }
     /// Withdrawals are processed via a CoinLockup which emulates shipping
     fn ship_hashrate(
@@ -340,7 +340,7 @@ impl Callback for CoinLockup {
         if game.current_time < self.time_when_free {
             return;
         }
-        let token = &mut game.erc20s[self.asset];
+        let token = &mut game.tokens[self.asset];
         token.transaction();
         let balance = token.balance_check(&self.id.0);
         let _ = token.transfer(&self.id.0, &owner, balance);
