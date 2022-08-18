@@ -10,16 +10,21 @@ use std::ops::Index;
 use std::ops::IndexMut;
 pub mod instances;
 pub mod sale;
+/// All NFTs must implement these behaviors
 pub(crate) trait NFT: Send + Sync {
+    /// Return the EntityID of the current Owner
     fn owner(&self) -> EntityID;
+    /// Transfer the NFT from the current Owner to someone else
     fn transfer(&mut self, to: EntityID);
+    /// Get the EntityID of the
     fn id(&self) -> EntityID;
+    /// How many times has this NFT been transfered
     fn transfer_count(&self) -> u128;
+    /// Represent the NFT as a JSON
     fn to_json(&self) -> serde_json::Value;
 }
 
-pub(crate) type NFTID = EntityID;
-
+/// A Registry of all NFTs and their MetaData
 #[derive(Default)]
 pub(crate) struct NFTRegistry {
     pub nfts: BTreeMap<NftPtr, Box<dyn NFT>>,
@@ -34,6 +39,10 @@ impl Serialize for NFTRegistry {
     }
 }
 
+/// A special Pointer designed for safer access to the NFTRegistry (prevent
+/// confusion with EntityID type)
+///
+/// TODO: Guarantee validity for a given NFTRegistry
 #[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy, JsonSchema)]
 pub struct NftPtr(EntityID);
 
@@ -62,6 +71,7 @@ impl IndexMut<NftPtr> for NFTRegistry {
     }
 }
 
+/// Basic NFT Implementation
 #[derive(Serialize, Clone)]
 pub(crate) struct BaseNFT {
     pub(crate) owner: EntityID,
@@ -93,30 +103,4 @@ impl NFT for BaseNFT {
     fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap()
     }
-}
-
-macro_rules! NFT_BASE {
-    ($i:ident) => {
-        impl NFT for $i {
-            fn owner(&self) -> EntityID {
-                self.base.owner()
-            }
-
-            fn transfer(&mut self, to: EntityID) {
-                self.base.transfer(to)
-            }
-
-            fn id(&self) -> EntityID {
-                self.base.id()
-            }
-
-            fn transfer_count(&self) -> u128 {
-                self.base.transfer_count()
-            }
-
-            fn to_json(&self) -> serde_json::Value {
-                self.base.to_json()
-            }
-        }
-    };
 }

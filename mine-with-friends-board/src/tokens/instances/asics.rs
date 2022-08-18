@@ -1,3 +1,4 @@
+///! Tokens which represent 1 unit of hashrate
 use std::cmp::min;
 
 use serde::Serialize;
@@ -9,6 +10,7 @@ use crate::tokens::TokenPointer;
 use crate::tokens::token_swap::{ConstantFunctionMarketMaker, TradingPairID};
 use crate::util::Price;
 
+/// Parameters for a given HashBoard type
 #[derive(Serialize)]
 pub struct HashBoardData {
     pub hash_per_watt: u128,
@@ -16,6 +18,12 @@ pub struct HashBoardData {
     // Could be used to determine "burn out"
     pub reliability: u8,
 }
+
+/// A ASICProducer is a kind of CFMM bot that deploys a basic strategy to
+/// periodically sell 1% of it's holdings in ASICs, after setting up an initial
+/// market condition with 10% of the hashrate available at a set price.
+///
+/// If it were more clever, the algorithm could do some fancier things.
 #[derive(Serialize, Clone)]
 pub struct ASICProducer {
     pub id: EntityID,
@@ -25,6 +33,7 @@ pub struct ASICProducer {
     pub hash_asset: TokenPointer,
     pub adjusts_every: u64,
     pub current_time: u64,
+    // On our first round we'll set some things up differently
     pub first: bool,
 }
 
@@ -38,6 +47,7 @@ impl Callback for ASICProducer {
             asset_a: self.hash_asset,
             asset_b: self.price_asset,
         };
+
         if self.first {
             {
                 let coin = &mut game.tokens[self.hash_asset];
@@ -59,6 +69,12 @@ impl Callback for ASICProducer {
         }
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);
         // TODO: Something more clever here?
+        //
+        // Ideas:
+        // if the current price is below the base price, then do not sell.  if
+        // the current price is above the current price, then sell enough to get
+        // the price back to base_price.
+        // Maybe worth implementing logic inside the swap contract directly for these.
         ConstantFunctionMarketMaker::do_trade(game, pair, min(balance / 100, balance), 0, self.id);
 
         self.current_time += self.adjusts_every;

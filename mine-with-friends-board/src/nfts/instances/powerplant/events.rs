@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::{callbacks::Callback, entity::EntityID, game::GameBoard};
 
+/// PowerPlantEvent drives the event loop for powerplants, including e.g.
+/// distribution of mining rewards.
 #[derive(Clone)]
 pub struct PowerPlantEvent {
     pub time: u64,

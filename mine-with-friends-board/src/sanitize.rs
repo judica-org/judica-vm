@@ -1,3 +1,7 @@
+//! This module helps with sanitizing certain things about different data types.
+//!
+//! TODO: The Context Objects passed in should e.g. be sufficient to check that all pointers are valid
+//! Currently this is not done.
 use crate::{
     game::game_move::{
         GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,

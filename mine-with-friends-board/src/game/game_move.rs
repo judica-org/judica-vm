@@ -11,6 +11,10 @@ use super::super::Verified;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Grab-Bag Enum of all moves
+///
+/// N.B. we do the enum-of-struct-variant pattern to make serialization/schemas
+/// nicer.
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum GameMove {
@@ -34,6 +38,11 @@ pub enum GameMove {
 }
 
 impl GameMove {
+    /// These moves should only be made by the root user / system if true.
+    /// TODO: Maybe have 3 rings for:
+    /// - 0 system
+    /// - 1 host
+    /// - 2 player
     pub fn is_priviledged(&self) -> bool {
         match self {
             GameMove::Trade(_)
@@ -45,6 +54,7 @@ impl GameMove {
     }
 }
 
+// Convenience to marshall a move into a GameMove
 macro_rules! derive_from {
     ($y:ident) => {
         impl From<$y> for GameMove {

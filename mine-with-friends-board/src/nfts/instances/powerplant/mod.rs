@@ -31,6 +31,7 @@ pub(crate) struct PowerPlant {
 }
 
 impl PowerPlant {
+    /// Compute the total hashes per second of this powerplant at this game state
     fn compute_hashrate(&self, game: &mut GameBoard) -> u128 {
         // TODO: Some algo that uses watts / coordinates / plant_type to compute a scalar?
         let _scale = 1000;
@@ -56,6 +57,8 @@ impl PowerPlant {
         }
         hashrate
     }
+
+    /// Send some of a the owner's hash boxes to this powerplant
     fn colocate_hashrate(&self, game: &mut GameBoard, miners: TokenPointer, amount: Price) {
         let owner = game.nfts[self.id].owner();
         game.tokens[miners].transaction();
@@ -65,30 +68,12 @@ impl PowerPlant {
     /// Withdrawals are processed via a CoinLockup which emulates shipping
     fn ship_hashrate(
         &self,
-        tokens: &mut TokenRegistry,
         miners: TokenPointer,
         amount: Price,
-        nfts: &mut NFTRegistry,
-        alloc: &mut EntityIDAllocator,
         shipping_time: u64,
         game: &mut GameBoard,
     ) {
         let owner = game.nfts[self.id].owner();
-        let lockup_base = BaseNFT {
-            owner: owner,
-            nft_id: alloc.make(),
-            // Non Transferrable
-            transfer_count: u128::max_value(),
-        };
-        let id = nfts.add(Box::new(lockup_base.clone()));
-        let lockup = CoinLockup {
-            time_when_free: shipping_time,
-            asset: miners,
-            id,
-        };
-        game.callbacks.schedule(Box::new(lockup.clone()));
-        tokens[miners].transaction();
-        let _ = tokens[miners].transfer(&self.id.0, &id.0, amount);
-        tokens[miners].end_transaction();
+        CoinLockup::lockup(game, owner, miners, amount, shipping_time)
     }
 }

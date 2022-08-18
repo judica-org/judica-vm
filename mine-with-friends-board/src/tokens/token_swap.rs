@@ -8,14 +8,22 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+/// Data for a single trading pair (e.g. Apples to Oranges tokens)
+///
+/// Pairs have a balance in Apples and Oranges, as well as a token that represents
+/// a fractional interest (unit / total) redemptive right of Apples : Oranges
 #[derive(Serialize)]
 pub(crate) struct ConstantFunctionMarketMakerPair {
+    /// The trading pair, should be normalized here
     pub(crate) pair: TradingPairID,
+    /// The ID of this pair
     pub(crate) id: EntityID,
+    /// The ID of the LP Tokens for this pair
     pub(crate) lp: TokenPointer,
 }
 
 impl ConstantFunctionMarketMakerPair {
+    /// ensure makes sure that a given trading pair exists in the GameBoard
     fn ensure(game: &mut GameBoard, mut pair: TradingPairID) -> TradingPairID {
         pair.normalize();
         match game.swap.markets.entry(pair) {
@@ -56,6 +64,9 @@ impl ConstantFunctionMarketMakerPair {
     }
 }
 
+/// A TradingPair, not guaranteed to be normalized (which can lead to weird
+/// bugs) Auto-canonicalizing is undesirable since a user might specify
+/// elsewhere in corresponding order what their trade is.
 #[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TradingPairID {
     pub asset_a: TokenPointer,
@@ -63,6 +74,9 @@ pub struct TradingPairID {
 }
 
 impl TradingPairID {
+    /// Sort the key for use in e.g. Maps
+    /// N.B. don't normalize without sorting the amounts in the same order.
+    /// TODO: Make a type-safer way of represnting this
     fn normalize(&mut self) {
         if self.asset_a <= self.asset_b {
         } else {
@@ -74,6 +88,7 @@ impl TradingPairID {
     }
 }
 
+/// Registry of all Market Pairs
 #[derive(Serialize, Default)]
 pub(crate) struct ConstantFunctionMarketMaker {
     pub(crate) markets: BTreeMap<TradingPairID, ConstantFunctionMarketMakerPair>,
@@ -82,6 +97,12 @@ pub(crate) struct ConstantFunctionMarketMaker {
 impl ConstantFunctionMarketMaker {
     // TODO: Better math in this whole module
 
+    /// Adds amount_a and amount_b to the pair
+    /// N.B. The deposit will fail if amount_a : amount_b != mkt.amt_a() : mkt.amt_b()
+    /// We might need some slack in how that works? May also be convenient to
+    /// imply one param from the other...
+    ///
+    /// mints the corresponding # of LP tokens
     pub(crate) fn deposit(
         game: &mut GameBoard,
         mut id: TradingPairID,
@@ -132,10 +153,16 @@ impl ConstantFunctionMarketMaker {
         tokens[id.asset_a].end_transaction();
         tokens[id.asset_b].end_transaction();
     }
+
+    /// TODO: Implement me please!
+    ///
+    /// This function should invert a deposit
     pub(crate) fn withdraw(&mut self) {
         todo!();
     }
-    // One of amount_a or amount_b should be 0
+    /// Perform a trade op by using the X*Y = K formula for a CFMM
+    ///
+    /// Parameters: One of amount_a or amount_b should be 0, which implies the trade direction
     pub(crate) fn do_trade(
         game: &mut GameBoard,
         mut id: TradingPairID,

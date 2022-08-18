@@ -1,19 +1,3 @@
-use std::collections::BTreeMap;
-
-use crate::callbacks::CallbackRegistry;
-use crate::entity::EntityID;
-use crate::entity::EntityIDAllocator;
-
-use crate::nfts::instances::powerplant::events::PowerPlantEvent;
-use crate::nfts::sale::NFTSaleRegistry;
-use crate::nfts::BaseNFT;
-use crate::nfts::NFTRegistry;
-use crate::sanitize::Sanitizable;
-use crate::tokens::instances::asics::ASICProducer;
-use crate::tokens::instances::asics::HashBoardData;
-use crate::tokens::token_swap;
-use crate::tokens::token_swap::ConstantFunctionMarketMaker;
-
 use self::game_move::GameMove;
 use self::game_move::Init;
 use self::game_move::ListNFTForSale;
@@ -22,20 +6,28 @@ use self::game_move::PurchaseNFT;
 use self::game_move::RegisterUser;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
-
-use super::tokens;
+use crate::callbacks::CallbackRegistry;
+use crate::entity::EntityID;
+use crate::entity::EntityIDAllocator;
+use crate::nfts::instances::powerplant::events::PowerPlantEvent;
+use crate::nfts::sale::NFTSaleRegistry;
+use crate::nfts::BaseNFT;
+use crate::nfts::NFTRegistry;
 use crate::sanitize;
-
-use tokens::TokenBase;
-
+use crate::sanitize::Sanitizable;
+use crate::tokens;
+use crate::tokens::instances::asics::ASICProducer;
+use crate::tokens::instances::asics::HashBoardData;
+use crate::tokens::token_swap;
+use crate::tokens::token_swap::ConstantFunctionMarketMaker;
+use crate::Verified;
 use serde::Serialize;
-
-use super::Verified;
-
+use std::collections::BTreeMap;
+use tokens::TokenBase;
 use tokens::TokenPointer;
-
 use tokens::TokenRegistry;
 
+/// GameBoard holds the entire state of the game.
 #[derive(Serialize)]
 pub struct GameBoard {
     pub(crate) tokens: tokens::TokenRegistry,
@@ -62,12 +54,13 @@ pub struct GameBoard {
 }
 
 impl GameBoard {
+    /// Creates a new GameBoard
     pub fn new() -> GameBoard {
         GameBoard {
             tokens: TokenRegistry::default(),
             swap: Default::default(),
             turn_count: 0,
-            alloc: EntityIDAllocator(0x00C0DE0000),
+            alloc: EntityIDAllocator::new(),
             users: Default::default(),
             nfts: Default::default(),
             nft_sales: Default::default(),
@@ -82,16 +75,20 @@ impl GameBoard {
             mining_subsidy: 100_000_000_000 * 50,
         }
     }
+    /// Creates a new EntityID
     pub fn alloc(&mut self) -> EntityID {
         self.alloc.make()
     }
     pub fn root_user(&self) -> Option<EntityID> {
         self.root_user
     }
+    /// Check if a given user is the root_user
     pub fn user_is_admin(&self, user: EntityID) -> bool {
         Some(user) == self.root_user
     }
 
+    /// Processes a GameMove against the board after verifying it's integrity
+    /// and sanitizing it.
     pub fn play(
         &mut self,
         Verified {
@@ -115,24 +112,21 @@ impl GameBoard {
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         self.play_inner(mv, from)
     }
+
+    /// Processes a GameMove without any sanitization
     pub fn play_inner(&mut self, d: GameMove, from: EntityID) -> Result<(), ()> {
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         match d {
             GameMove::Init(Init {}) => {
                 if self.init == false {
                     self.init = true;
-                    let _ = self.bitcoin_token_id.insert(
-                        self.tokens
-                            .new_token(Box::new(TokenBase::new(&mut self.alloc, "Bitcoin".into()))),
-                    );
-                    let _ = self.dollar_token_id.insert(self.tokens.new_token(Box::new(
-                        TokenBase::new(&mut self.alloc, "US Dollars".into()),
-                    )));
+                    let btc = Box::new(TokenBase::new(self, "Bitcoin".into()));
+                    let dollar = Box::new(TokenBase::new(self, "US Dollar".into()));
+                    let asic = Box::new(TokenBase::new(self, "ASIC Gen 1".into()));
+                    let _ = self.bitcoin_token_id.insert(self.tokens.new_token(btc));
+                    let _ = self.dollar_token_id.insert(self.tokens.new_token(dollar));
 
-                    let asic = self.tokens.new_token(Box::new(TokenBase::new(
-                        &mut self.alloc,
-                        "US Dollars".into(),
-                    )));
+                    let asic = self.tokens.new_token(asic);
                     let _ = self.tokens.hashboards.insert(
                         asic,
                         HashBoardData {
@@ -168,6 +162,7 @@ impl GameBoard {
                         1000,
                         self.bitcoin_token_id.unwrap(),
                         &self.nfts,
+                        self.root_user.unwrap(),
                     );
 
                     self.callbacks.schedule(Box::new(PowerPlantEvent {
@@ -195,7 +190,7 @@ impl GameBoard {
                 nft_id,
                 limit_price,
                 currency,
-            }) => self.nft_sales.make_trade(
+            }) => self.nft_sales.purchase(
                 from,
                 nft_id,
                 &mut self.tokens,
@@ -207,7 +202,9 @@ impl GameBoard {
                 nft_id,
                 price,
                 currency,
-            }) => self.nft_sales.list_nft(nft_id, price, currency, &self.nfts),
+            }) => self
+                .nft_sales
+                .list_nft(nft_id, price, currency, &self.nfts, from),
             GameMove::SendTokens(SendTokens {
                 to,
                 amount,
