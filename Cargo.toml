@@ -3,5 +3,7 @@ members = [
     "common/mine-with-friends-board",
     "common/attest",
     "common/attest-messages",
+    "common/attest-database",
+    "common/attest-util",
     "ux/src-tauri/"
 ]

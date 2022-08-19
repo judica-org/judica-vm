@@ -1,5 +1,5 @@
 [package]
-name = "attest"
+name = "attest-database"
 version = "0.1.0"
 edition = "2021"
 
@@ -28,8 +28,6 @@ features = ["vendored"]
 
 [dependencies.attest-util]
 path = "../attest-util"
-[dependencies.attest-database]
-path = "../attest-database"
 
 [dependencies.attest-messages]
 path = "../attest-messages"

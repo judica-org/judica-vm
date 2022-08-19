@@ -116,7 +116,36 @@ dependencies = [
 name = "attest"
 version = "0.1.0"
 dependencies = [
+ "attest-database",
  "attest-messages",
+ "attest-util",
+ "axum",
+ "bitcoincore-rpc-async",
+ "directories",
+ "ed25519-dalek",
+ "fallible-iterator",
+ "futures",
+ "libtor",
+ "openssl-sys",
+ "reqwest",
+ "ruma-serde",
+ "ruma-signatures",
+ "rusqlite",
+ "sapio-bitcoin",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "attest-database"
+version = "0.1.0"
+dependencies = [
+ "attest-messages",
+ "attest-util",
  "axum",
  "bitcoincore-rpc-async",
  "directories",
@@ -155,6 +184,10 @@ dependencies = [
  "serde_json",
  "tokio",
 ]
+
+[[package]]
+name = "attest-util"
+version = "0.1.0"
 
 [[package]]
 name = "attohttpc"

@@ -1,4 +1,3 @@
-use crate::util;
 
 use super::sql_serializers::{self, PK};
 use attest_messages::Authenticated;
@@ -82,7 +81,7 @@ impl<'a> MsgDBHandle<'a> {
         // Side effect free...
         let tips = self.get_tips_for_all_users()?;
         let my_tip = self.get_tip_for_user_by_key(key)?;
-        let sent_time_ms = util::now();
+        let sent_time_ms = attest_util::now();
         let secret = self.get_secret_for_public_nonce(my_tip.header.next_nonce)?;
         // Has side effects!
         let next_nonce = self.generate_fresh_nonce_for_user_by_key(secp, key)?;
@@ -316,7 +315,7 @@ impl<'a> MsgDBHandle<'a> {
     ) -> Result<(), rusqlite::Error> {
         let data = data.inner();
         let mut stmt = self.0.prepare(include_str!("sql/insert_envelope.sql"))?;
-        let time = util::now();
+        let time = attest_util::now();
 
         stmt.insert(rusqlite::params![
             data,

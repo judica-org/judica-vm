@@ -1,6 +1,5 @@
 use super::connection::MsgDB;
 use super::*;
-use crate::util;
 use attest_messages::{Envelope, Header, CanonicalEnvelopeHash, Unsigned};
 use attest_messages::nonce::PrecomittedNonce;
 use fallible_iterator::FallibleIterator;
@@ -168,7 +167,7 @@ fn make_test_user(
             prev_msg: CanonicalEnvelopeHash::genesis(),
             tips: vec![],
             height: 0,
-            sent_time_ms: util::now(),
+            sent_time_ms: attest_util::now(),
             unsigned: Unsigned { signature: None },
             checkpoints: Default::default(),
         },

@@ -2,7 +2,7 @@ use attest_messages::{CanonicalEnvelopeHash, Envelope, Header, Unsigned, nonce::
 use serde_json::Value;
 use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
 
-use crate::util::INFER_UNIT;
+use attest_util::INFER_UNIT;
 
 use super::*;
 
@@ -186,7 +186,7 @@ fn generate_new_user() -> Result<
     let secp = Secp256k1::new();
     let keypair: _ = KeyPair::new(&secp, &mut rand::thread_rng());
     let nonce = PrecomittedNonce::new(&secp);
-    let sent_time_ms = util::now();
+    let sent_time_ms = attest_util::now();
     let mut msg = Envelope {
         header: Header {
             height: 0,

@@ -1,8 +1,6 @@
-use super::{
-    db::connection::MsgDB,
-};
+use    attest_database::connection::MsgDB;
+use attest_util::{AbstractResult, INFER_UNIT};
 use crate::{
-    util::{AbstractResult, INFER_UNIT},
     Config,
 };
 use attest_messages::{CanonicalEnvelopeHash, Envelope};

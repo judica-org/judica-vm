@@ -1,5 +1,5 @@
 use attest_messages::checkpoints::BitcoinCheckPointCache;
-use attestations::db::connection::MsgDB;
+use attest_database::connection::MsgDB;
 use attestations::server::Tips;
 use rpc::Client;
 use rusqlite::Connection;
@@ -17,7 +17,6 @@ use tokio::task::JoinHandle;
 mod attestations;
 mod peer_services;
 mod tor;
-mod util;
 
 use bitcoincore_rpc_async as rpc;
 const fn default_port() -> u16 {
