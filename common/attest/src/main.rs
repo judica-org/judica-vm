@@ -1,5 +1,6 @@
-use attest_messages::checkpoints::BitcoinCheckPointCache;
 use attest_database::connection::MsgDB;
+use attest_database::setup_db;
+use attest_messages::checkpoints::BitcoinCheckPointCache;
 use attestations::server::Tips;
 use rpc::Client;
 use rusqlite::Connection;
@@ -55,6 +56,7 @@ pub struct Config {
     pub subname: String,
     pub tor: TorConfig,
 }
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
@@ -76,18 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .ok_or("Checkpoint service already started")?;
     let application = format!("attestations.{}", config.subname);
-    let dirs = directories::ProjectDirs::from("org", "judica", &application).unwrap();
-
-    let data_dir: PathBuf = ensure_dir(dirs.data_dir().into()).await?;
-    let mut chat_db_file = data_dir.clone();
-    chat_db_file.push("chat.sqlite3");
-    let mdb = MsgDB::new(Arc::new(tokio::sync::Mutex::new(
-        Connection::open(chat_db_file).unwrap(),
-    )));
-    mdb.get_handle().await.setup_tables();
-
-    let mut attestation_server =
-        attestations::server::run(config.clone(), mdb.clone()).await;
+    let mdb = setup_db(&application).await?;
+    let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
     let mut tor_service = tor::start(config.clone());
     let mut fetching_client = peer_services::client_fetching(config.clone(), mdb.clone());
 
@@ -109,13 +101,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ])
     .await;
     Ok(())
-}
-
-async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
-    let dir = tokio::fs::create_dir_all(&data_dir).await;
-    match dir.as_ref().map_err(std::io::Error::kind) {
-        Err(std::io::ErrorKind::AlreadyExists) => (),
-        _e => dir?,
-    };
-    Ok(data_dir)
 }
