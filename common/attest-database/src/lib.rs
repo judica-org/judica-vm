@@ -1,7 +1,13 @@
 use std::{error::Error, path::PathBuf, sync::Arc};
 
+use attest_messages::{nonce::PrecomittedNonce, CanonicalEnvelopeHash, Envelope, Header, Unsigned};
 use connection::MsgDB;
 use rusqlite::Connection;
+use sapio_bitcoin::{
+    secp256k1::{rand, Secp256k1},
+    KeyPair,
+};
+use serde_json::Value;
 
 pub mod connection;
 pub mod db_handle;
@@ -29,4 +35,37 @@ async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
         _e => dir?,
     };
     Ok(data_dir)
+}
+
+pub fn generate_new_user() -> Result<
+    (
+        Secp256k1<sapio_bitcoin::secp256k1::All>,
+        KeyPair,
+        PrecomittedNonce,
+        Envelope,
+    ),
+    Box<dyn Error>,
+> {
+    let secp = Secp256k1::new();
+    let keypair: _ = KeyPair::new(&secp, &mut rand::thread_rng());
+    let nonce = PrecomittedNonce::new(&secp);
+    let next_nonce = PrecomittedNonce::new(&secp);
+    let sent_time_ms = attest_util::now();
+    let mut msg = Envelope {
+        header: Header {
+            height: 0,
+            prev_msg: CanonicalEnvelopeHash::genesis(),
+            tips: Vec::new(),
+            next_nonce: next_nonce.get_public(&secp),
+            key: keypair.public_key().x_only_public_key().0,
+            sent_time_ms,
+            unsigned: Unsigned {
+                signature: Default::default(),
+            },
+            checkpoints: Default::default(),
+        },
+        msg: Value::Null,
+    };
+    msg.sign_with(&keypair, &secp, nonce)?;
+    Ok((secp, keypair, next_nonce, msg))
 }
