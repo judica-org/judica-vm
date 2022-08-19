@@ -2,5 +2,6 @@
 
 members = [
     "common/mine-with-friends-board",
+    "common/attest",
     "ux/src-tauri/"
 ]
