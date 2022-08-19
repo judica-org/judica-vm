@@ -19,7 +19,7 @@ use tokio::{
 
 use crate::util::{AbstractResult, INFER_UNIT};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BitcoinCheckPoints {
     /// whatever tip hash we've seen recently present if changed where it should
     /// be roughly:

@@ -19,12 +19,12 @@ pub mod authenticated;
 pub use authenticated::*;
 pub mod checkpoints;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Unsigned {
     pub signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Header {
     pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
     pub next_nonce: PrecomittedPublicNonce,

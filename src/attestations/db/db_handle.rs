@@ -3,7 +3,7 @@ use super::{
         messages::{Authenticated, Envelope, Header, SigningError, Unsigned},
         nonce::{PrecomittedNonce, PrecomittedPublicNonce},
     },
-    sql_serializers,
+    sql_serializers::{self, PK},
 };
 use crate::{attestations::messages::CanonicalEnvelopeHash, util};
 use fallible_iterator::FallibleIterator;
@@ -19,6 +19,10 @@ use std::collections::{BTreeMap, HashMap};
 use tokio::sync::MutexGuard;
 
 pub struct MsgDBHandle<'a>(pub MutexGuard<'a, Connection>);
+
+pub enum ConsistentMessages {
+    AllMessagesNotReady,
+}
 
 impl<'a> MsgDBHandle<'a> {
     /// Creates all the required tables for the application.
@@ -135,6 +139,37 @@ impl<'a> MsgDBHandle<'a> {
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
+    }
+
+    /// finds the most recent message only for messages where we know the key
+    pub fn get_all_messages(
+        &self,
+    ) -> Result<Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, ConsistentMessages>, rusqlite::Error>
+    {
+        let mut stmt = self.0.prepare(include_str!("sql/get_all_messages.sql"))?;
+        let rows = stmt.query([])?;
+        let mut vs = rows
+            .map(|r| r.get::<_, Envelope>(0))
+            .fold(HashMap::new(), |mut acc, v| {
+                acc.entry(v.header.key).or_insert(vec![]).push(v);
+                Ok(acc)
+            })?;
+
+        for (k, v) in vs.iter_mut() {
+            v.sort_unstable_by_key(|k| k.header.height)
+        }
+        if vs.iter().all(|(k, v)| v[0].header.height == 0)
+            && vs.iter().all(|(k, v)| {
+                v.windows(2).all(|w| {
+                    w[0].header.height + 1 == w[1].header.height
+                        && w[1].header.prev_msg == w[0].clone().canonicalized_hash().unwrap()
+                })
+            })
+        {
+            Ok(Ok(vs))
+        } else {
+            Ok(Err(ConsistentMessages::AllMessagesNotReady))
+        }
     }
 
     /// finds a reused nonce

@@ -2,7 +2,10 @@ use super::{
     db::connection::MsgDB,
     messages::{CanonicalEnvelopeHash, Envelope},
 };
-use crate::{util::{AbstractResult, INFER_UNIT}, Config};
+use crate::{
+    util::{AbstractResult, INFER_UNIT},
+    Config,
+};
 use axum::{
     extract::Query,
     http::Response,
