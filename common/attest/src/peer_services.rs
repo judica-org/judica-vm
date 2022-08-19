@@ -1,7 +1,8 @@
+use attest_messages::{CanonicalEnvelopeHash, Envelope, Header, Unsigned, nonce::PrecomittedNonce};
 use serde_json::Value;
 use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
 
-use crate::{attestations::messages::CanonicalEnvelopeHash, util::INFER_UNIT};
+use crate::util::INFER_UNIT;
 
 use super::*;
 

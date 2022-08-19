@@ -1,11 +1,11 @@
 use super::{
     db::connection::MsgDB,
-    messages::{CanonicalEnvelopeHash, Envelope},
 };
 use crate::{
     util::{AbstractResult, INFER_UNIT},
     Config,
 };
+use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use axum::{
     extract::Query,
     http::Response,

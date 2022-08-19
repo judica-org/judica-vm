@@ -116,6 +116,7 @@ dependencies = [
 name = "attest"
 version = "0.1.0"
 dependencies = [
+ "attest-messages",
  "axum",
  "bitcoincore-rpc-async",
  "directories",
@@ -123,6 +124,7 @@ dependencies = [
  "fallible-iterator",
  "futures",
  "libtor",
+ "openssl-sys",
  "reqwest",
  "ruma-serde",
  "ruma-signatures",
@@ -134,6 +136,24 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "attest-messages"
+version = "0.1.0"
+dependencies = [
+ "bitcoincore-rpc-async",
+ "ed25519-dalek",
+ "fallible-iterator",
+ "futures",
+ "ruma-serde",
+ "ruma-signatures",
+ "rusqlite",
+ "sapio-bitcoin",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2271,6 +2291,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
+name = "openssl-src"
+version = "111.22.0+1.1.1q"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f31f0d509d1c1ae9cada2f9539ff8f37933831fd5098879e482aa687d659853"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "openssl-sys"
 version = "0.9.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2279,6 +2308,7 @@ dependencies = [
  "autocfg 1.1.0",
  "cc",
  "libc",
+ "openssl-src",
  "pkg-config",
  "vcpkg",
 ]

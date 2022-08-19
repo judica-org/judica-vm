@@ -1,7 +1,5 @@
-use crate::attestations::messages::{Envelope, Header, Unsigned};
-use crate::attestations::nonce::PrecomittedNonce;
+use attest_messages::checkpoints::BitcoinCheckPointCache;
 use attestations::db::connection::MsgDB;
-use attestations::messages::checkpoints::BitcoinCheckPointCache;
 use attestations::server::Tips;
 use rpc::Client;
 use rusqlite::Connection;

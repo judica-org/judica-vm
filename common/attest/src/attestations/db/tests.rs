@@ -1,8 +1,8 @@
 use super::connection::MsgDB;
 use super::*;
-use crate::attestations::messages::{CanonicalEnvelopeHash, Envelope, Header, Unsigned};
-use crate::attestations::nonce::PrecomittedNonce;
 use crate::util;
+use attest_messages::{Envelope, Header, CanonicalEnvelopeHash, Unsigned};
+use attest_messages::nonce::PrecomittedNonce;
 use fallible_iterator::FallibleIterator;
 use rusqlite::{params, Connection};
 

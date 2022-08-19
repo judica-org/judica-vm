@@ -1,8 +1,5 @@
 use self::checkpoints::BitcoinCheckPoints;
-
-use super::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
-use rusqlite::types::{FromSql, FromSqlError};
-use rusqlite::ToSql;
+use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
@@ -16,8 +13,12 @@ use std::error::Error;
 use std::fmt::Display;
 use std::str::FromStr;
 pub mod authenticated;
+pub mod nonce;
+mod util;
 pub use authenticated::*;
 pub mod checkpoints;
+#[cfg(feature="rusqlite")]
+pub mod sql_impl;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Unsigned {
@@ -75,19 +76,6 @@ impl CanonicalEnvelopeHash {
     }
 }
 
-// Implemented here to keep type opaque
-impl ToSql for CanonicalEnvelopeHash {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(self.0.to_hex().into())
-    }
-}
-impl FromSql for CanonicalEnvelopeHash {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        sha256::Hash::from_str(value.as_str()?)
-            .map(CanonicalEnvelopeHash)
-            .map_err(|e| FromSqlError::Other(Box::new(e)))
-    }
-}
 pub struct SignatureDigest(SchnorrMessage);
 
 impl Envelope {
@@ -133,7 +121,7 @@ impl Envelope {
     /// # Errors
     ///
     /// This function will return an error if hashing or serialization fails.
-    pub(crate) fn sign_with<C: Signing>(
+    pub fn sign_with<C: Signing>(
         &mut self,
         keypair: &KeyPair,
         secp: &Secp256k1<C>,

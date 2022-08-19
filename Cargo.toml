@@ -1,7 +1,7 @@
 [workspace]
-
 members = [
     "common/mine-with-friends-board",
     "common/attest",
+    "common/attest-messages",
     "ux/src-tauri/"
 ]

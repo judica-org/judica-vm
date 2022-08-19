@@ -1,11 +1,14 @@
-use super::{
-    super::{
-        messages::{Authenticated, Envelope, Header, SigningError, Unsigned},
-        nonce::{PrecomittedNonce, PrecomittedPublicNonce},
-    },
-    sql_serializers::{self, PK},
-};
-use crate::{attestations::messages::CanonicalEnvelopeHash, util};
+use crate::util;
+
+use super::sql_serializers::{self, PK};
+use attest_messages::Authenticated;
+use attest_messages::CanonicalEnvelopeHash;
+use attest_messages::Envelope;
+use attest_messages::Header;
+use attest_messages::SigningError;
+use attest_messages::Unsigned;
+use attest_messages::nonce::PrecomittedNonce;
+use attest_messages::nonce::PrecomittedPublicNonce;
 use fallible_iterator::FallibleIterator;
 use rusqlite::params;
 use rusqlite::Connection;
