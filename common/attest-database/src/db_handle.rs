@@ -121,6 +121,7 @@ impl<'a> MsgDBHandle<'a> {
             .prepare(include_str!("sql/get_message_by_height_and_user.sql"))?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
+
     /// finds the most recent message for a user by their key
     pub fn get_tip_for_user_by_key(
         &self,
@@ -143,22 +144,34 @@ impl<'a> MsgDBHandle<'a> {
     }
 
     /// finds the most recent message only for messages where we know the key
-    pub fn get_all_messages(
+    pub fn get_all_messages_by_key_consistent(
         &self,
-    ) -> Result<Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, ConsistentMessages>, rusqlite::Error>
-    {
-        let mut stmt = self.0.prepare(include_str!("sql/get_all_messages.sql"))?;
-        let rows = stmt.query([])?;
-        let mut vs = rows
-            .map(|r| r.get::<_, Envelope>(0))
-            .fold(HashMap::new(), |mut acc, v| {
+        newer: Option<i64>,
+    ) -> Result<
+        Result<(HashMap<XOnlyPublicKey, Vec<Envelope>>, Option<i64>), ConsistentMessages>,
+        rusqlite::Error,
+    > {
+        let mut stmt = if newer.is_some() {
+            self.0.prepare(include_str!("sql/get_all_messages.sql"))?
+        } else {
+            self.0
+                .prepare(include_str!("sql/get_all_messages_after.sql"))?
+        };
+        let rows = match newer {
+            Some(i) => stmt.query([i])?,
+            None => stmt.query([])?,
+        };
+        let (mut vs, newest) = rows
+            .map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
+            .fold((HashMap::new(), None), |(mut acc, mut max_id), (v, id)| {
                 acc.entry(v.header.key).or_insert(vec![]).push(v);
-                Ok(acc)
+                Ok((acc, max_id.max(Some(id))))
             })?;
 
         for (k, v) in vs.iter_mut() {
             v.sort_unstable_by_key(|k| k.header.height)
         }
+        // TODO: Make this more consistent by being able to drop a pending suffix.
         if vs.iter().all(|(k, v)| v[0].header.height == 0)
             && vs.iter().all(|(k, v)| {
                 v.windows(2).all(|w| {
@@ -167,10 +180,34 @@ impl<'a> MsgDBHandle<'a> {
                 })
             })
         {
-            Ok(Ok(vs))
+            Ok(Ok((vs, newest)))
         } else {
             Ok(Err(ConsistentMessages::AllMessagesNotReady))
         }
+    }
+
+    pub fn get_all_messages_collect_into_inconsistent(
+        &self,
+        newer: &mut Option<i64>,
+        map: &mut HashMap<CanonicalEnvelopeHash, Envelope>,
+    ) -> Result<(), rusqlite::Error> {
+        let mut stmt = if newer.is_some() {
+            self.0.prepare(include_str!("sql/get_all_messages.sql"))?
+        } else {
+            self.0
+                .prepare(include_str!("sql/get_all_messages_after.sql"))?
+        };
+        let rows = match newer {
+            Some(i) => stmt.query([*i])?,
+            None => stmt.query([])?,
+        };
+        rows.map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
+            .for_each(|(v, id)| {
+                map.insert(v.canonicalized_hash_ref().unwrap(), v);
+                *newer = (*newer).max(Some(id));
+                Ok(())
+            })?;
+        Ok(())
     }
 
     /// finds a reused nonce

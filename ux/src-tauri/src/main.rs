@@ -3,10 +3,19 @@
     windows_subsystem = "windows"
 )]
 
-use std::{error::Error, future::Future, sync::Arc, time::Duration};
+use std::{
+    collections::{
+        hash_map::Entry::{Occupied, Vacant},
+        HashMap, VecDeque,
+    },
+    error::Error,
+    future::Future,
+    sync::Arc,
+    time::Duration,
+};
 
 use attest_database::{connection::MsgDB, generate_new_user, setup_db};
-use attest_messages::CanonicalEnvelopeHash;
+use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
@@ -140,6 +149,7 @@ fn main() {
     let g = Game(game, Arc::new(Notify::new()));
     let db = Database(OnceCell::new());
     let (mut tx, mut rx) = unbounded_channel();
+    /// Goes through the oracles commitments in order
     {
         let db = db.clone();
         spawn(async move {
@@ -147,13 +157,16 @@ fn main() {
             let mut count = 0;
             loop {
                 let db = db.get().await.unwrap();
-                let handle = db.get_handle().await;
                 'check: loop {
-                    let msg = handle.get_message_at_height_for_user(oracle_key, count);
+                    let msg = {
+                        let handle = db.get_handle().await;
+                        handle.get_message_at_height_for_user(oracle_key, count)
+                    };
                     match msg {
                         Ok(envelope) => {
-                            match serde_json::from_value::<Vec<CanonicalEnvelopeHash>>(envelope.msg)
-                            {
+                            match serde_json::from_value::<VecDeque<CanonicalEnvelopeHash>>(
+                                envelope.msg,
+                            ) {
                                 Ok(v) => {
                                     if tx.send(v).is_err() {
                                         return;
@@ -174,32 +187,94 @@ fn main() {
             }
         });
     }
+
+    /// This task builds a HashMap of all unprocessed envelopes regularly
+    let mut shared_envelopes =
+        Arc::new(Mutex::new(HashMap::<CanonicalEnvelopeHash, Envelope>::new()));
+    let notify_new_envelopes = Arc::new(Notify::new());
     {
+        let envelopes = shared_envelopes.clone();
         let db = db.clone();
-        let g = g.clone();
+        let notify = notify_new_envelopes.clone();
         spawn(async move {
-            let db = db.get().await.unwrap();
-            let handle = db.get_handle().await;
-            let envelopes = rx.recv().await;
-            match envelopes {
-                Some(v) => {
-                    let msgs = handle.messages_by_hash(v.iter()).unwrap();
-                    for envelope in msgs {
-                        let mut game = g.0.lock().await;
-                        let game = game.as_mut().unwrap();
-                        let r_game_move = serde_json::from_value(envelope.msg);
-                        match r_game_move {
-                            Ok(game_move) => {
-                                game.play(game_move, envelope.header.key.to_hex());
-                                // TODO: Maybe notify less often?
-                                g.1.notify_waiters();
-                            }
-                            Err(_) => {}
+            let mut newer = None;
+            loop {
+                let newer_before = newer;
+                {
+                    let db = db.get().await.unwrap();
+                    let handle = db.get_handle().await;
+                    let mut env = envelopes.lock().await;
+                    handle.get_all_messages_collect_into_inconsistent(&mut newer, &mut env);
+                }
+
+                if newer_before != newer {
+                    notify.notify_waiters();
+                }
+                sleep(Duration::from_secs(10)).await;
+            }
+        });
+    }
+    // Whenever new sequencing comes in, wait until they are all in the messages DB, and then drain them out for processing
+    let (mut tx_envelopes_to_process, mut rx_envelopes_to_process) = unbounded_channel();
+    {
+        let envelopes = shared_envelopes.clone();
+        let notify = notify_new_envelopes.clone();
+        spawn(async move {
+            loop {
+                if let Some(mut envelope_hashes) = rx.recv().await {
+                    let mut should_wait = None;
+                    'wait_for_new: while envelope_hashes.len() != 0 {
+                        if let Some(n) = should_wait.take() {
+                            // register for notification, then drop lock, then wait
+                            n.await;
                         }
-                        break;
+                        let mut envs = envelopes.lock().await;
+                        while let Some(envelope) = envelope_hashes.pop_front() {
+                            match envs.entry(envelope) {
+                                Occupied(e) => {
+                                    // TODO: Batch size
+                                    tx_envelopes_to_process.send(e.remove());
+                                }
+                                Vacant(k) => {
+                                    envelope_hashes.push_front(k.into_key());
+                                    should_wait.insert(notify.notified());
+                                    break 'wait_for_new;
+                                }
+                            }
+                        }
                     }
                 }
-                None => todo!(),
+            }
+        });
+    }
+    // Run the deserialization of the inner message type to move sets in it's own thread so that we can process
+    // moves in a pipeline as they get deserialized
+    // TODO: We skip invalid moves? Should do something else?
+    let (mut tx2, mut rx2) = unbounded_channel();
+    {
+        spawn(async move {
+            while let Some(envelope) = rx_envelopes_to_process.recv().await {
+                let r_game_move = serde_json::from_value(envelope.msg);
+                match r_game_move {
+                    Ok(game_move) => {
+                        if tx2.send((game_move, envelope.header.key.to_hex())).is_err() {
+                            return;
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+        });
+    }
+    // Play the moves one by one
+    {
+        let g = g.clone();
+        spawn(async move {
+            while let Some((game_move, s)) = rx2.recv().await {
+                let mut game = g.0.lock().await;
+                game.as_mut().unwrap().play(game_move, s);
+                // TODO: Maybe notify less often?
+                g.1.notify_waiters();
             }
         });
     }

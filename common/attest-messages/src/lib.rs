@@ -17,7 +17,7 @@ pub mod nonce;
 mod util;
 pub use authenticated::*;
 pub mod checkpoints;
-#[cfg(feature="rusqlite")]
+#[cfg(feature = "rusqlite")]
 pub mod sql_impl;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
@@ -143,6 +143,19 @@ impl Envelope {
     ///
     /// This hashes everything, including unsigned data.
     pub fn canonicalized_hash(self) -> Option<CanonicalEnvelopeHash> {
+        let msg_str = serde_json::to_value(self)
+            .and_then(|reserialized| serde_json::from_value(reserialized))
+            .ok()?;
+        let canonical = ruma_signatures::canonical_json(&msg_str).ok()?;
+        Some(CanonicalEnvelopeHash(
+            sapio_bitcoin::hashes::sha256::Hash::hash(canonical.as_bytes()),
+        ))
+    }
+
+    /// Creates the canonicalized_hash for the [`Envelope`].
+    ///
+    /// This hashes everything, including unsigned data.
+    pub fn canonicalized_hash_ref(&self) -> Option<CanonicalEnvelopeHash> {
         let msg_str = serde_json::to_value(self)
             .and_then(|reserialized| serde_json::from_value(reserialized))
             .ok()?;
