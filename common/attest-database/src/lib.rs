@@ -4,7 +4,7 @@ use attest_messages::{nonce::PrecomittedNonce, CanonicalEnvelopeHash, Envelope, 
 use connection::MsgDB;
 use rusqlite::Connection;
 use sapio_bitcoin::{
-    secp256k1::{rand, Secp256k1},
+    secp256k1::{rand, Secp256k1, Signing},
     KeyPair,
 };
 use serde_json::Value;
@@ -37,16 +37,9 @@ async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
     Ok(data_dir)
 }
 
-pub fn generate_new_user() -> Result<
-    (
-        Secp256k1<sapio_bitcoin::secp256k1::All>,
-        KeyPair,
-        PrecomittedNonce,
-        Envelope,
-    ),
-    Box<dyn Error>,
-> {
-    let secp = Secp256k1::new();
+pub fn generate_new_user<C: Signing>(
+    secp: &Secp256k1<C>,
+) -> Result<(KeyPair, PrecomittedNonce, Envelope), Box<dyn Error>> {
     let keypair: _ = KeyPair::new(&secp, &mut rand::thread_rng());
     let nonce = PrecomittedNonce::new(&secp);
     let next_nonce = PrecomittedNonce::new(&secp);
@@ -67,5 +60,5 @@ pub fn generate_new_user() -> Result<
         msg: Value::Null,
     };
     msg.sign_with(&keypair, &secp, nonce)?;
-    Ok((secp, keypair, next_nonce, msg))
+    Ok((keypair, next_nonce, msg))
 }

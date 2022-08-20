@@ -27,6 +27,13 @@ version = "1.0"
 features = ["arbitrary_precision"]
 [dependencies.mine-with-friends-board]
 path = "../../common/mine-with-friends-board"
+[dependencies.attest-database]
+path = "../../common/attest-database"
+
+
+[dependencies.sapio-bitcoin]
+version = "0.28.1"
+features= ['use-serde', 'rand']
 
 [features]
 # by default Tauri runs in production mode

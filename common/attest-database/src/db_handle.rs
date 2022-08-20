@@ -1,13 +1,12 @@
-
 use super::sql_serializers::{self, PK};
+use attest_messages::nonce::PrecomittedNonce;
+use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use attest_messages::Header;
 use attest_messages::SigningError;
 use attest_messages::Unsigned;
-use attest_messages::nonce::PrecomittedNonce;
-use attest_messages::nonce::PrecomittedPublicNonce;
 use fallible_iterator::FallibleIterator;
 use rusqlite::params;
 use rusqlite::Connection;
@@ -46,7 +45,7 @@ impl<'a> MsgDBHandle<'a> {
         Ok(pk_nonce)
     }
     /// Saves an arbitrary nonce for the given user.
-    pub(crate) fn save_nonce_for_user_by_key<C: Signing>(
+    pub fn save_nonce_for_user_by_key<C: Signing>(
         &self,
         nonce: PrecomittedNonce,
         secp: &Secp256k1<C>,
@@ -332,11 +331,13 @@ impl<'a> MsgDBHandle<'a> {
     pub fn locate_user(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    ) -> Result<i64, rusqlite::Error> {
+    ) -> Result<(i64, String), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT user_id FROM users WHERE key = ? LIMIT 1")?;
-        stmt.query_row([key.to_hex()], |row| row.get(0))
+            .prepare("SELECT user_id, nickname  FROM users WHERE key = ? LIMIT 1")?;
+        stmt.query_row([key.to_hex()], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
     }
 
     /// creates a new user from a genesis envelope
