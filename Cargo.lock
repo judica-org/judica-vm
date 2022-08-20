@@ -69,6 +69,7 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "attest-database",
+ "attest-messages",
  "mine-with-friends-board",
  "sapio-bitcoin",
  "schemars",

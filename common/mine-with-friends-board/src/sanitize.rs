@@ -2,6 +2,8 @@
 //!
 //! TODO: The Context Objects passed in should e.g. be sufficient to check that all pointers are valid
 //! Currently this is not done.
+use serde::{Deserialize, Serialize};
+
 use crate::{
     game::game_move::{
         GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,
@@ -18,6 +20,7 @@ pub trait Sanitizable {
     fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error>;
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Unsanitized<D: Sanitizable>(pub D);
 
 impl<D> Sanitizable for Unsanitized<D>

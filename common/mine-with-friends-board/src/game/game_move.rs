@@ -96,7 +96,7 @@ pub struct ListNFTForSale {
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct RegisterUser {
-    pub user_id: String,
+    pub hex_user_key: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -111,7 +111,6 @@ impl MoveEnvelope {
         MoveEnvelope {
             d: sanitize::Unsanitized(g),
             sequence,
-            sig,
             from,
             time,
         }

@@ -30,6 +30,9 @@ path = "../../common/mine-with-friends-board"
 [dependencies.attest-database]
 path = "../../common/attest-database"
 
+[dependencies.attest-messages]
+path = "../../common/attest-messages"
+
 
 [dependencies.sapio-bitcoin]
 version = "0.28.1"

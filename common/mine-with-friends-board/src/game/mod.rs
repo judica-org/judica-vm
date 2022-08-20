@@ -29,6 +29,10 @@ use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
 
+#[derive(Serialize)]
+pub struct UserData {
+    key: String,
+}
 /// GameBoard holds the entire state of the game.
 #[derive(Serialize)]
 pub struct GameBoard {
@@ -37,7 +41,7 @@ pub struct GameBoard {
     /// Make this a vote over the map of users to current vote and let the turn count be dynamic
     pub(crate) turn_count: u64,
     alloc: EntityIDAllocator,
-    pub(crate) users: BTreeMap<EntityID, String>,
+    pub(crate) users: BTreeMap<EntityID, UserData>,
     pub(crate) nfts: NFTRegistry,
     pub(crate) nft_sales: NFTSaleRegistry,
     pub(crate) player_move_sequence: BTreeMap<EntityID, u64>,
@@ -102,11 +106,14 @@ impl GameBoard {
         MoveEnvelope {
             d,
             sequence,
-            sig: _,
             from,
             time,
         }: MoveEnvelope,
+        signed_by: String,
     ) -> Result<(), ()> {
+        if self.users.get(&from).map(|u| &u.key) != Some(&signed_by) {
+            return Ok(());
+        }
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from.clone()).or_default();
         if (*current_move + 1) != sequence {
@@ -202,9 +209,10 @@ impl GameBoard {
                     }));
                 }
             }
-            GameMove::RegisterUser(RegisterUser { user_id }) => {
+            GameMove::RegisterUser(RegisterUser { hex_user_key }) => {
                 if self.new_users_allowed {
-                    self.users.insert(self.alloc.make(), user_id);
+                    self.users
+                        .insert(self.alloc.make(), UserData { key: hex_user_key });
                 }
             }
             GameMove::NoNewUsers(NoNewUsers {}) => {
