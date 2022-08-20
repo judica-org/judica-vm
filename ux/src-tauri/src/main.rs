@@ -19,10 +19,11 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
-use tauri::{async_runtime::Mutex, State, Window};
+use tasks::{start_game_server, GameServer};
+use tauri::{async_runtime::{Mutex, spawn_blocking}, State, Window};
 use tokio::{
     sync::{Notify, OnceCell},
-    time::sleep,
+    time::sleep, task::block_in_place,
 };
 mod tasks;
 
@@ -135,29 +136,7 @@ fn main() {
     let game = Arc::new(Mutex::new(Some(GameBoard::new())));
     let g = Game(game, Arc::new(Notify::new()));
     let db = Database(OnceCell::new());
-    /// Goes through the oracles commitments in order
-    let (sequencer_reader_task, output_envelope_hashes) = { tasks::start_sequencer(&db) };
-
-    /// This task builds a HashMap of all unprocessed envelopes regularly
-    let (shared_envelopes, notify_new_envelopes, shared_envelopes_task) =
-        { tasks::start_envelope_db_fetcher(&db) };
-    // Whenever new sequencing comes in, wait until they are all in the messages DB, and then drain them out for processing
-    let (envelope_batcher, output_batches) = {
-        tasks::start_envelope_batcher(
-            shared_envelopes,
-            notify_new_envelopes,
-            output_envelope_hashes,
-        )
-    };
-    // Run the deserialization of the inner message type to move sets in it's own thread so that we can process
-    // moves in a pipeline as they get deserialized
-    // TODO: We skip invalid moves? Should do something else?
-    let (move_deserializer, output_moves) = { tasks::start_move_deserializer(output_batches) };
-    // Play the moves one by one
-    let game_task = {
-        let g = g.clone();
-        tasks::start_game(g, output_moves)
-    };
+    let game_server = GameServer::start(&db, &g);
 
     tauri::Builder::default()
         .setup(|app| Ok(()))
@@ -171,4 +150,5 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+    game_server.shutdown();
 }
