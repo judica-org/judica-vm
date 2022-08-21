@@ -6,3 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+serde_json = "1.0.79"
+serde = "1.0.136"
+serde_derive = "1.0.136"
+[dependencies.mine-with-friends-board]
+path = "../mine-with-friends-board"
+
+[dependencies.sapio-bitcoin]
+version = "0.28.1"
+features=['use-serde', 'rand']
+
+[dependencies.attest-messages]
+path = "../attest-messages"

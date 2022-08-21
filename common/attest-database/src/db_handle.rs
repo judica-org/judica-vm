@@ -275,10 +275,11 @@ impl<'a> MsgDBHandle<'a> {
     }
 
     /// adds a hidden service to our connection list
+    /// Won't fail if already exists
     pub fn insert_hidden_service(&self, s: String, port: u16) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("INSERT INTO hidden_services (service_url, port) VALUES (?,?)")?;
+            .prepare("INSERT OR IGNORE INTO hidden_services (service_url, port) VALUES (?,?)")?;
         stmt.insert(rusqlite::params![s, port])?;
         Ok(())
     }

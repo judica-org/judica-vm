@@ -19,7 +19,7 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
-use tasks::{start_game_server, GameServer};
+use tasks::{ GameServer};
 use tauri::{async_runtime::{Mutex, spawn_blocking}, State, Window};
 use tokio::{
     sync::{Notify, OnceCell},

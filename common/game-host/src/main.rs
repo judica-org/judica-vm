@@ -1,5 +1,6 @@
 use attest_database::setup_db;
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use game_host_messages::{BroadcastByHost, Channelized};
 use sapio_bitcoin::{hashes::Hash, secp256k1::Secp256k1, KeyPair, XOnlyPublicKey};
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -23,8 +24,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let handle = db.get_handle().await;
         if let Ok(v) = handle.load_all_messages_for_user_by_key(&oracle_publickey)? {
             for x in v {
-                let d = serde_json::from_value::<VecDeque<CanonicalEnvelopeHash>>(x.msg)?;
-                already_sequenced.extend(d.iter());
+                let d = serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg)?;
+                match d.data {
+                    BroadcastByHost::Sequence(l) => already_sequenced.extend(l.iter()),
+                    BroadcastByHost::NewPeer(_) => {}
+                }
             }
         } else {
             panic!("Incosistent Database");
@@ -111,7 +115,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
 
         {
-            let msg = serde_json::to_value(to_sequence)?;
+            let msg = serde_json::to_value(Channelized {
+                data: BroadcastByHost::Sequence(to_sequence),
+                channel: "default".into(),
+            })?;
             let handle = db.get_handle().await;
             let wrapped = handle
                 .wrap_message_in_envelope_for_user_by_key(msg, &keypair, &secp)??

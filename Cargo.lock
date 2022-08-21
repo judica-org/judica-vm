@@ -70,6 +70,7 @@ version = "0.1.0"
 dependencies = [
  "attest-database",
  "attest-messages",
+ "game-host-messages",
  "mine-with-friends-board",
  "sapio-bitcoin",
  "schemars",
@@ -1171,6 +1172,7 @@ version = "0.1.0"
 dependencies = [
  "attest-database",
  "attest-messages",
+ "game-host-messages",
  "sapio-bitcoin",
  "serde",
  "serde_derive",
@@ -1181,6 +1183,14 @@ dependencies = [
 [[package]]
 name = "game-host-messages"
 version = "0.1.0"
+dependencies = [
+ "attest-messages",
+ "mine-with-friends-board",
+ "sapio-bitcoin",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
 
 [[package]]
 name = "gdk"

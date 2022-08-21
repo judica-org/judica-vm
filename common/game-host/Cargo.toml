@@ -20,3 +20,6 @@ path = "../attest-database"
 [dependencies.sapio-bitcoin]
 version = "0.28.1"
 features=['use-serde', 'rand']
+
+[dependencies.game-host-messages]
+path = "../game-host-messages"

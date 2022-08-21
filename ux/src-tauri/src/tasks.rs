@@ -3,6 +3,8 @@ use super::Database;
 use super::Game;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
+use game_host_messages::Peer;
+use game_host_messages::{BroadcastByHost, Channelized};
 use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::hashes::hex::ToHex;
 use std::collections::hash_map::Entry::Occupied;
@@ -81,13 +83,20 @@ pub(crate) fn start_sequencer(
                 };
                 match msg {
                     Ok(envelope) => {
-                        match serde_json::from_value::<VecDeque<CanonicalEnvelopeHash>>(
-                            envelope.msg,
-                        ) {
+                        match serde_json::from_value::<Channelized<BroadcastByHost>>(envelope.msg) {
                             Ok(v) => {
-                                if tx.send(v).is_err() {
-                                    return;
-                                };
+                                match v.data {
+                                    BroadcastByHost::Sequence(s) => {
+                                        if tx.send(s).is_err() {
+                                            return;
+                                        };
+                                    }
+                                    BroadcastByHost::NewPeer(Peer { tor, port }) => {
+                                        let handle = db.get_handle().await;
+                                        // idempotent
+                                        handle.insert_hidden_service(tor, port);
+                                    }
+                                }
                                 count += 1;
                             }
                             Err(_) => {
