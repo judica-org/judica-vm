@@ -1,7 +1,7 @@
 use super::connection::MsgDB;
 use super::*;
-use attest_messages::{Envelope, Header, CanonicalEnvelopeHash, Unsigned};
 use attest_messages::nonce::PrecomittedNonce;
+use attest_messages::{CanonicalEnvelopeHash, Envelope, Header, Unsigned};
 use fallible_iterator::FallibleIterator;
 use rusqlite::{params, Connection};
 
@@ -54,10 +54,13 @@ async fn test_reused_nonce() {
         let nonces = handle.get_reused_nonces().unwrap();
         assert_eq!(nonces.len(), 1);
         let v = nonces.get(&envelope_2.inner_ref().header.key).unwrap();
-        assert_eq!(&v[..], &[envelope_1.inner_ref().clone(), envelope_2.clone().inner()][..]);
+        assert_eq!(
+            &v[..],
+            &[envelope_1.inner_ref().clone(), envelope_2.clone().inner()][..]
+        );
         // Inserting more messages shouldn't change anything
         let envelope_i = handle
-            .wrap_message_in_envelope_for_user_by_key(json!({"distinct": i}), &kp, &secp)
+            .wrap_message_in_envelope_for_user_by_key(json!({ "distinct": i }), &kp, &secp)
             .unwrap()
             .unwrap();
         let envelope_i = envelope_i.clone().self_authenticate(&secp).unwrap();

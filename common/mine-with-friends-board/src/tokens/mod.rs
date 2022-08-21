@@ -1,7 +1,7 @@
 //! This module defines components for managing and issuing tokens
 use self::instances::asics::HashBoardData;
 use super::entity::EntityID;
-use crate::{entity::EntityIDAllocator, game::GameBoard, util::Price};
+use crate::{game::GameBoard, util::Price};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{

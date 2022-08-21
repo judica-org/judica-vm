@@ -1,6 +1,6 @@
 use game::game_move::GameMove;
 use sanitize::Unsanitized;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 mod callbacks;
 pub mod entity;

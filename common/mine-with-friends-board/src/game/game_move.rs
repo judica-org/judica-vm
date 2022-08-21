@@ -3,7 +3,7 @@ use crate::util::Currency;
 use crate::{entity::EntityID, util::Price};
 
 use crate::sanitize;
-use crate::sanitize::Unsanitized;
+
 use crate::tokens::token_swap::TradingPairID;
 
 use super::super::MoveEnvelope;
@@ -107,7 +107,7 @@ pub struct SendTokens {
 }
 
 impl MoveEnvelope {
-    pub fn create(g: GameMove, sequence: u64, sig: String, from: EntityID, time: u64) -> Self {
+    pub fn create(g: GameMove, sequence: u64, _sig: String, from: EntityID, time: u64) -> Self {
         MoveEnvelope {
             d: sanitize::Unsanitized(g),
             sequence,

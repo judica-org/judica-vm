@@ -1,7 +1,7 @@
 use attest_database::setup_db;
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
-use sapio_bitcoin::{hashes::Hash, secp256k1::Secp256k1, KeyPair, XOnlyPublicKey};
+use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair, XOnlyPublicKey};
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     error::Error,
@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 all_unprocessed_messages.keys().cloned().collect::<Vec<_>>();
             for value in &unprocessed_message_keys {
                 // we can remove it now because the only reason we will drop it is if it is not to be sequenced
-                if let Some((k, e)) = all_unprocessed_messages.remove_entry(value) {
+                if let Some((_k, e)) = all_unprocessed_messages.remove_entry(value) {
                     if e.header.key != oracle_publickey {
                         if messages_by_user
                             .entry(e.header.key)
@@ -126,6 +126,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
             handle.try_insert_authenticated_envelope(wrapped)?;
         }
     }
-
-    Ok(())
 }

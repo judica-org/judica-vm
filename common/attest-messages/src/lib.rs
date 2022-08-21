@@ -5,7 +5,7 @@ use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
-use sapio_bitcoin::{XOnlyPublicKey};
+use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;

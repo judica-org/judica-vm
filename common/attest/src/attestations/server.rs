@@ -1,9 +1,7 @@
-use    attest_database::connection::MsgDB;
-use attest_util::{AbstractResult, INFER_UNIT};
-use crate::{
-    Config,
-};
+use crate::Config;
+use attest_database::connection::MsgDB;
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     extract::Query,
     http::Response,

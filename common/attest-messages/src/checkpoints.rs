@@ -74,7 +74,8 @@ impl BitcoinCheckPointCache {
     pub async fn run_cache_service(&self) -> Option<JoinHandle<AbstractResult<()>>> {
         if self
             .running
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) == Ok(false)
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            == Ok(false)
         {
             let mut this = self.clone();
             Some(tokio::spawn(async move {

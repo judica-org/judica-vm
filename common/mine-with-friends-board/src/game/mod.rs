@@ -13,7 +13,7 @@ use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::BaseNFT;
 use crate::nfts::NFTRegistry;
-use crate::sanitize;
+
 use crate::sanitize::Sanitizable;
 use crate::tokens;
 use crate::tokens::instances::asics::ASICProducer;
@@ -24,7 +24,7 @@ use crate::MoveEnvelope;
 use serde::Serialize;
 use std::cmp::max;
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
+
 use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
@@ -250,7 +250,7 @@ impl GameBoard {
                 currency,
             }) => {
                 self.tokens[currency].transaction();
-                self.tokens[currency].transfer(&from, &to, amount);
+                let _ = self.tokens[currency].transfer(&from, &to, amount);
                 self.tokens[currency].end_transaction();
             }
         }
