@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS messages
     sent_time INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.sent_time_ms')) STORED,
     nonce TEXT NOT NULL GENERATED ALWAYS AS (substr(json_extract(body, '$.header.unsigned.signature'), 0, 64)) STORED,
     FOREIGN KEY(user_id) references users(user_id),
-    UNIQUE(received_time, body, user_id)
+    UNIQUE(received_time, hash, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS hidden_services (service_id INTEGER PRIMARY KEY, service_url TEXT NOT NULL, port INTEGER NOT NULL, UNIQUE(service_url, port));
