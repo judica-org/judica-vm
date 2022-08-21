@@ -4,10 +4,10 @@ use attest_messages::CanonicalEnvelopeHash;
 use mine_with_friends_board::game::game_move::GameMove;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Peer {
-    tor: String,
-    port: u16,
+    pub tor: String,
+    pub port: u16,
 }
 #[derive(Serialize, Deserialize)]
 pub enum BroadcastByHost {

@@ -1,3 +1,4 @@
+use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
@@ -5,15 +6,60 @@ use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair, XOnlyPublicKey};
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     error::Error,
+    sync::Arc,
 };
+use tor::TorConfig;
+mod app;
+mod tor;
+pub struct Config {
+    tor: TorConfig,
+}
 
 fn get_oracle_key() -> KeyPair {
     todo!()
 }
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn get_config() -> Arc<Config> {
+    let directory = todo!();
+    let socks_port = todo!();
+    let application_port = todo!();
+    let application_path = todo!();
+    Arc::new(Config {
+        tor: TorConfig {
+            directory,
+            socks_port,
+            application_port,
+            application_path,
+        },
+    })
+}
+fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt::init();
+    let config = get_config();
+    tor::start(config.clone());
+
+    let v = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            let db = setup_db("attestations.mining-game-host").await?;
+            let app_instance = app::run(config, db.clone());
+            let game_instance = game(db.clone());
+            tokio::select! {
+                a =  game_instance =>{
+                    a?;
+                },
+                b = app_instance => {
+                    b?.map_err(|e| format!("{}", e))?;
+                }
+            }
+            Ok(())
+        });
+    v
+}
+
+async fn game(db: MsgDB) -> Result<(), Box<dyn Error>> {
     let secp = Secp256k1::new();
-    let db = setup_db("attestations.mining-game-host").await?;
     let mut seq = None;
     let keypair = get_oracle_key();
     let oracle_publickey = keypair.public_key().x_only_public_key().0;
