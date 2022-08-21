@@ -6,5 +6,6 @@ members = [
     "common/attest-database",
     "common/attest-util",
     "common/game-host",
+    "common/game-host-messages",
     "ux/src-tauri/"
 ]
