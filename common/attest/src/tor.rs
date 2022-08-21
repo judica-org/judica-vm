@@ -1,4 +1,4 @@
-use std::{any::Any, error::Error, fmt::Display, path::PathBuf, sync::Arc};
+use std::{error::Error, fmt::Display, sync::Arc};
 
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use tokio::task::JoinHandle;
@@ -18,9 +18,7 @@ impl Display for TorError {
 }
 impl Error for TorError {}
 
-pub fn start(
-    config: Arc<Config>,
-) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
+pub fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     tokio::task::spawn_blocking(move || {
         let mut buf = config.tor.directory.clone();
         buf.push("onion");

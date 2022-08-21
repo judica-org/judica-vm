@@ -1,5 +1,4 @@
-use attest_messages::{CanonicalEnvelopeHash, Envelope, Header, Unsigned, nonce::PrecomittedNonce};
-use serde_json::Value;
+use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
 
 use attest_util::INFER_UNIT;
@@ -46,7 +45,7 @@ pub fn client_fetching(
                 );
             }
         }
-        INFER_UNIT
+        // INFER_UNIT
     });
     jh
 }
@@ -116,7 +115,7 @@ fn envelope_processor<C: Verification + 'static>(
                     tx.send(unknown_dep_tips)?;
                 }
             }
-            INFER_UNIT
+            // INFER_UNIT
         })
     };
     envelope_processor
@@ -145,7 +144,7 @@ fn tip_fetcher(
                 + Duration::from_millis(rand::thread_rng().gen_range(0, 1000));
             tokio::time::sleep(d).await;
         }
-        INFER_UNIT
+        // INFER_UNIT
     })
 }
 
@@ -170,6 +169,6 @@ fn tip_resolver(
                 tx_envelope.send(resp)?;
             }
         }
-        INFER_UNIT
+        // INFER_UNIT
     })
 }

@@ -1,17 +1,15 @@
 use self::checkpoints::BitcoinCheckPoints;
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
-use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
-use sapio_bitcoin::{Block, BlockHeader, XOnlyPublicKey};
+use sapio_bitcoin::{XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;
 use std::fmt::Display;
-use std::str::FromStr;
 pub mod authenticated;
 pub mod nonce;
 mod util;

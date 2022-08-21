@@ -1,4 +1,4 @@
-use super::sql_serializers::{self, PK};
+use super::sql_serializers::{self};
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Authenticated;
@@ -163,17 +163,17 @@ impl<'a> MsgDBHandle<'a> {
         };
         let (mut vs, newest) = rows
             .map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
-            .fold((HashMap::new(), None), |(mut acc, mut max_id), (v, id)| {
+            .fold((HashMap::new(), None), |(mut acc, max_id), (v, id)| {
                 acc.entry(v.header.key).or_insert(vec![]).push(v);
                 Ok((acc, max_id.max(Some(id))))
             })?;
 
-        for (k, v) in vs.iter_mut() {
+        for v in vs.values_mut() {
             v.sort_unstable_by_key(|k| k.header.height)
         }
         // TODO: Make this more consistent by being able to drop a pending suffix.
-        if vs.iter().all(|(k, v)| v[0].header.height == 0)
-            && vs.iter().all(|(k, v)| {
+        if vs.values().all(|v| v[0].header.height == 0)
+            && vs.values().all(|v| {
                 v.windows(2).all(|w| {
                     w[0].header.height + 1 == w[1].header.height
                         && w[1].header.prev_msg == w[0].clone().canonicalized_hash().unwrap()

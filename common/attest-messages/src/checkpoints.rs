@@ -1,21 +1,15 @@
+use bitcoincore_rpc_async as rpc;
+use rpc::RpcApi;
+use sapio_bitcoin::BlockHash;
+use serde::{Deserialize, Serialize};
 use std::{
-    ops::Deref,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
     time::Duration,
 };
-
-use bitcoincore_rpc_async as rpc;
-use rpc::RpcApi;
-use sapio_bitcoin::BlockHash;
-use serde::{Deserialize, Serialize};
-use tokio::{
-    sync::{Mutex, RwLock},
-    task::JoinHandle,
-    time::Interval,
-};
+use tokio::{sync::RwLock, task::JoinHandle};
 
 use crate::util::{AbstractResult, INFER_UNIT};
 
@@ -78,7 +72,10 @@ impl BitcoinCheckPointCache {
     }
 
     pub async fn run_cache_service(&self) -> Option<JoinHandle<AbstractResult<()>>> {
-        if !self.running.compare_and_swap(false, true, Ordering::SeqCst) {
+        if self
+            .running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) == Ok(false)
+        {
             let mut this = self.clone();
             Some(tokio::spawn(async move {
                 while !this.quit.load(Ordering::Relaxed) {

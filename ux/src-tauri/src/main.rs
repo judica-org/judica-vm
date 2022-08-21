@@ -2,29 +2,20 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-
-use std::{error::Error, future::Future, sync::Arc, time::Duration};
-
 use attest_database::{connection::MsgDB, generate_new_user, setup_db};
 use mine_with_friends_board::{
     entity::EntityID,
-    game::{
-        game_move::{self, GameMove, Init, RegisterUser},
-        GameBoard,
-    },
+    game::{game_move::GameMove, GameBoard},
 };
 use sapio_bitcoin::{
-    hashes::hex::ToHex,
     secp256k1::{All, Secp256k1},
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
-use tasks::{ GameServer};
-use tauri::{async_runtime::{Mutex, spawn_blocking}, State, Window};
-use tokio::{
-    sync::{Notify, OnceCell},
-    time::sleep, task::block_in_place,
-};
+use std::{error::Error, sync::Arc};
+use tasks::GameServer;
+use tauri::{async_runtime::Mutex, State, Window};
+use tokio::sync::{Notify, OnceCell};
 mod tasks;
 
 #[tauri::command]
@@ -38,7 +29,6 @@ async fn game_synchronizer(window: Window, game: State<'_, Game>) -> Result<(), 
         window.emit("game-board", game_s).unwrap();
         game.1.notified().await;
     }
-    Ok(())
 }
 
 #[tauri::command]
