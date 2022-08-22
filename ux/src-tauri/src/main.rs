@@ -15,19 +15,35 @@ use schemars::{schema::RootSchema, schema_for};
 use std::{error::Error, sync::Arc};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, State, Window};
-use tokio::sync::{Notify, OnceCell};
+use tokio::{
+    spawn,
+    sync::{futures::Notified, Notify, OnceCell},
+};
 mod tasks;
 
 #[tauri::command]
-async fn game_synchronizer(window: Window, game: State<'_, Game>) -> Result<(), ()> {
+async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
     loop {
-        let game_s = {
-            let g = game.inner().0.lock().await;
-            serde_json::to_string(&*g)
+        // No Idea why the borrow checker likes this, but it seems to be the case
+        // that because the notified needs to live inside the async state machine
+        // hapily, giving a stable reference to it tricks the compiler into thinking
+        // that the lifetime is 'static and we can successfully wait on it outside
+        // the lock.
+        let mut arc_cheat = None;
+        let (gamestring, wait_on) = {
+            let game = s.inner().lock().await;
+            let s = game
+                .as_ref()
+                .map(|g| serde_json::to_string(&g.board).unwrap_or("null".into()))
+                .unwrap_or("null".into());
+            arc_cheat = game.as_ref().map(|g: &Game| g.notify.clone());
+            let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
+            (s, w)
+        };
+        window.emit("game-board", gamestring).unwrap();
+        if let Some(w) = wait_on {
+            w.await;
         }
-        .unwrap();
-        window.emit("game-board", game_s).unwrap();
-        game.1.notified().await;
     }
 }
 
@@ -74,15 +90,12 @@ async fn make_new_user(
 
 #[tauri::command]
 async fn make_move_inner(
-    game: State<'_, Game>,
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
     user: XOnlyPublicKey,
     nextMove: GameMove,
     from: EntityID,
 ) -> Result<(), ()> {
-    let mut game = game.0.lock().await;
-    let game = game.as_mut().ok_or(())?;
     let msgdb = db.get().await.map_err(|e| ())?;
     let v = serde_json::to_value(nextMove).map_err(|_| ())?;
     let handle = msgdb.get_handle().await;
@@ -101,16 +114,47 @@ async fn make_move_inner(
         .ok()
         .ok_or(())?;
     return Ok::<(), ()>(());
-    // game.play_inner(nextMove, from);
-    // game.1.notify_waiters();
 }
 
-#[derive(Clone)]
-struct Game(Arc<Mutex<Option<GameBoard>>>, Arc<Notify>);
+#[tauri::command]
+async fn create_new_game(
+    db: State<'_, Database>,
+    game: GameState<'_>,
+    key: XOnlyPublicKey,
+) -> Result<(), ()> {
+    let db = db.inner().clone();
+    let game = game.inner().clone();
+    spawn(async move {
+        let game2 = game.clone();
+        let mut g = game2.lock().await;
+        g.as_mut()
+            .map(|game| game.server.as_ref().map(|s| s.shutdown()));
+        let new_game = Game {
+            board: GameBoard::new(),
+            notify: Arc::new(Notify::new()),
+            host_key: key,
+            server: None,
+        };
+        *g = Some(new_game);
+        GameServer::start(&db, g, game).await?;
+        Ok::<(), &'static str>(())
+    });
+    Ok(())
+}
+
+pub struct Game {
+    board: GameBoard,
+    notify: Arc<Notify>,
+    host_key: XOnlyPublicKey,
+    server: Option<Arc<GameServer>>,
+}
+
+type GameStateInner = Arc<Mutex<Option<Game>>>;
+type GameState<'a> = State<'a, GameStateInner>;
 
 // Safe to clone because MsgDB has Clone
 #[derive(Clone)]
-struct Database(OnceCell<MsgDB>);
+pub struct Database(OnceCell<MsgDB>);
 impl Database {
     async fn get(&self) -> Result<MsgDB, Box<dyn Error>> {
         self.0
@@ -119,19 +163,13 @@ impl Database {
             .map(|v| v.clone())
     }
 }
-fn get_oracle_key() -> XOnlyPublicKey {
-    todo!()
-}
 fn main() {
-    let game = Arc::new(Mutex::new(Some(GameBoard::new())));
-    let g = Game(game, Arc::new(Notify::new()));
+    let game = GameStateInner::new(Mutex::new(None));
     let db = Database(OnceCell::new());
-    let game_server = GameServer::start(&db, &g);
-
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(Secp256k1::new())
-        .manage(g.clone())
+        .manage(game.clone())
         .manage(db)
         .invoke_handler(tauri::generate_handler![
             game_synchronizer,
@@ -140,5 +178,4 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-    game_server.shutdown();
 }

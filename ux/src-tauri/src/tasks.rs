@@ -1,12 +1,13 @@
-use super::get_oracle_key;
 use super::Database;
-use super::Game;
+use crate::Game;
+use crate::GameStateInner;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
 use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::hashes::hex::ToHex;
+use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
@@ -16,12 +17,14 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri;
-use tauri::async_runtime::spawn;
 use tauri::async_runtime::Mutex;
 use tokio;
+use tokio::spawn;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::MutexGuard;
 use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 /// Game Server Handle
@@ -37,42 +40,61 @@ impl GameServer {
         // TODO: wait for all tasks to join
     }
     /// Start all Game Server functions
-    pub(crate) fn start(db: &Database, g: &Game) -> Arc<GameServer> {
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let (sequencer_reader_task, output_envelope_hashes) =
-            { start_sequencer(shutdown.clone(), db) };
-        let (shared_envelopes, notify_new_envelopes, shared_envelopes_task) =
-            { start_envelope_db_fetcher(shutdown.clone(), db) };
-        let (envelope_batcher, output_batches) = {
-            start_envelope_batcher(
-                shutdown.clone(),
-                shared_envelopes,
-                notify_new_envelopes,
-                output_envelope_hashes,
-            )
-        };
-        let (move_deserializer, output_moves) =
-            { start_move_deserializer(shutdown.clone(), output_batches) };
-        let game_task = {
-            let g = g.clone();
-            start_game(shutdown.clone(), g, output_moves)
-        };
-        Arc::new(GameServer { shutdown })
+    pub async fn start(
+        db: &Database,
+        mut g_lock: MutexGuard<'_, Option<Game>>,
+        g: GameStateInner,
+    ) -> Result<(), &'static str> {
+        if !std::ptr::eq(MutexGuard::mutex(&g_lock), &*g) {
+            return Err("Must be same Mutex Passed in");
+        }
+        match g_lock.as_mut() {
+            None => {
+                return Err("No Game Available");
+            }
+            Some(game) => {
+                if game.server.is_some() {
+                    return Err("Game Already has a Server");
+                }
+                let k = game.host_key;
+                let shutdown = Arc::new(AtomicBool::new(false));
+                let (sequencer_reader_task, output_envelope_hashes) =
+                    { start_sequencer(shutdown.clone(), k, db) };
+                let (shared_envelopes, notify_new_envelopes, shared_envelopes_task) =
+                    { start_envelope_db_fetcher(shutdown.clone(), db) };
+                let (envelope_batcher, output_batches) = {
+                    start_envelope_batcher(
+                        shutdown.clone(),
+                        shared_envelopes,
+                        notify_new_envelopes,
+                        output_envelope_hashes,
+                    )
+                };
+                let (move_deserializer, output_moves) =
+                    { start_move_deserializer(shutdown.clone(), output_batches) };
+                let game_task = {
+                    let g = g;
+                    start_game(shutdown.clone(), g, output_moves)
+                };
+                game.server = Some(Arc::new(GameServer { shutdown }));
+            }
+        }
+        Ok(())
     }
 }
 
 /// Goes through the oracles commitments in order
 pub(crate) fn start_sequencer(
     shutdown: Arc<AtomicBool>,
+    oracle_key: XOnlyPublicKey,
     db: &Database,
 ) -> (
-    tauri::async_runtime::JoinHandle<()>,
+    JoinHandle<()>,
     tokio::sync::mpsc::UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>,
 ) {
     let (mut tx, mut rx) = unbounded_channel();
     let db = db.clone();
     let task = spawn(async move {
-        let oracle_key = get_oracle_key();
         let mut count = 0;
         while !shutdown.load(Ordering::Relaxed) {
             let db = db.get().await.unwrap();
@@ -122,7 +144,7 @@ pub(crate) fn start_envelope_db_fetcher(
 ) -> (
     Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>>,
     Arc<Notify>,
-    tauri::async_runtime::JoinHandle<()>,
+    JoinHandle<()>,
 ) {
     let shared_envelopes = Arc::new(Mutex::new(HashMap::<CanonicalEnvelopeHash, Envelope>::new()));
     let notify_new_envelopes = Arc::new(Notify::new());
@@ -157,7 +179,7 @@ pub(crate) fn start_envelope_batcher(
     notify_new_envelopes: Arc<Notify>,
     mut input_envelope_hashers: UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>,
 ) -> (
-    tauri::async_runtime::JoinHandle<()>,
+    JoinHandle<()>,
     tokio::sync::mpsc::UnboundedReceiver<Envelope>,
 ) {
     let (mut tx_envelopes_to_process, mut rx_envelopes_to_process) = unbounded_channel();
@@ -202,7 +224,7 @@ pub(crate) fn start_move_deserializer(
     shutdown: Arc<AtomicBool>,
     mut input_envelopes: tokio::sync::mpsc::UnboundedReceiver<Envelope>,
 ) -> (
-    tauri::async_runtime::JoinHandle<()>,
+    JoinHandle<()>,
     tokio::sync::mpsc::UnboundedReceiver<(MoveEnvelope, String)>,
 ) {
     let (mut tx2, mut rx2) = unbounded_channel();
@@ -225,15 +247,18 @@ pub(crate) fn start_move_deserializer(
 // Play the moves one by one
 pub(crate) fn start_game(
     shutdown: Arc<AtomicBool>,
-    g: Game,
+    g: GameStateInner,
     mut input_moves: UnboundedReceiver<(MoveEnvelope, String)>,
-) -> tauri::async_runtime::JoinHandle<()> {
+) -> JoinHandle<()> {
     let task = spawn(async move {
+        // TODO: Check which game the move is for?
         while let Some((game_move, s)) = input_moves.recv().await {
-            let mut game = g.0.lock().await;
-            game.as_mut().unwrap().play(game_move, s);
-            // TODO: Maybe notify less often?
-            g.1.notify_waiters();
+            let mut game = g.lock().await;
+            if let Some(game) = game.as_mut() {
+                game.board.play(game_move, s);
+                // TODO: Maybe notify less often?
+                game.notify.notify_waiters();
+            }
         }
     });
     task
