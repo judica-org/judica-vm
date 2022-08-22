@@ -1,16 +1,16 @@
 SELECT
-    body
-from
-    messages
+    M_Outer.body
+FROM
+    messages M_Outer
 WHERE
-    nonce in (
+    (M_Outer.nonce, M_Outer.user_id) in (
         SELECT
-            nonce
+            M.nonce, M.user_id
         FROM
-            messages
+            messages M
         GROUP BY
-            nonce,
-            user_id
+            M.nonce,
+            M.user_id
         HAVING
-            COUNT(nonce) > 1
+            COUNT(*) > 1
     )

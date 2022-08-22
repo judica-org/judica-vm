@@ -1,3 +1,5 @@
+use crate::db_handle::MsgDBHandle;
+
 use super::connection::MsgDB;
 use super::*;
 use attest_messages::nonce::PrecomittedNonce;
@@ -53,6 +55,7 @@ async fn test_reused_nonce() {
         // Check that only this group is returned
         let nonces = handle.get_reused_nonces().unwrap();
         assert_eq!(nonces.len(), 1);
+        print_db(&handle);
         let v = nonces.get(&envelope_2.inner_ref().header.key).unwrap();
         assert_eq!(
             &v[..],
@@ -70,6 +73,24 @@ async fn test_reused_nonce() {
     }
 }
 
+fn print_db(handle: &MsgDBHandle) {
+    let mut stm = handle
+        .0
+        .prepare("select message_id, prev_msg, hash, height, nonce from messages")
+        .unwrap();
+    let mut rows = stm.query([]).unwrap();
+    println!("---------------------------");
+    while let Ok(Some(row)) = rows.next() {
+        println!(
+            "   - height({}) prev({}) hash({:?}) height({}) nonce({})",
+            row.get::<_, i64>(0).unwrap(),
+            row.get::<_, String>(1).unwrap(),
+            row.get::<_, String>(2).unwrap(),
+            row.get::<_, i64>(3).unwrap(),
+            row.get::<_, String>(4).unwrap(),
+        );
+    }
+}
 #[tokio::test]
 async fn test_envelope_creation() {
     let conn = setup_db().await;
@@ -77,6 +98,8 @@ async fn test_envelope_creation() {
     let test_user = "TestUser".into();
     let handle = conn.get_handle().await;
     let kp = make_test_user(&secp, &handle, test_user);
+
+    print_db(&handle);
     let envelope_1 = handle
         .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
         .unwrap()
@@ -97,6 +120,7 @@ async fn test_envelope_creation() {
             .unwrap();
         assert_eq!(&my_tip, envelope_1.inner_ref());
     }
+    print_db(&handle);
     {
         let known_tips = handle.get_tip_for_known_keys().unwrap();
         assert_eq!(known_tips.len(), 1);
@@ -126,6 +150,69 @@ async fn test_envelope_creation() {
         let known_tips = handle.get_tip_for_known_keys().unwrap();
         assert_eq!(known_tips.len(), 1);
         assert_eq!(&known_tips[0], envelope_2.inner_ref());
+    }
+    print_db(&handle);
+
+    let mut envs = vec![];
+    for i in 0..10 {
+        let envelope_disconnected = handle
+            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
+            .unwrap()
+            .unwrap();
+        let envelope_disconnected = envelope_disconnected
+            .clone()
+            .self_authenticate(&secp)
+            .unwrap();
+        envs.push((
+            envelope_disconnected
+                .inner_ref()
+                .canonicalized_hash_ref()
+                .unwrap(),
+            envelope_disconnected.clone(),
+        ));
+        handle
+            .try_insert_authenticated_envelope(envelope_disconnected.clone())
+            .unwrap();
+        {
+            let tips = handle.get_tips_for_all_users().unwrap();
+            assert_eq!(tips.len(), 1);
+            assert_eq!(&tips[0], envelope_disconnected.inner_ref());
+        }
+        {
+            let my_tip = handle
+                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .unwrap();
+            assert_eq!(&my_tip, envelope_disconnected.inner_ref());
+        }
+        {
+            let known_tips = handle.get_tip_for_known_keys().unwrap();
+            assert_eq!(known_tips.len(), 1);
+            assert_eq!(&known_tips[0], envelope_disconnected.inner_ref());
+        }
+    }
+
+    {
+        handle.drop_message_by_hash(envs[5].0).unwrap();
+
+        {
+            let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
+            assert_eq!(tips.len(), 1);
+            assert_eq!(&tips[0], envs[4].1.inner_ref());
+        }
+        {
+            let my_tip = handle
+                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .unwrap();
+            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), envs[4].0);
+        }
+        {
+            let known_tips = handle.get_tip_for_known_keys().unwrap();
+            assert_eq!(known_tips.len(), 1);
+            assert_eq!(known_tips[0].canonicalized_hash_ref().unwrap(), envs[4].0);
+        }
+        handle
+            .try_insert_authenticated_envelope(envs[5].1.clone())
+            .unwrap();
     }
 
     let kp_2 = make_test_user(&secp, &handle, "TestUser2".into());
@@ -157,34 +244,16 @@ fn make_test_user(
     handle: &db_handle::MsgDBHandle<'_>,
     name: String,
 ) -> KeyPair {
-    let mut rng = rand::thread_rng();
-    let (sk, pk) = secp.generate_keypair(&mut rng);
-    let key = pk.x_only_public_key().0;
-    let nonce = PrecomittedNonce::new(secp);
-    let kp = KeyPair::from_secret_key(secp, &sk);
-    handle.save_keypair(kp).unwrap();
-    let mut genesis = Envelope {
-        header: Header {
-            key,
-            next_nonce: nonce.get_public(secp),
-            prev_msg: CanonicalEnvelopeHash::genesis(),
-            tips: vec![],
-            height: 0,
-            sent_time_ms: attest_util::now(),
-            unsigned: Unsigned { signature: None },
-            checkpoints: Default::default(),
-        },
-        msg: Value::Null,
-    };
-    genesis
-        .sign_with(&kp, secp, PrecomittedNonce::new(secp))
-        .unwrap();
-    let genesis = genesis.self_authenticate(secp).unwrap();
+    let (kp, nonce, envelope) = generate_new_user(secp).unwrap();
+    let genesis = envelope.self_authenticate(secp).unwrap();
     handle
         .insert_user_by_genesis_envelope(name, genesis)
         .unwrap();
-    handle.save_nonce_for_user_by_key(nonce, secp, key).unwrap();
+    handle
+        .save_nonce_for_user_by_key(nonce, secp, kp.x_only_public_key().0)
+        .unwrap();
     kp
+
 }
 
 async fn setup_db() -> MsgDB {
@@ -201,6 +270,7 @@ async fn test_tables() {
         .prepare(
             "SELECT name FROM sqlite_schema
         WHERE type='table'
+        AND name NOT LIKE 'sqlite_%'
         ORDER BY name;
         ",
         )

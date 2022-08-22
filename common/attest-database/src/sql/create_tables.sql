@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS messages
     received_time INTEGER NOT NULL,
     height INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.height')) STORED,
     sent_time INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.sent_time_ms')) STORED,
+    prev_msg TEXT NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.prev_msg')) STORED,
     nonce TEXT NOT NULL GENERATED ALWAYS AS (substr(json_extract(body, '$.header.unsigned.signature'), 0, 64)) STORED,
     FOREIGN KEY(user_id) references users(user_id),
     UNIQUE(received_time, hash, user_id)

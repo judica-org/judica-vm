@@ -143,6 +143,24 @@ impl<'a> MsgDBHandle<'a> {
         Ok(vs)
     }
 
+    pub fn get_disconnected_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare(include_str!("sql/get_disconnected_tips_for_known_keys.sql"))?;
+        let rows = stmt.query([])?;
+        let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        Ok(vs)
+    }
+
+    #[cfg(test)]
+    pub fn drop_message_by_hash(&self, h: CanonicalEnvelopeHash) -> Result<(), rusqlite::Error> {
+        use rusqlite::named_params;
+
+        let mut stmt = self.0.prepare("DELETE FROM messages WHERE :hash = hash")?;
+        stmt.execute(named_params! {":hash": h})?;
+        Ok(())
+    }
+
     /// finds the most recent message only for messages where we know the key
     pub fn get_all_messages_by_key_consistent(
         &self,
@@ -214,7 +232,7 @@ impl<'a> MsgDBHandle<'a> {
     pub fn get_reused_nonces(
         &self,
     ) -> Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, rusqlite::Error> {
-        let mut stmt = self.0.prepare("sql/get_reused_nonces.sql")?;
+        let mut stmt = self.0.prepare(include_str!("sql/get_reused_nonces.sql"))?;
         let rows = stmt.query([])?;
         let vs = rows
             .map(|r| r.get::<_, Envelope>(0))
@@ -354,14 +372,14 @@ impl<'a> MsgDBHandle<'a> {
         let mut stmt = self.0.prepare(include_str!("sql/insert_envelope.sql"))?;
         let time = attest_util::now();
 
-        stmt.insert(rusqlite::params![
-            data,
-            data.clone()
-                .canonicalized_hash()
-                .expect("Hashing should always succeed?"),
-            data.header.key.to_hex(),
-            time
-        ])?;
+        stmt.insert(rusqlite::named_params! {
+                ":body": data,
+                ":hash": data.clone()
+                    .canonicalized_hash()
+                    .expect("Hashing should always succeed?"),
+                ":key": data.header.key.to_hex(),
+                ":received_time": time
+        })?;
         Ok(())
     }
 
