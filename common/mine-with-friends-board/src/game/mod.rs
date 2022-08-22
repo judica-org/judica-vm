@@ -10,6 +10,7 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
+use crate::nfts::sale::NFTSale;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::BaseNFT;
 use crate::nfts::NFTRegistry;
@@ -289,7 +290,13 @@ impl GameBoard {
     pub fn get_energy_market(&self) -> Result<UXForSaleList, ()> {
         let mut listings = BTreeMap::new();
         self.nft_sales.nfts.iter().for_each(|(pointer, listing)| {
-            listings.insert(*pointer, *listing);
+            listings.insert(*pointer, NFTSale {
+                price: listing.price.clone(),
+                currency: listing.currency,
+                seller: listing.seller,
+                transfer_count: listing.transfer_count
+                
+            });
         });
         return Ok(UXForSaleList { listings });
     }
