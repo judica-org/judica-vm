@@ -55,19 +55,33 @@ pub struct Config {
     pub tor: TorConfig,
 }
 
+fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
+    let config = std::env::var("ATTEST_CONFIG_JSON").map(|s| serde_json::from_str(&s))??;
+    Ok(Arc::new(config))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let quit = Arc::new(AtomicBool::new(false));
     let args: Vec<String> = std::env::args().into_iter().collect();
-    if args.len() != 2 {
-        Err("Expected only 2 args, file name of config")?;
-    }
-    let config: Arc<Config> = Arc::new(serde_json::from_slice(
-        &tokio::fs::read(&args[1]).await?[..],
-    )?);
+    let config = match get_config() {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!("Trying to read config from file {}", e);
+            if args.len() != 2 {
+                Err("Expected only 2 args, file name of config")?;
+            }
+            let config: Arc<Config> = Arc::new(serde_json::from_slice(
+                &tokio::fs::read(&args[1]).await?[..],
+            )?);
+            config
+        }
+    };
+    tracing::debug!("Config Loaded");
     let bitcoin_client =
         Arc::new(Client::new(config.bitcoin.url.clone(), config.bitcoin.auth.clone()).await?);
+    tracing::debug!("Bitcoin Client Loaded");
     let bitcoin_checkpoints = BitcoinCheckPointCache::new(bitcoin_client, None, quit.clone())
         .await?
         .ok_or("Failed to create a cache")?;
@@ -75,17 +89,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .run_cache_service()
         .await
         .ok_or("Checkpoint service already started")?;
+    tracing::debug!("Checkpoint Service Started");
     let application = format!("attestations.{}", config.subname);
     let mdb = setup_db(&application).await?;
+    tracing::debug!("Database Connection Setup");
     let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
     let mut tor_service = tor::start(config.clone());
     let mut fetching_client = peer_services::client_fetching(config.clone(), mdb.clone());
 
+    tracing::debug!("Starting Subservices");
     tokio::select!(
-        _ = &mut attestation_server => {},
-        _ = &mut tor_service => {},
-        _ = &mut fetching_client => {},
-        _ = &mut checkpoint_service => {});
+    a = &mut attestation_server => {
+        a?
+    },
+    b = &mut tor_service => {
+        b?
+    },
+    c = &mut fetching_client => {
+        c?
+    },
+    d = &mut checkpoint_service => {
+        d?
+    })
+    .map_err(|e| format!("{}", e))?;
     quit.store(true, Ordering::Relaxed);
     attestation_server.abort();
     tor_service.abort();

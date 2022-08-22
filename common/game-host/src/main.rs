@@ -2,7 +2,14 @@ use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
-use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair, XOnlyPublicKey};
+use sapio_bitcoin::{
+    secp256k1::{
+        rand::{self, OsRng},
+        Secp256k1,
+    },
+    KeyPair, XOnlyPublicKey,
+};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     error::Error,
@@ -11,57 +18,58 @@ use std::{
 use tor::TorConfig;
 mod app;
 mod tor;
+#[derive(Serialize, Deserialize)]
 pub struct Config {
     tor: TorConfig,
+    key: Option<XOnlyPublicKey>,
 }
 
-fn get_oracle_key() -> KeyPair {
-    todo!()
+async fn get_oracle_key(key: &XOnlyPublicKey, db: MsgDB) -> Result<KeyPair, Box<dyn Error>> {
+    let km = db.get_handle().await.get_keymap()?;
+    let s = km.get(key).map(Clone::clone).ok_or("No Key Known")?;
+    Ok(KeyPair::from_secret_key(&Secp256k1::new(), &s))
 }
-fn get_config() -> Arc<Config> {
-    let directory = todo!();
-    let socks_port = todo!();
-    let application_port = todo!();
-    let application_path = todo!();
-    Arc::new(Config {
-        tor: TorConfig {
-            directory,
-            socks_port,
-            application_port,
-            application_path,
-        },
-    })
+fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
+    let config = std::env::var("GAME_HOST_CONFIG_JSON").map(|s| serde_json::from_str(&s))??;
+    Ok(Arc::new(config))
 }
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt::init();
-    let config = get_config();
+    let mut config = get_config()?;
+    let db = setup_db("attestations.mining-game-host").await?;
+    if config.key.is_none() {
+        let handle = db.get_handle().await;
+        let kp = KeyPair::new(&Secp256k1::new(), &mut rand::thread_rng());
+        handle.save_keypair(kp)?;
+        if let Some(config) = Arc::get_mut(&mut config) {
+            tracing::debug!("Running On {}", kp.x_only_public_key().0);
+            config.key.insert(kp.x_only_public_key().0);
+        }
+    }
     tor::start(config.clone());
 
-    let v = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            let db = setup_db("attestations.mining-game-host").await?;
-            let app_instance = app::run(config, db.clone());
-            let game_instance = game(db.clone());
-            tokio::select! {
-                a =  game_instance =>{
-                    a?;
-                },
-                b = app_instance => {
-                    b?.map_err(|e| format!("{}", e))?;
-                }
-            }
-            Ok(())
-        });
-    v
+    let app_instance = app::run(config.clone(), db.clone());
+    let game_instance = game(config, db.clone());
+    tokio::select! {
+        a =  game_instance =>{
+            a?;
+        },
+        b = app_instance => {
+            b?.map_err(|e| format!("{}", e))?;
+        }
+    }
+    Ok(())
 }
 
-async fn game(db: MsgDB) -> Result<(), Box<dyn Error>> {
+async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
     let secp = Secp256k1::new();
     let mut seq = None;
-    let keypair = get_oracle_key();
+    let keypair = get_oracle_key(
+        &config.key.expect("Key Created Earlier if Missing"),
+        db.clone(),
+    )
+    .await?;
     let oracle_publickey = keypair.public_key().x_only_public_key().0;
     let mut already_sequenced: Vec<CanonicalEnvelopeHash> = vec![];
     // First we get all of the old messages for the Oracle itself, so that we

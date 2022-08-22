@@ -1,6 +1,7 @@
 use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc};
 
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
+use serde::{Serialize, Deserialize};
 use tokio::task::JoinHandle;
 
 use crate::Config;
@@ -18,6 +19,7 @@ impl Display for TorError {
 }
 impl Error for TorError {}
 
+#[derive(Serialize, Deserialize)]
 pub struct TorConfig {
     pub directory: PathBuf,
     pub socks_port: u16,
