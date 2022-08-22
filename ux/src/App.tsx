@@ -2,10 +2,12 @@ import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import './App.css';
 import Form, { FormSubmit } from "@rjsf/core";
+import { PowerPlant, PowerPlants } from './power-plant-list';
 import RawMaterialsMarket from './raw-materials';
 import { tauri_host } from './tauri_host';
 import { SwitchToGame } from './SwitchToGame';
 import { SwitchToDB } from './SwitchToDB';
+import { invoke } from '@tauri-apps/api';
 
 function MoveForm() {
   const [schema, set_schema] = React.useState<null | any>(null);
@@ -42,14 +44,31 @@ function MoveForm() {
   </div>;
 }
 
+type NFTs = {
+  nfts: { nft_id: number, owner: number, transfer_count: number }[],
+  power_plants: {
+    id: number,
+    plant_type: string //how does PlantType enum show up
+    watts: number,
+    coordinates: number[]
+  }[]
+}
+
+type NFTSale = {
+  price: number,
+  currency: any,
+  seller: number,
+  transfer_count: number,
+}
+
 type game_board = {
   erc20s: any,
-  swap: any,
+  swap: any, // determine TS swap shape
   turn_count: number,
   alloc: any,
   users: Record<string, string>,
-  nfts: any,
-  nft_sales: any,
+  nfts: NFTs,
+  nft_sales: { nfts: NFTSale },
   player_move_sequences: Record<string, number>,
   init: boolean,
   new_users_allowed: boolean,
@@ -57,6 +76,7 @@ type game_board = {
   dollar_token_id: null | string,
   root_user: null | string,
 };
+
 function GameBoard(props: { g: game_board }) {
   return <ul>
     <li>
@@ -93,8 +113,17 @@ function GameBoard(props: { g: game_board }) {
 
   </ul>;
 }
+
+let invoked = false;
+const invoke_once = () => {
+  if (invoked) return;
+  invoked = true;
+  invoke("game_synchronizer")
+}
+
 function App() {
   const [game_board, set_game_board] = React.useState<game_board | null>(null);
+  const [power_plants, set_power_plants] = React.useState<PowerPlant[]>([]);
   React.useEffect(() => {
     const unlisten = appWindow.listen("game-board", (ev) => {
       console.log(ev);
@@ -112,6 +141,7 @@ function App() {
     <div className="App">
       {game_board && <GameBoard g={game_board}></GameBoard>}
       <RawMaterialsMarket></RawMaterialsMarket>
+      {power_plants && <PowerPlants power_plants={power_plants}></PowerPlants>}
       <MoveForm></MoveForm>
       <SwitchToGame></SwitchToGame>
       <SwitchToDB></SwitchToDB>

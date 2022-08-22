@@ -13,6 +13,8 @@ use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::BaseNFT;
 use crate::nfts::NFTRegistry;
+use crate::nfts::UXNFTRegistry;
+use crate::nfts::UXPlantData;
 
 use crate::sanitize::Sanitizable;
 use crate::tokens;
@@ -371,6 +373,32 @@ impl GameBoard {
         });
 
         Ok(price_data)
+    }
+
+    // where does miner status come from
+    pub fn get_power_plants(&self) -> Result<UXNFTRegistry, ()> {
+        let mut power_plant_data = BTreeMap::new();
+        self.nfts
+            .power_plants
+            .iter()
+            .for_each(|(pointer, power_plant)| {
+                let mut for_sale = false;
+                if let Some(_nft_sale) = &self.nft_sales.nfts.get(&pointer) {
+                    for_sale = true;
+                }
+                power_plant_data.insert(
+                    *pointer,
+                    UXPlantData {
+                        plant_type: power_plant.plant_type.clone(),
+                        watts: power_plant.watts,
+                        coordinates: power_plant.coordinates,
+                        has_miners: false,
+                        for_sale,
+                    },
+                );
+            });
+
+        return Ok(UXNFTRegistry { power_plant_data });
     }
 }
 
