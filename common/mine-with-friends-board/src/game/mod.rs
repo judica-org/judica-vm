@@ -16,6 +16,7 @@ use crate::nfts::NFTRegistry;
 use crate::nfts::UXNFTRegistry;
 use crate::nfts::UXPlantData;
 
+use crate::nfts::sale::UXForSaleList;
 use crate::sanitize::Sanitizable;
 use crate::tokens;
 use crate::tokens::instances::asics::ASICProducer;
@@ -399,6 +400,14 @@ impl GameBoard {
             });
 
         return Ok(UXNFTRegistry { power_plant_data });
+    }
+
+    pub fn get_energy_market(&self) -> Result<UXForSaleList, ()> {
+        let mut listings = BTreeMap::new();
+        self.nft_sales.nfts.iter().for_each(|(pointer, listing)| {
+            listings.insert(*pointer, *listing);
+        });
+        return Ok(UXForSaleList { listings });
     }
 }
 
