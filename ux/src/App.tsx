@@ -3,6 +3,7 @@ import React from 'react';
 import './App.css';
 import Form, { FormSubmit } from "@rjsf/core";
 import { PowerPlant, PowerPlants } from './power-plant-list';
+import EnergyExchange, { NFTSale } from './energy-exchange';
 import RawMaterialsMarket from './raw-materials';
 import { tauri_host } from './tauri_host';
 import { SwitchToGame } from './SwitchToGame';
@@ -54,12 +55,7 @@ type NFTs = {
   }[]
 }
 
-type NFTSale = {
-  price: number,
-  currency: any,
-  seller: number,
-  transfer_count: number,
-}
+
 
 type game_board = {
   erc20s: any,
@@ -123,7 +119,7 @@ const invoke_once = () => {
 
 function App() {
   const [game_board, set_game_board] = React.useState<game_board | null>(null);
-  const [power_plants, set_power_plants] = React.useState<PowerPlant[]>([]);
+  const [power_plants, set_power_plants] = React.useState<PowerPlant[]>([]); // use empty list for now so it will render
   React.useEffect(() => {
     const unlisten = appWindow.listen("game-board", (ev) => {
       console.log(ev);
@@ -142,6 +138,17 @@ function App() {
       {game_board && <GameBoard g={game_board}></GameBoard>}
       <RawMaterialsMarket></RawMaterialsMarket>
       {power_plants && <PowerPlants power_plants={power_plants}></PowerPlants>}
+      {<EnergyExchange listings={[{
+        price: 937,
+        currency: 'donuts',
+        seller: 95720486,
+        transfer_count: 2
+      }, {
+        price: 424,
+        currency: 'cookies',
+        seller: 3058572037,
+        transfer_count: 1
+      }]}></EnergyExchange>}
       <MoveForm></MoveForm>
       <SwitchToGame></SwitchToGame>
       <SwitchToDB></SwitchToDB>
