@@ -16,7 +16,7 @@ pub struct NFTSale {
     currency: Currency,
     /// The seller's ID _at the time the sale was opened_, for replay protection
     seller: EntityID,
-    /// The transfer_coint of the NFT _at the time the sale was opened_, for replay protection
+    /// The transfer_count of the NFT _at the time the sale was opened_, for replay protection
     transfer_count: u128,
 }
 /// A Registry of all pending sales

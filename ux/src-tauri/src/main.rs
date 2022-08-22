@@ -52,6 +52,10 @@ fn get_move_schema() -> RootSchema {
     schema_for!(GameMove)
 }
 
+// get transfer_token schema, get list of tokens, and make individual components around each
+// make sure everything is consistent state wise.
+// wrap in game move when you handleSubmit
+
 #[tauri::command]
 async fn list_my_users(
     secp: State<'_, Secp256k1<All>>,

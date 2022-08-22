@@ -100,7 +100,7 @@ impl<'a> MsgDBHandle<'a> {
                 key,
                 sent_time_ms,
                 unsigned: Unsigned {
-                    signature: Default::default(),
+                    signature: Default::default()
                 },
                 // TODO: Fetch from server.
                 checkpoints: Default::default(),

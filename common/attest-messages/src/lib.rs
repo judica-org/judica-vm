@@ -30,7 +30,7 @@ pub struct Header {
     pub prev_msg: CanonicalEnvelopeHash,
     pub tips: Vec<(XOnlyPublicKey, u64, CanonicalEnvelopeHash)>,
     pub height: u64,
-    pub sent_time_ms: u64,
+    pub sent_time_ms: u64, //unix timestamp
     pub unsigned: Unsigned,
     pub checkpoints: BitcoinCheckPoints,
 }
