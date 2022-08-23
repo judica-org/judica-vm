@@ -23,20 +23,10 @@ WITH RECURSIVE updatable(mid, prev, conn, height) AS (
         U.height
     FROM
         updatable U
+        INNER JOIN messages UParent ON UParent.message_id = U.prev
     WHERE
-        U.prev IS NOT NULL
-        AND U.conn = 0
-        AND IFNULL(
-            (
-                SELECT
-                    X2.connected
-                FROM
-                    messages X2
-                WHERE
-                    X2.message_id = U.prev
-            ),
-            0
-        ) = 1
+        U.conn = 0
+        AND UParent.connected
         /*
          
          Order By Height not strictly required because the first query already
