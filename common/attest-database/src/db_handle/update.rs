@@ -6,7 +6,7 @@ impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get + handle_type::Insert,
 {
-    pub fn attach_tips(&mut self) -> Result<(), rusqlite::Error> {
+    pub fn resolve_parents(&mut self) -> Result<(), rusqlite::Error> {
         let txn = self.0.transaction()?;
         {
             let mut s = txn.prepare(include_str!("sql/update/resolve_prev_ids.sql"))?;
@@ -17,6 +17,14 @@ where
                     break;
                 }
             }
+        }
+
+        txn.commit()?;
+        Ok(())
+    }
+    pub fn attach_tips(&mut self) -> Result<(), rusqlite::Error> {
+        let txn = self.0.transaction()?;
+        {
             let mut s = txn.prepare(include_str!("sql/update/do_connect.sql"))?;
             loop {
                 let mut modified = 1000;

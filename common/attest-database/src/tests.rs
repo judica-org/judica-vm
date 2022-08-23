@@ -259,6 +259,25 @@ async fn test_envelope_creation() {
         }
 
         handle.attach_tips().unwrap();
+        print_db(&handle);
+
+        {
+            let my_tip = handle
+                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .unwrap();
+            assert_eq!(
+                my_tip.canonicalized_hash_ref().unwrap(),
+                envs[9].0
+            );
+        }
+        {
+            let known_tips = handle.get_tip_for_known_keys().unwrap();
+            assert_eq!(known_tips.len(), 1);
+            assert_eq!(
+                known_tips[0].canonicalized_hash_ref().unwrap(),
+                envs[9].0
+            );
+        }
     }
 
     print_db(&handle);
