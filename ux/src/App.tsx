@@ -1,18 +1,22 @@
 import { invoke } from '@tauri-apps/api';
 import { appWindow } from '@tauri-apps/api/window';
-import React from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import './App.css';
 import Form, { FormSubmit } from "@rjsf/core";
 import { PowerPlant, PowerPlants } from './power-plant-list';
 import EnergyExchange, { NFTSale } from './energy-exchange';
+import Globe from 'react-globe.gl';
+import {countries} from './countries';
 
 
 function MoveForm() {
-  const [schema, set_schema] = React.useState<null | any>(null);
-  React.useEffect(() => {
+  const [schema, set_schema] = useState<null | any>(null);
+
+  useEffect(() => {
     (async () => {
       set_schema(await invoke("get_move_schema"));
     })()
+
   }, []);
   console.log(schema);
   const handle_submit = (data: FormSubmit) => {
@@ -21,7 +25,7 @@ function MoveForm() {
 
   };
   const customFormats = { "uint128": (s: string) => { return true; } };
-  const schema_form = React.useMemo<JSX.Element>(() => {
+  const schema_form = useMemo<JSX.Element>(() => {
     if (schema)
       return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
         <button type="submit">Submit</button>
@@ -31,7 +35,7 @@ function MoveForm() {
   }
     , [schema]
   )
-  const uid = React.useRef<null | HTMLInputElement>(null);
+  const uid = useRef<null | HTMLInputElement>(null);
   return schema && <div className='MoveForm'>
     <div>
       <label>Player ID:</label>
@@ -114,17 +118,21 @@ const invoke_once = () => {
 }
 
 function App() {
-  const [game_board, set_game_board] = React.useState<game_board | null>(null);
-  const [power_plants, set_power_plants] = React.useState<PowerPlant[]>([]); // use empty list for now so it will render
-  React.useEffect(() => {
-    const unlisten = appWindow.listen("game-board", (ev) => {
-      console.log(ev);
+  const [game_board, set_game_board] = useState<game_board | null>(null);
+  const [power_plants, set_power_plants] = useState<PowerPlant[]>([]); // use empty list for now so it will render
+  // const [countries, setCountries] = useState<{features: any[]}>({ features: [] });
+
+  useEffect(() => {
+    // fetch('./countries.geojson').then(res => res.json()).then(setCountries);
+    const unlisten_game_board = appWindow.listen("game-board", (ev) => {
+      console.log(['game-board-event'], ev);
       set_game_board(JSON.parse(ev.payload as string) as game_board)
     });
+
     invoke_once()
     return () => {
       (async () => {
-        (await unlisten)()
+        (await unlisten_game_board)();
       })();
     }
   }, [game_board]);
@@ -133,6 +141,13 @@ function App() {
     <div className="App">
       {game_board && <GameBoard g={game_board}></GameBoard>}
       {power_plants && <PowerPlants power_plants={power_plants}></PowerPlants>}
+      {<Globe width={500}
+        height={500}
+        hexPolygonsData={countries.features}
+        hexPolygonResolution={3}
+        hexPolygonMargin={0.3}
+        hexPolygonColor={useCallback(() => `#${Math.round(Math.random() * Math.pow(2, 24)).toString(16).padStart(6, '0')}`, [])}
+      ></Globe>}
       {<EnergyExchange listings={[{
         price: 937,
         currency: 'donuts',
