@@ -12,6 +12,7 @@ WHERE
         where
             key = ?
     )
+    AND m.connected
 ORDER BY
     m.height DESC
 LIMIT

@@ -48,6 +48,7 @@ pub fn generate_new_user<C: Signing>(
         header: Header {
             height: 0,
             prev_msg: CanonicalEnvelopeHash::genesis(),
+            genesis: CanonicalEnvelopeHash::genesis(),
             tips: Vec::new(),
             next_nonce: next_nonce.get_public(&secp),
             key: keypair.public_key().x_only_public_key().0,

@@ -23,6 +23,7 @@ mod tasks;
 
 #[tauri::command]
 async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
+    println!("Registering");
     loop {
         // No Idea why the borrow checker likes this, but it seems to be the case
         // that because the notified needs to live inside the async state machine
@@ -36,13 +37,16 @@ async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
                 .as_ref()
                 .map(|g| serde_json::to_string(&g.board).unwrap_or("null".into()))
                 .unwrap_or("null".into());
-            arc_cheat = game.as_ref().map(|g: &Game| g.notify.clone());
+            arc_cheat = game.as_ref().map(|g: &Game| g.should_notify.clone());
             let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
             (s, w)
         };
+        println!("Emitting!");
         window.emit("game-board", gamestring).unwrap();
         if let Some(w) = wait_on {
             w.await;
+        } else {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
     }
 }
@@ -135,7 +139,7 @@ async fn create_new_game(
             .map(|game| game.server.as_ref().map(|s| s.shutdown()));
         let new_game = Game {
             board: GameBoard::new(),
-            notify: Arc::new(Notify::new()),
+            should_notify: Arc::new(Notify::new()),
             host_key: key,
             server: None,
         };
@@ -148,7 +152,7 @@ async fn create_new_game(
 
 pub struct Game {
     board: GameBoard,
-    notify: Arc<Notify>,
+    should_notify: Arc<Notify>,
     host_key: XOnlyPublicKey,
     server: Option<Arc<GameServer>>,
 }
