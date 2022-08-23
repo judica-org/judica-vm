@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS messages (
     user_id INTEGER NOT NULL,
     received_time INTEGER NOT NULL,
     prev_msg_id INTEGER,
+    genesis_id INTEGER,
     height INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.height')) STORED,
     sent_time INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.sent_time_ms')) STORED,
     prev_msg TEXT NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.prev_msg')) STORED,
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS messages (
             64
         )
     ) STORED,
+    FOREIGN KEY(genesis_id) references messages(message_id) ON DELETE CASCADE,
     FOREIGN KEY(user_id) references users(user_id),
     FOREIGN KEY(prev_msg_id) references messages(message_id) ON DELETE
     SET
@@ -61,6 +63,7 @@ SET
     )
 WHERE
     message_id = NEW.message_id;
+
 END;
 
 /* When the new incoming message has a disconnected child,
@@ -87,6 +90,7 @@ SET
     prev_msg_id = NEW.message_id
 WHERE
     prev_msg = NEW.hash;
+
 END;
 
 CREATE TABLE IF NOT EXISTS hidden_services (

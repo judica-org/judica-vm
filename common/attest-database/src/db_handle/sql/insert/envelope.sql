@@ -1,5 +1,12 @@
 INSERT INTO
-    messages (body, hash, user_id, prev_msg_id, received_time)
+    messages (
+        body,
+        hash,
+        user_id,
+        prev_msg_id,
+        genesis_id,
+        received_time
+    )
 VALUES
     (
         :body,
@@ -13,5 +20,14 @@ VALUES
                 key = :key
         ),
         NULL,
+        (
+            SELECT
+                M.message_id
+            FROM
+                messages M
+            WHERE
+                M.hash = json_extract(:body, "$.header.genesis")
+            LIMIT 1
+        ),
         :received_time
     )
