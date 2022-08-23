@@ -1,5 +1,11 @@
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
-use tokio::{sync::mpsc::UnboundedSender, time::MissedTickBehavior};
+use tokio::{
+    sync::{
+        mpsc::{error::TryRecvError, UnboundedSender},
+        Notify,
+    },
+    time::MissedTickBehavior,
+};
 
 use attest_util::INFER_UNIT;
 
@@ -85,34 +91,63 @@ fn envelope_processor<C: Verification + 'static>(
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     let envelope_processor = {
         tokio::spawn(async move {
+            // We poll this is a biased order so we favour loading more data
+            // before attaching tips
+            let wake_if_no_work_left = Notify::new();
+            // One initial permit, to let the attach_tips method enter first,
+            // one time
+
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+            interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            wake_if_no_work_left.notify_one();
             loop {
-                if let Some(resp) = rx_envelope.recv().await {
-                    let mut all_tips = Vec::new();
-                    for envelope in resp {
-                        tracing::debug!("Response: {:?}", envelope);
-                        match envelope.self_authenticate(secp.as_ref()) {
-                            Ok(authentic) => {
-                                tracing::debug!("Authentic Tip: {:?}", authentic);
-                                conn.get_handle()
-                                    .await
-                                    .try_insert_authenticated_envelope(authentic)?;
-                                // safe to reuse since it is authentic still..
-                                all_tips
-                                    .extend(envelope.header.tips.iter().map(|(_, _, v)| v.clone()))
+                tokio::select! {
+                    biased;
+                    // Try to tick once every 30 seconds with high priority if it doesn't happen naturally
+                    _ = interval.tick() => {
+                        conn.get_handle().await.attach_tips()?;
+                    }
+                    // Prefer to process envelopes
+                    resp = rx_envelope.recv() => {
+                        if let Some(resp) = resp {
+                            let mut all_tips = Vec::new();
+                            for envelope in resp {
+                                tracing::debug!("Response: {:?}", envelope);
+                                match envelope.self_authenticate(secp.as_ref()) {
+                                    Ok(authentic) => {
+                                        tracing::debug!("Authentic Tip: {:?}", authentic);
+                                        conn.get_handle()
+                                            .await
+                                            .try_insert_authenticated_envelope(authentic)?;
+                                        // safe to reuse since it is authentic still..
+                                        all_tips.extend(
+                                            envelope.header.tips.iter().map(|(_, _, v)| v.clone()),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        // TODO: Ban peer?
+                                        tracing::debug!("Invalid Tip: {:?}", envelope);
+                                    }
+                                }
                             }
-                            Err(_) => {
-                                // TODO: Ban peer?
-                                tracing::debug!("Invalid Tip: {:?}", envelope);
-                            }
+                            all_tips.sort_unstable();
+                            all_tips.dedup();
+                            let unknown_dep_tips = conn
+                                .get_handle()
+                                .await
+                                .message_not_exists_it(all_tips.iter())?;
+                            tx.send(unknown_dep_tips)?;
+                            wake_if_no_work_left.notify_one();
+
+                        } else {
+                            return Ok(());
                         }
                     }
-                    all_tips.sort_unstable();
-                    all_tips.dedup();
-                    let unknown_dep_tips = conn
-                        .get_handle()
-                        .await
-                        .message_not_exists_it(all_tips.iter())?;
-                    tx.send(unknown_dep_tips)?;
+                    _ = wake_if_no_work_left.notified() => {
+                        conn.get_handle().await.attach_tips()?;
+                        // Reset the tick since we just did the work.
+                        interval.reset();
+                    }
                 }
             }
             // INFER_UNIT

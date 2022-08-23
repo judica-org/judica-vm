@@ -6,6 +6,7 @@ impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get + handle_type::Insert,
 {
+    /// Normally not required, as triggered on DB insert
     pub fn resolve_parents(&mut self) -> Result<(), rusqlite::Error> {
         let txn = self.0.transaction()?;
         {
@@ -22,6 +23,8 @@ where
         txn.commit()?;
         Ok(())
     }
+    /// Required to run periodically to make progress...
+    /// TODO: Something more efficient?
     pub fn attach_tips(&mut self) -> Result<(), rusqlite::Error> {
         let txn = self.0.transaction()?;
         {
