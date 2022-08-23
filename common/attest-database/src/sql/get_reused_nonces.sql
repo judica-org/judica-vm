@@ -5,7 +5,8 @@ FROM
 WHERE
     (M_Outer.nonce, M_Outer.user_id) in (
         SELECT
-            M.nonce, M.user_id
+            M.nonce,
+            M.user_id
         FROM
             messages M
         GROUP BY
