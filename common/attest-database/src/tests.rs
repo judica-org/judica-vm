@@ -7,9 +7,11 @@ use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, Header, Un
 use fallible_iterator::FallibleIterator;
 use rusqlite::{named_params, params, Connection};
 
+use sapio_bitcoin::blockdata::opcodes::all;
 use sapio_bitcoin::secp256k1::{rand, All, Secp256k1};
 use sapio_bitcoin::KeyPair;
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -110,12 +112,27 @@ fn print_db(handle: &MsgDBHandle) {
 }
 #[tokio::test]
 async fn test_envelope_creation() {
-    let verify_tip =
-        |handle: &MsgDBHandle, envelope: &Authenticated<Envelope>, user_id: usize, kp: KeyPair| {
+    let mut all_past_tips = BTreeSet::<CanonicalEnvelopeHash>::new();
+    let mut disconnected_tip = vec![];
+    let mut disconnected = vec![];
+    let mut kps = vec![];
+    let mut final_msg = vec![];
+    let mut verify_tip =
+        |handle: &MsgDBHandle,
+         envelope: &Authenticated<Envelope>,
+         user_id: usize,
+         kp: KeyPair,
+         all_past_tips: &BTreeSet<CanonicalEnvelopeHash>| {
             {
                 let tips = handle.get_tips_for_all_users().unwrap();
-                assert_eq!(tips.len(), 1);
-                assert_eq!(&tips[0], envelope.inner_ref());
+                assert_eq!(tips.len(), user_id + 1);
+                assert!(tips.contains(envelope.inner_ref()));
+                assert_eq!(
+                    tips.iter()
+                        .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
+                        .count(),
+                    1
+                );
             }
             {
                 let my_tip = handle
@@ -125,100 +142,116 @@ async fn test_envelope_creation() {
             }
             {
                 let known_tips = handle.get_tip_for_known_keys().unwrap();
-                assert_eq!(known_tips.len(), 1);
-                assert_eq!(&known_tips[0], envelope.inner_ref());
+                assert_eq!(known_tips.len(), user_id + 1);
+                assert!(known_tips.contains(envelope.inner_ref()));
+                assert_eq!(
+                    known_tips
+                        .iter()
+                        .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
+                        .count(),
+                    1
+                );
             }
         };
-    let conn = setup_db().await;
     let secp = Secp256k1::new();
-    let user_id = 0;
-    let test_user = "TestUser".into();
+    let conn = setup_db().await;
     let mut handle = conn.get_handle().await;
-    let kp = make_test_user(&secp, &handle, test_user);
+    for user_id in 0..1 {
+        let test_user = format!("Test_User_{}", user_id);
+        let kp = make_test_user(&secp, &handle, test_user);
 
-    let envelope_1 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
-        .unwrap()
-        .unwrap();
-    let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
-    handle
-        .try_insert_authenticated_envelope(envelope_1.clone())
-        .unwrap();
-    verify_tip(&handle, &envelope_1, user_id, kp);
-
-    let envelope_2 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
-        .unwrap()
-        .unwrap();
-    let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
-    handle
-        .try_insert_authenticated_envelope(envelope_2.clone())
-        .unwrap();
-    verify_tip(&handle, &envelope_2, user_id, kp);
-
-    let mut envs: Vec<(CanonicalEnvelopeHash, Authenticated<Envelope>)> = vec![];
-    let special_idx = 5;
-    for i in 0..10isize {
-        let envelope_disconnected = handle
-            .wrap_message_in_envelope_for_user_by_key(
-                Value::Null,
-                &kp,
-                &secp,
-                envs.get((i - 1) as usize).map(|a| a.1.inner_ref().clone()),
-            )
+        let envelope_1 = handle
+            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
             .unwrap()
             .unwrap();
-        let envelope_disconnected = envelope_disconnected
-            .clone()
-            .self_authenticate(&secp)
+        let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
+        handle
+            .try_insert_authenticated_envelope(envelope_1.clone())
             .unwrap();
-        envs.push((
-            envelope_disconnected
-                .inner_ref()
-                .canonicalized_hash_ref()
-                .unwrap(),
-            envelope_disconnected.clone(),
-        ));
-        if i != special_idx {
-            println!("Inserting i={}", i);
-            handle
-                .try_insert_authenticated_envelope(envelope_disconnected.clone())
-                .unwrap();
-        } else {
-            println!("Skipping i={}", i);
-        }
-        print_db(&handle);
-        let idx = if i >= special_idx { special_idx - 1 } else { i };
-        let check_envelope = &envs[idx as usize].1;
+        verify_tip(&handle, &envelope_1, user_id, kp, &all_past_tips);
 
-        verify_tip(&handle, &check_envelope, user_id, kp);
-        if i > special_idx {
-            let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
-            assert_eq!(tips.len(), 1);
-            assert_eq!(&tips[0], envs[special_idx as usize + 1].1.inner_ref());
+        let envelope_2 = handle
+            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
+            .unwrap()
+            .unwrap();
+        let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
+        handle
+            .try_insert_authenticated_envelope(envelope_2.clone())
+            .unwrap();
+        verify_tip(&handle, &envelope_2, user_id, kp, &all_past_tips);
+
+        let mut envs: Vec<(CanonicalEnvelopeHash, Authenticated<Envelope>)> = vec![];
+        let special_idx = 5;
+        for i in 0..10isize {
+            let envelope_disconnected = handle
+                .wrap_message_in_envelope_for_user_by_key(
+                    Value::Null,
+                    &kp,
+                    &secp,
+                    envs.get((i - 1) as usize).map(|a| a.1.inner_ref().clone()),
+                )
+                .unwrap()
+                .unwrap();
+            let envelope_disconnected = envelope_disconnected
+                .clone()
+                .self_authenticate(&secp)
+                .unwrap();
+            envs.push((
+                envelope_disconnected
+                    .inner_ref()
+                    .canonicalized_hash_ref()
+                    .unwrap(),
+                envelope_disconnected.clone(),
+            ));
+            if i != special_idx {
+                println!("Inserting i={}", i);
+                handle
+                    .try_insert_authenticated_envelope(envelope_disconnected.clone())
+                    .unwrap();
+            } else {
+                println!("Skipping i={}", i);
+            }
+            print_db(&handle);
+            let idx = if i >= special_idx { special_idx - 1 } else { i };
+            let check_envelope = &envs[idx as usize].1;
+
+            verify_tip(&handle, &check_envelope, user_id, kp, &all_past_tips);
+            if i > special_idx {
+                let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
+                assert_eq!(tips.len(), 1);
+                assert_eq!(&tips[0], envs[special_idx as usize + 1].1.inner_ref());
+            }
         }
+        all_past_tips.insert(envs[(special_idx - 1) as usize].0);
+        disconnected.push(envs[special_idx as usize].1.clone());
+        disconnected_tip.push(envs[(special_idx + 1) as usize].1.clone());
+        final_msg.push(envs[9].0);
+        kps.push(kp);
     }
 
-    {
+    for user_id in 0..1 {
         // handle.drop_message_by_hash(envs[5].0).unwrap();
         print_db(&handle);
 
         handle
-            .try_insert_authenticated_envelope(envs[5].1.clone())
+            .try_insert_authenticated_envelope(disconnected[user_id].clone())
             .unwrap();
         print_db(&handle);
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
             assert_eq!(tips.len(), 1);
-            assert_eq!(&tips[0], envs[special_idx as usize + 1].1.inner_ref());
+            assert_eq!(&tips[0], disconnected_tip[user_id].inner_ref());
         }
         {
             let my_tip = handle
-                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
                 .unwrap();
             assert_eq!(
                 my_tip.canonicalized_hash_ref().unwrap(),
-                envs[special_idx as usize].0
+                disconnected[user_id]
+                    .inner_ref()
+                    .canonicalized_hash_ref()
+                    .unwrap()
             );
         }
         {
@@ -226,7 +259,10 @@ async fn test_envelope_creation() {
             assert_eq!(known_tips.len(), 1);
             assert_eq!(
                 known_tips[0].canonicalized_hash_ref().unwrap(),
-                envs[special_idx as usize].0
+                disconnected[user_id]
+                    .inner_ref()
+                    .canonicalized_hash_ref()
+                    .unwrap()
             );
         }
 
@@ -235,14 +271,17 @@ async fn test_envelope_creation() {
 
         {
             let my_tip = handle
-                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
                 .unwrap();
-            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), envs[9].0);
+            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), final_msg[user_id]);
         }
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
             assert_eq!(known_tips.len(), 1);
-            assert_eq!(known_tips[0].canonicalized_hash_ref().unwrap(), envs[9].0);
+            assert_eq!(
+                known_tips[0].canonicalized_hash_ref().unwrap(),
+                final_msg[user_id]
+            );
         }
     }
 
@@ -260,14 +299,15 @@ async fn test_envelope_creation() {
 
     {
         let mut known_tips = handle.get_tip_for_known_keys().unwrap();
-        assert_eq!(known_tips.len(), 2);
-        known_tips.sort_by_key(|t| t.header.key);
-        let mut presumed_tips = [
-            envelope_3.inner_ref().clone(),
-            envs[9].1.inner_ref().clone(),
-        ];
-        presumed_tips.sort_by_key(|p| p.header.key);
-        assert_eq!(&known_tips[..], &presumed_tips);
+        assert_eq!(known_tips.len(), kps.len() + 1);
+        let mut tip_hashes: Vec<_> = known_tips
+            .iter()
+            .map(|t| t.canonicalized_hash_ref().unwrap())
+            .collect();
+        tip_hashes.sort();
+        final_msg.push(envelope_3.inner_ref().canonicalized_hash_ref().unwrap());
+        final_msg.sort();
+        assert_eq!(&tip_hashes[..], &final_msg[..]);
     }
 }
 
