@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@mui/icons-material": "^5.8.4",
+    "@mui/material": "^5.10.1",
     "@rjsf/core": "^4.2.3",
     "@tauri-apps/api": "^1.0.2",
     "@testing-library/jest-dom": "^5.14.1",

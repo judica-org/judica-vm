@@ -1,13 +1,12 @@
 import FactoryIcon from '@mui/icons-material/Factory';
 import { makeStyles, Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, createStyles } from '@mui/material';
-import { Spacing } from '@mui/system';
-import React from 'react';
 
 export type NFTSale = {
   price: number,
   currency: any,
   seller: number,
   transfer_count: number,
+  // add plant type
 }
 
 // const useStyles = makeStyles(({ spacing }: {spacing: Spacing}) => createStyles({
