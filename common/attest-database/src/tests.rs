@@ -110,13 +110,32 @@ fn print_db(handle: &MsgDBHandle) {
 }
 #[tokio::test]
 async fn test_envelope_creation() {
+    let verify_tip =
+        |handle: &MsgDBHandle, envelope: &Authenticated<Envelope>, user_id: usize, kp: KeyPair| {
+            {
+                let tips = handle.get_tips_for_all_users().unwrap();
+                assert_eq!(tips.len(), 1);
+                assert_eq!(&tips[0], envelope.inner_ref());
+            }
+            {
+                let my_tip = handle
+                    .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                    .unwrap();
+                assert_eq!(&my_tip, envelope.inner_ref());
+            }
+            {
+                let known_tips = handle.get_tip_for_known_keys().unwrap();
+                assert_eq!(known_tips.len(), 1);
+                assert_eq!(&known_tips[0], envelope.inner_ref());
+            }
+        };
     let conn = setup_db().await;
     let secp = Secp256k1::new();
+    let user_id = 0;
     let test_user = "TestUser".into();
     let mut handle = conn.get_handle().await;
     let kp = make_test_user(&secp, &handle, test_user);
 
-    print_db(&handle);
     let envelope_1 = handle
         .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
         .unwrap()
@@ -125,24 +144,7 @@ async fn test_envelope_creation() {
     handle
         .try_insert_authenticated_envelope(envelope_1.clone())
         .unwrap();
-
-    {
-        let tips = handle.get_tips_for_all_users().unwrap();
-        assert_eq!(tips.len(), 1);
-        assert_eq!(&tips[0], envelope_1.inner_ref());
-    }
-    {
-        let my_tip = handle
-            .get_tip_for_user_by_key(kp.x_only_public_key().0)
-            .unwrap();
-        assert_eq!(&my_tip, envelope_1.inner_ref());
-    }
-    print_db(&handle);
-    {
-        let known_tips = handle.get_tip_for_known_keys().unwrap();
-        assert_eq!(known_tips.len(), 1);
-        assert_eq!(&known_tips[0], envelope_1.inner_ref());
-    }
+    verify_tip(&handle, &envelope_1, user_id, kp);
 
     let envelope_2 = handle
         .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
@@ -152,23 +154,7 @@ async fn test_envelope_creation() {
     handle
         .try_insert_authenticated_envelope(envelope_2.clone())
         .unwrap();
-    {
-        let tips = handle.get_tips_for_all_users().unwrap();
-        assert_eq!(tips.len(), 1);
-        assert_eq!(&tips[0], envelope_2.inner_ref());
-    }
-    {
-        let my_tip = handle
-            .get_tip_for_user_by_key(kp.x_only_public_key().0)
-            .unwrap();
-        assert_eq!(&my_tip, envelope_2.inner_ref());
-    }
-    {
-        let known_tips = handle.get_tip_for_known_keys().unwrap();
-        assert_eq!(known_tips.len(), 1);
-        assert_eq!(&known_tips[0], envelope_2.inner_ref());
-    }
-    print_db(&handle);
+    verify_tip(&handle, &envelope_2, user_id, kp);
 
     let mut envs: Vec<(CanonicalEnvelopeHash, Authenticated<Envelope>)> = vec![];
     let special_idx = 5;
@@ -203,23 +189,9 @@ async fn test_envelope_creation() {
         }
         print_db(&handle);
         let idx = if i >= special_idx { special_idx - 1 } else { i };
-        let check_envelope = envs[idx as usize].1.inner_ref();
-        {
-            let tips = handle.get_tips_for_all_users().unwrap();
-            assert_eq!(tips.len(), 1);
-            assert_eq!(&tips[0], check_envelope);
-        }
-        {
-            let my_tip = handle
-                .get_tip_for_user_by_key(kp.x_only_public_key().0)
-                .unwrap();
-            assert_eq!(&my_tip, check_envelope);
-        }
-        {
-            let known_tips = handle.get_tip_for_known_keys().unwrap();
-            assert_eq!(known_tips.len(), 1);
-            assert_eq!(&known_tips[0], check_envelope);
-        }
+        let check_envelope = &envs[idx as usize].1;
+
+        verify_tip(&handle, &check_envelope, user_id, kp);
         if i > special_idx {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
             assert_eq!(tips.len(), 1);
@@ -265,18 +237,12 @@ async fn test_envelope_creation() {
             let my_tip = handle
                 .get_tip_for_user_by_key(kp.x_only_public_key().0)
                 .unwrap();
-            assert_eq!(
-                my_tip.canonicalized_hash_ref().unwrap(),
-                envs[9].0
-            );
+            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), envs[9].0);
         }
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
             assert_eq!(known_tips.len(), 1);
-            assert_eq!(
-                known_tips[0].canonicalized_hash_ref().unwrap(),
-                envs[9].0
-            );
+            assert_eq!(known_tips[0].canonicalized_hash_ref().unwrap(), envs[9].0);
         }
     }
 
