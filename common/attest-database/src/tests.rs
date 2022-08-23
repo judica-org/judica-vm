@@ -193,22 +193,22 @@ async fn test_envelope_creation() {
 
     {
         handle.drop_message_by_hash(envs[5].0).unwrap();
-
+        print_db(&handle);
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
             assert_eq!(tips.len(), 1);
-            assert_eq!(&tips[0], envs[4].1.inner_ref());
+            assert_eq!(&tips[0], envs[6].1.inner_ref());
         }
         {
             let my_tip = handle
                 .get_tip_for_user_by_key(kp.x_only_public_key().0)
                 .unwrap();
-            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), envs[4].0);
+            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), envs[9].0);
         }
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
             assert_eq!(known_tips.len(), 1);
-            assert_eq!(known_tips[0].canonicalized_hash_ref().unwrap(), envs[4].0);
+            assert_eq!(known_tips[0].canonicalized_hash_ref().unwrap(), envs[9].0);
         }
         handle
             .try_insert_authenticated_envelope(envs[5].1.clone())
@@ -232,7 +232,7 @@ async fn test_envelope_creation() {
         known_tips.sort_by_key(|t| t.header.key);
         let mut presumed_tips = [
             envelope_3.inner_ref().clone(),
-            envelope_2.inner_ref().clone(),
+            envs[9].1.inner_ref().clone(),
         ];
         presumed_tips.sort_by_key(|p| p.header.key);
         assert_eq!(&known_tips[..], &presumed_tips);
@@ -245,6 +245,7 @@ fn make_test_user(
     name: String,
 ) -> KeyPair {
     let (kp, nonce, envelope) = generate_new_user(secp).unwrap();
+    let u = handle.save_keypair(kp).unwrap();
     let genesis = envelope.self_authenticate(secp).unwrap();
     handle
         .insert_user_by_genesis_envelope(name, genesis)
@@ -253,7 +254,6 @@ fn make_test_user(
         .save_nonce_for_user_by_key(nonce, secp, kp.x_only_public_key().0)
         .unwrap();
     kp
-
 }
 
 async fn setup_db() -> MsgDB {
