@@ -6,8 +6,8 @@ import Form, { FormSubmit } from "@rjsf/core";
 import { PowerPlant, PowerPlants } from './power-plant-list';
 import EnergyExchange, { NFTSale } from './energy-exchange';
 import Globe from 'react-globe.gl';
-import {countries} from './countries';
-
+// import { MakeGlobe } from './globe-display';
+import CustomGlobe, { MakeGlobe } from './CustomGlobe';
 
 function MoveForm() {
   const [schema, set_schema] = useState<null | any>(null);
@@ -120,10 +120,11 @@ const invoke_once = () => {
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
   const [power_plants, set_power_plants] = useState<PowerPlant[]>([]); // use empty list for now so it will render
-  // const [countries, setCountries] = useState<{features: any[]}>({ features: [] });
+  const [countries, setCountries] = useState<{features: any[]}>({ features: [] });
 
   useEffect(() => {
-    // fetch('./countries.geojson').then(res => res.json()).then(setCountries);
+    setCountries(countries);
+    console.log("loaded countries", countries.features[0]);
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
       set_game_board(JSON.parse(ev.payload as string) as game_board)
@@ -135,7 +136,14 @@ function App() {
         (await unlisten_game_board)();
       })();
     }
-  }, [game_board]);
+  }, [game_board, countries, setCountries]);
+
+  // update deps, 
+  // image file should be local
+  // tauri toolbar - add a reload button?
+  // when there's no background its unhappy
+  // bug in the FE rust logic - because no game initialized just keeps checking for game. <-fix ux-scheduler branch - merge in.
+
 
   return (
     <div className="App">
@@ -143,11 +151,14 @@ function App() {
       {power_plants && <PowerPlants power_plants={power_plants}></PowerPlants>}
       {<Globe width={500}
         height={500}
+        globeImageUrl={"//unpkg.com/three-globe/example/img/earth-dark.jpg"}
         hexPolygonsData={countries.features}
         hexPolygonResolution={3}
         hexPolygonMargin={0.3}
-        hexPolygonColor={useCallback(() => `#${Math.round(Math.random() * Math.pow(2, 24)).toString(16).padStart(6, '0')}`, [])}
+        hexPolygonColor={useCallback(() => "#1b66b1", [])}
       ></Globe>}
+      {<CustomGlobe></CustomGlobe>}
+      {<MakeGlobe></MakeGlobe>}
       {<EnergyExchange listings={[{
         price: 937,
         currency: 'donuts',
