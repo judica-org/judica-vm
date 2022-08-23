@@ -1,4 +1,3 @@
-import './styles.css';
 import { Card, CardContent, CardHeader } from '@mui/material';
 // import MapCanvas from '../map-canvas';
 import { useEffect, useRef, useState } from 'react';
