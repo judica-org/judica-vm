@@ -57,7 +57,6 @@ async fn test_reused_nonce() {
         // Check that only this group is returned
         let nonces = handle.get_reused_nonces().unwrap();
         assert_eq!(nonces.len(), 1);
-        print_db(&handle);
         let v = nonces.get(&envelope_2.inner_ref().header.key).unwrap();
         assert_eq!(
             &v[..],
@@ -156,7 +155,8 @@ async fn test_envelope_creation() {
     let secp = Secp256k1::new();
     let conn = setup_db().await;
     let mut handle = conn.get_handle().await;
-    for user_id in 0..1 {
+    const N_USERS: usize = 10;
+    for user_id in 0..N_USERS {
         let test_user = format!("Test_User_{}", user_id);
         let kp = make_test_user(&secp, &handle, test_user);
 
@@ -211,15 +211,14 @@ async fn test_envelope_creation() {
             } else {
                 println!("Skipping i={}", i);
             }
-            print_db(&handle);
             let idx = if i >= special_idx { special_idx - 1 } else { i };
             let check_envelope = &envs[idx as usize].1;
 
             verify_tip(&handle, &check_envelope, user_id, kp, &all_past_tips);
             if i > special_idx {
                 let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
-                assert_eq!(tips.len(), 1);
-                assert_eq!(&tips[0], envs[special_idx as usize + 1].1.inner_ref());
+                assert_eq!(tips.len(), user_id + 1);
+                assert!(tips.contains(&envs[special_idx as usize + 1].1.inner_ref()));
             }
         }
         all_past_tips.insert(envs[(special_idx - 1) as usize].0);
@@ -229,18 +228,16 @@ async fn test_envelope_creation() {
         kps.push(kp);
     }
 
-    for user_id in 0..1 {
+    for user_id in 0..N_USERS {
         // handle.drop_message_by_hash(envs[5].0).unwrap();
-        print_db(&handle);
 
         handle
             .try_insert_authenticated_envelope(disconnected[user_id].clone())
             .unwrap();
-        print_db(&handle);
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
-            assert_eq!(tips.len(), 1);
-            assert_eq!(&tips[0], disconnected_tip[user_id].inner_ref());
+            assert_eq!(tips.len(), N_USERS);
+            assert!(tips.contains(disconnected_tip[user_id].inner_ref()));
         }
         {
             let my_tip = handle
@@ -256,19 +253,20 @@ async fn test_envelope_creation() {
         }
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
-            assert_eq!(known_tips.len(), 1);
-            assert_eq!(
-                known_tips[0].canonicalized_hash_ref().unwrap(),
-                disconnected[user_id]
-                    .inner_ref()
-                    .canonicalized_hash_ref()
-                    .unwrap()
-            );
+            assert_eq!(known_tips.len(), N_USERS);
+            assert!(known_tips.contains(disconnected[user_id].inner_ref()));
         }
+    }
 
-        handle.attach_tips().unwrap();
-        print_db(&handle);
+    handle.attach_tips().unwrap();
 
+    let known_tips: Vec<_> = handle
+        .get_tip_for_known_keys()
+        .unwrap()
+        .iter()
+        .map(|t| t.canonicalized_hash_ref().unwrap())
+        .collect();
+    for user_id in 0..N_USERS {
         {
             let my_tip = handle
                 .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
@@ -276,16 +274,11 @@ async fn test_envelope_creation() {
             assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), final_msg[user_id]);
         }
         {
-            let known_tips = handle.get_tip_for_known_keys().unwrap();
-            assert_eq!(known_tips.len(), 1);
-            assert_eq!(
-                known_tips[0].canonicalized_hash_ref().unwrap(),
-                final_msg[user_id]
-            );
+            assert_eq!(known_tips.len(), N_USERS);
+            assert!(known_tips.contains(&final_msg[user_id]));
         }
     }
 
-    print_db(&handle);
     let kp_2 = make_test_user(&secp, &handle, "TestUser2".into());
 
     let envelope_3 = handle
