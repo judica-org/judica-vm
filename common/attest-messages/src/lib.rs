@@ -28,6 +28,7 @@ pub struct Header {
     pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
     pub next_nonce: PrecomittedPublicNonce,
     pub prev_msg: CanonicalEnvelopeHash,
+    pub genesis: CanonicalEnvelopeHash,
     pub tips: Vec<(XOnlyPublicKey, u64, CanonicalEnvelopeHash)>,
     pub height: u64,
     pub sent_time_ms: u64,
@@ -71,6 +72,9 @@ pub struct CanonicalEnvelopeHash(sha256::Hash);
 impl CanonicalEnvelopeHash {
     pub fn genesis() -> CanonicalEnvelopeHash {
         CanonicalEnvelopeHash(sha256::Hash::from_inner([0u8; 32]))
+    }
+    pub fn is_genesis(&self) -> bool {
+        *self == Self::genesis()
     }
 }
 

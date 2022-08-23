@@ -1,61 +1,21 @@
 use super::sql_serializers::{self};
+use super::{handle_type, ConsistentMessages, MsgDBHandle};
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
-use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
-use attest_messages::Header;
-use attest_messages::SigningError;
-use attest_messages::Unsigned;
 use fallible_iterator::FallibleIterator;
 use rusqlite::params;
-use rusqlite::Connection;
 use sapio_bitcoin::{
     hashes::{hex::ToHex, sha256, Hash},
-    secp256k1::{Secp256k1, SecretKey, Signing},
-    KeyPair, XOnlyPublicKey,
+    secp256k1::SecretKey,
+    XOnlyPublicKey,
 };
-use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
-use tokio::sync::MutexGuard;
-
-pub struct MsgDBHandle<'a>(pub MutexGuard<'a, Connection>);
-
-pub enum ConsistentMessages {
-    AllMessagesNotReady,
-}
-
-impl<'a> MsgDBHandle<'a> {
-    /// Creates all the required tables for the application.
-    /// Safe to call multiple times
-    pub fn setup_tables(&mut self) {
-        self.0
-            .execute_batch(include_str!("sql/create_tables.sql"))
-            .unwrap();
-    }
-
-    /// Creates a new random nonce and saves it for the given user.
-    pub fn generate_fresh_nonce_for_user_by_key<C: Signing>(
-        &self,
-        secp: &Secp256k1<C>,
-        key: XOnlyPublicKey,
-    ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
-        let nonce = PrecomittedNonce::new(secp);
-        let pk_nonce = self.save_nonce_for_user_by_key(nonce, secp, key)?;
-        Ok(pk_nonce)
-    }
-    /// Saves an arbitrary nonce for the given user.
-    pub fn save_nonce_for_user_by_key<C: Signing>(
-        &self,
-        nonce: PrecomittedNonce,
-        secp: &Secp256k1<C>,
-        key: XOnlyPublicKey,
-    ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
-        let pk_nonce = nonce.get_public(secp);
-        let mut stmt = self.0.prepare(include_str!("sql/insert_nonce.sql"))?;
-        stmt.insert(rusqlite::params![key.to_hex(), pk_nonce, nonce,])?;
-        Ok(pk_nonce)
-    }
+impl<'a, T> MsgDBHandle<'a, T>
+where
+    T: handle_type::Get,
+{
     /// Returns the secret nonce for a given public nonce
     pub fn get_secret_for_public_nonce(
         &self,
@@ -67,49 +27,6 @@ impl<'a> MsgDBHandle<'a> {
         stmt.query_row([nonce], |r| r.get::<_, PrecomittedNonce>(0))
     }
 
-    /// given an arbitrary inner message, generates an envelope and signs it.
-    ///
-    /// Calling multiple times with a given nonce would result in nonce reuse.
-    pub fn wrap_message_in_envelope_for_user_by_key<C: Signing>(
-        &self,
-        msg: Value,
-        keypair: &KeyPair,
-        secp: &Secp256k1<C>,
-    ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {
-        let key: XOnlyPublicKey = keypair.x_only_public_key().0;
-        // Side effect free...
-        let tips = self.get_tips_for_all_users()?;
-        let my_tip = self.get_tip_for_user_by_key(key)?;
-        let sent_time_ms = attest_util::now();
-        let secret = self.get_secret_for_public_nonce(my_tip.header.next_nonce)?;
-        // Has side effects!
-        let next_nonce = self.generate_fresh_nonce_for_user_by_key(secp, key)?;
-        let mut msg = Envelope {
-            header: Header {
-                height: my_tip.header.height + 1,
-                prev_msg: my_tip.canonicalized_hash().unwrap(),
-                tips: tips
-                    .iter()
-                    .map(|tip| {
-                        let h = tip.clone().canonicalized_hash()?;
-                        Some((tip.header.key, tip.header.height, h))
-                    })
-                    .flatten()
-                    .collect(),
-                next_nonce,
-                key,
-                sent_time_ms,
-                unsigned: Unsigned {
-                    signature: Default::default(),
-                },
-                // TODO: Fetch from server.
-                checkpoints: Default::default(),
-            },
-            msg,
-        };
-        Ok(msg.sign_with(keypair, secp, secret).map(move |_| msg))
-    }
-
     /// Returns the message at a given height for a key
     pub fn get_message_at_height_for_user(
         &self,
@@ -118,7 +35,7 @@ impl<'a> MsgDBHandle<'a> {
     ) -> Result<Envelope, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get_message_by_height_and_user.sql"))?;
+            .prepare(include_str!("sql/get/message_by_height_and_user.sql"))?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
 
@@ -129,7 +46,7 @@ impl<'a> MsgDBHandle<'a> {
     ) -> Result<Envelope, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/message_tips_by_user.sql"))?;
+            .prepare(include_str!("sql/get/message_tips_by_user.sql"))?;
         stmt.query_row([key.to_hex()], |r| r.get(0))
     }
 
@@ -137,10 +54,28 @@ impl<'a> MsgDBHandle<'a> {
     pub fn get_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get_tips_for_known_keys.sql"))?;
+            .prepare(include_str!("sql/get/tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
+    }
+
+    pub fn get_disconnected_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare(include_str!("sql/get/disconnected_tips_for_known_keys.sql"))?;
+        let rows = stmt.query([])?;
+        let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        Ok(vs)
+    }
+
+    #[cfg(test)]
+    pub fn drop_message_by_hash(&self, h: CanonicalEnvelopeHash) -> Result<(), rusqlite::Error> {
+        use rusqlite::named_params;
+
+        let mut stmt = self.0.prepare("DELETE FROM messages WHERE :hash = hash")?;
+        stmt.execute(named_params! {":hash": h})?;
+        Ok(())
     }
 
     /// finds the most recent message only for messages where we know the key
@@ -152,10 +87,10 @@ impl<'a> MsgDBHandle<'a> {
         rusqlite::Error,
     > {
         let mut stmt = if newer.is_some() {
-            self.0.prepare(include_str!("sql/get_all_messages.sql"))?
+            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
         } else {
             self.0
-                .prepare(include_str!("sql/get_all_messages_after.sql"))?
+                .prepare(include_str!("sql/get/all_messages_after.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([i])?,
@@ -192,10 +127,10 @@ impl<'a> MsgDBHandle<'a> {
         map: &mut HashMap<CanonicalEnvelopeHash, Envelope>,
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
-            self.0.prepare(include_str!("sql/get_all_messages.sql"))?
+            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
         } else {
             self.0
-                .prepare(include_str!("sql/get_all_messages_after.sql"))?
+                .prepare(include_str!("sql/get/all_messages_after.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -214,7 +149,7 @@ impl<'a> MsgDBHandle<'a> {
     pub fn get_reused_nonces(
         &self,
     ) -> Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, rusqlite::Error> {
-        let mut stmt = self.0.prepare("sql/get_reused_nonces.sql")?;
+        let mut stmt = self.0.prepare(include_str!("sql/get/reused_nonces.sql"))?;
         let rows = stmt.query([])?;
         let vs = rows
             .map(|r| r.get::<_, Envelope>(0))
@@ -230,7 +165,7 @@ impl<'a> MsgDBHandle<'a> {
     pub fn get_tips_for_all_users(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT body, max(height)  FROM   messages GROUP BY user_id")?;
+            .prepare(include_str!("sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
@@ -243,7 +178,7 @@ impl<'a> MsgDBHandle<'a> {
     ) -> Result<Result<Vec<Envelope>, (Envelope, Envelope)>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/load_all_messages_by_key.sql"))?;
+            .prepare(include_str!("sql/get/all_messages_by_key.sql"))?;
         let rows = stmt.query(params![key.to_hex()])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get(0)).collect()?;
         let _prev = sha256::Hash::hash(&[]);
@@ -274,16 +209,6 @@ impl<'a> MsgDBHandle<'a> {
         .collect()
     }
 
-    /// adds a hidden service to our connection list
-    /// Won't fail if already exists
-    pub fn insert_hidden_service(&self, s: String, port: u16) -> Result<(), rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare("INSERT OR IGNORE INTO hidden_services (service_url, port) VALUES (?,?)")?;
-        stmt.insert(rusqlite::params![s, port])?;
-        Ok(())
-    }
-
     /// get all added hidden services
     pub fn get_all_hidden_services(&self) -> Result<Vec<(String, u16)>, rusqlite::Error> {
         let mut stmt = self.0.prepare("SELECT service_url FROM hidden_services")?;
@@ -292,19 +217,6 @@ impl<'a> MsgDBHandle<'a> {
             .map(|r| Ok((r.get::<_, String>(0)?, r.get(1)?)))
             .collect()?;
         Ok(results)
-    }
-
-    /// saves a keypair to our keyset
-    pub fn save_keypair(&self, kp: KeyPair) -> Result<(), rusqlite::Error> {
-        let mut stmt = self.0
-                                .prepare("
-                                            INSERT INTO private_keys (public_key, private_key) VALUES (?, ?)
-                                            ")?;
-        stmt.insert(rusqlite::params![
-            kp.x_only_public_key().0.to_hex(),
-            kp.secret_bytes().to_hex()
-        ])?;
-        Ok(())
     }
 
     pub fn message_exists(&self, hash: &sha256::Hash) -> Result<bool, rusqlite::Error> {
@@ -343,28 +255,6 @@ impl<'a> MsgDBHandle<'a> {
             .collect()
     }
 
-    /// attempts to put an authenticated envelope in the DB
-    ///
-    /// Will fail if the key is not registered.
-    pub fn try_insert_authenticated_envelope(
-        &self,
-        data: Authenticated<Envelope>,
-    ) -> Result<(), rusqlite::Error> {
-        let data = data.inner();
-        let mut stmt = self.0.prepare(include_str!("sql/insert_envelope.sql"))?;
-        let time = attest_util::now();
-
-        stmt.insert(rusqlite::params![
-            data,
-            data.clone()
-                .canonicalized_hash()
-                .expect("Hashing should always succeed?"),
-            data.header.key.to_hex(),
-            time
-        ])?;
-        Ok(())
-    }
-
     /// finds a user by key
     pub fn locate_user(
         &self,
@@ -376,20 +266,5 @@ impl<'a> MsgDBHandle<'a> {
         stmt.query_row([key.to_hex()], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })
-    }
-
-    /// creates a new user from a genesis envelope
-    pub fn insert_user_by_genesis_envelope(
-        &self,
-        nickname: String,
-        envelope: Authenticated<Envelope>,
-    ) -> Result<String, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
-        let hex_key = envelope.inner_ref().header.key.to_hex();
-        stmt.insert(params![nickname, hex_key])?;
-        self.try_insert_authenticated_envelope(envelope)?;
-        Ok(hex_key)
     }
 }
