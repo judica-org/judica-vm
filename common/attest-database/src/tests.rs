@@ -5,7 +5,7 @@ use super::*;
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, Header, Unsigned};
 use fallible_iterator::FallibleIterator;
-use rusqlite::{params, Connection};
+use rusqlite::{named_params, params, Connection};
 
 use sapio_bitcoin::secp256k1::{rand, All, Secp256k1};
 use sapio_bitcoin::KeyPair;
@@ -94,14 +94,17 @@ fn print_db(handle: &MsgDBHandle) {
 
     let mut stm = handle
         .0
-        .prepare("select genesis, hash from messages")
+        .prepare("select genesis, hash, prev_msg, connected, prev_msg_id from messages")
         .unwrap();
     let mut rows = stm.query([]).unwrap();
     while let Ok(Some(row)) = rows.next() {
         println!(
-            "   - gen({:?}) me({})",
+            "   - gen({:?}) me({}) prev({}) con({}) id({:?})",
             row.get::<_, String>(0).unwrap(),
             row.get::<_, String>(1).unwrap(),
+            row.get::<_, String>(2).unwrap(),
+            row.get::<_, bool>(3).unwrap(),
+            row.get::<_, Option<i64>>(4).unwrap(),
         );
     }
 }
@@ -191,50 +194,95 @@ async fn test_envelope_creation() {
             envelope_disconnected.clone(),
         ));
         if i != special_idx {
+            println!("Inserting i={}", i);
             handle
                 .try_insert_authenticated_envelope(envelope_disconnected.clone())
                 .unwrap();
-            {
-                let tips = handle.get_tips_for_all_users().unwrap();
-                assert_eq!(tips.len(), 1);
-                assert_eq!(&tips[0], envelope_disconnected.inner_ref());
-            }
-            {
-                let my_tip = handle
-                    .get_tip_for_user_by_key(kp.x_only_public_key().0)
-                    .unwrap();
-                assert_eq!(&my_tip, envelope_disconnected.inner_ref());
-            }
-            {
-                let known_tips = handle.get_tip_for_known_keys().unwrap();
-                assert_eq!(known_tips.len(), 1);
-                assert_eq!(&known_tips[0], envelope_disconnected.inner_ref());
-            }
+        } else {
+            println!("Skipping i={}", i);
+        }
+        print_db(&handle);
+        let idx = if i >= special_idx { special_idx - 1 } else { i };
+        let check_envelope = envs[idx as usize].1.inner_ref();
+        {
+            let tips = handle.get_tips_for_all_users().unwrap();
+            assert_eq!(tips.len(), 1);
+            assert_eq!(&tips[0], check_envelope);
+        }
+        {
+            let my_tip = handle
+                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .unwrap();
+            assert_eq!(&my_tip, check_envelope);
+        }
+        {
+            let known_tips = handle.get_tip_for_known_keys().unwrap();
+            assert_eq!(known_tips.len(), 1);
+            assert_eq!(&known_tips[0], check_envelope);
+        }
+        if i > special_idx {
+            let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
+            assert_eq!(tips.len(), 1);
+            assert_eq!(&tips[0], envs[special_idx as usize + 1].1.inner_ref());
         }
     }
 
     {
         // handle.drop_message_by_hash(envs[5].0).unwrap();
         print_db(&handle);
+
+        handle
+            .try_insert_authenticated_envelope(envs[5].1.clone())
+            .unwrap();
+        print_db(&handle);
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
             assert_eq!(tips.len(), 1);
-            assert_eq!(&tips[0], envs[6].1.inner_ref());
+            assert_eq!(&tips[0], envs[special_idx as usize + 1].1.inner_ref());
         }
         {
             let my_tip = handle
                 .get_tip_for_user_by_key(kp.x_only_public_key().0)
                 .unwrap();
-            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), envs[9].0);
+            assert_eq!(
+                my_tip.canonicalized_hash_ref().unwrap(),
+                envs[special_idx as usize].0
+            );
         }
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
             assert_eq!(known_tips.len(), 1);
-            assert_eq!(known_tips[0].canonicalized_hash_ref().unwrap(), envs[9].0);
+            assert_eq!(
+                known_tips[0].canonicalized_hash_ref().unwrap(),
+                envs[special_idx as usize].0
+            );
         }
-        handle
-            .try_insert_authenticated_envelope(envs[5].1.clone())
+
+        let mut s = handle
+            .0
+            .prepare(include_str!("db_handle/sql/update/resolve_prev_ids.sql"))
             .unwrap();
+        loop {
+            let mut modified = 1000;
+            modified = s.execute(named_params! {":limit": modified}).unwrap();
+            println!("Marked {} rows", modified);
+            if modified == 0 {
+                break;
+            }
+        }
+        print_db(&handle);
+        let mut s = handle
+            .0
+            .prepare(include_str!("db_handle/sql/update/do_connect.sql"))
+            .unwrap();
+        loop {
+            let mut modified = 1000;
+            modified = s.execute(named_params! {":limit": modified}).unwrap();
+            println!("Marked {} rows", modified);
+            if modified == 0 {
+                break;
+            }
+        }
     }
 
     print_db(&handle);

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS messages (
             64
         )
     ) STORED,
+    connected BOOLEAN NOT NULL,
     FOREIGN KEY(genesis_id) references messages(message_id) ON DELETE CASCADE,
     FOREIGN KEY(user_id) references users(user_id),
     FOREIGN KEY(prev_msg_id) references messages(message_id) ON DELETE
@@ -32,66 +33,6 @@ CREATE TABLE IF NOT EXISTS messages (
         NULL,
         UNIQUE(received_time, hash, user_id)
 );
-
-/* Connect the new message to it's parent, if the parent exists */
-CREATE TRIGGER IF NOT EXISTS message_connectedness
-AFTER
-INSERT
-    ON messages -- when the NEW message has a direct parent
-    WHEN EXISTS (
-        SELECT
-            M.message_id
-        FROM
-            messages M
-        WHERE
-            M.hash = NEW.prev_msg
-        LIMIT
-            1
-    ) BEGIN
-UPDATE
-    messages
-SET
-    prev_msg_id = (
-        SELECT
-            M.message_id
-        FROM
-            messages M
-        WHERE
-            M.hash = NEW.prev_msg
-        LIMIT
-            1
-    )
-WHERE
-    message_id = NEW.message_id;
-
-END;
-
-/* When the new incoming message has a disconnected child,
- we update that child to have it's prev_msg_id set to match.
- 
- N.B. the select should have a AND M.gensis_id IS NULL, but this must always be
- true so we don't need it.
- */
-CREATE TRIGGER IF NOT EXISTS message_connectedness2
-AFTER
-INSERT
-    ON messages -- when there are messages who think this is their parent message
-    WHEN EXISTS (
-        SELECT
-            *
-        FROM
-            messages M
-        WHERE
-            M.prev_msg = NEW.hash
-    ) BEGIN
-UPDATE
-    messages
-SET
-    prev_msg_id = NEW.message_id
-WHERE
-    prev_msg = NEW.hash;
-
-END;
 
 CREATE TABLE IF NOT EXISTS hidden_services (
     service_id INTEGER PRIMARY KEY,

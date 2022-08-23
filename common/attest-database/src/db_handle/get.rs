@@ -165,7 +165,7 @@ where
     pub fn get_tips_for_all_users(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT body, max(height)  FROM   messages GROUP BY user_id")?;
+            .prepare(include_str!("sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
