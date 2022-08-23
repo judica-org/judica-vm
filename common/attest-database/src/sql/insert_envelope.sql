@@ -1,5 +1,5 @@
 INSERT INTO
-    messages (body, hash, user_id, received_time)
+    messages (body, hash, user_id, prev_msg_id, received_time)
 VALUES
     (
         :body,
@@ -12,5 +12,6 @@ VALUES
             WHERE
                 key = :key
         ),
+        NULL,
         :received_time
     )
