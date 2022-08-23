@@ -1,3 +1,4 @@
+use super::handle_type;
 use super::MsgDBHandle;
 use attest_messages::Envelope;
 use attest_messages::Header;
@@ -8,7 +9,10 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use serde_json::Value;
-impl<'a> MsgDBHandle<'a> {
+impl<'a, T> MsgDBHandle<'a, T>
+where
+    T: handle_type::Get + handle_type::Insert,
+{
     /// given an arbitrary inner message, generates an envelope and signs it.
     ///
     /// Calling multiple times with a given nonce would result in nonce reuse.

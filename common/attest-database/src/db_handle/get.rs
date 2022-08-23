@@ -1,5 +1,5 @@
 use super::sql_serializers::{self};
-use super::{ConsistentMessages, MsgDBHandle};
+use super::{handle_type, ConsistentMessages, MsgDBHandle};
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::CanonicalEnvelopeHash;
@@ -12,7 +12,10 @@ use sapio_bitcoin::{
     XOnlyPublicKey,
 };
 use std::collections::{BTreeMap, HashMap};
-impl<'a> MsgDBHandle<'a> {
+impl<'a, T> MsgDBHandle<'a, T>
+where
+    T: handle_type::Get,
+{
     /// Returns the secret nonce for a given public nonce
     pub fn get_secret_for_public_nonce(
         &self,

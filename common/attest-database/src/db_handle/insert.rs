@@ -1,3 +1,4 @@
+use super::handle_type;
 use super::MsgDBHandle;
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
@@ -9,7 +10,10 @@ use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
-impl<'a> MsgDBHandle<'a> {
+impl<'a, T> MsgDBHandle<'a, T>
+where
+    T: handle_type::Insert,
+{
     /// Creates a new random nonce and saves it for the given user.
     pub fn generate_fresh_nonce_for_user_by_key<C: Signing>(
         &self,
