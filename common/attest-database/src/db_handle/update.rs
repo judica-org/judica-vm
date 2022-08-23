@@ -31,7 +31,7 @@ where
             let mut s = txn.prepare(include_str!("sql/update/do_connect.sql"))?;
             loop {
                 let mut modified = 1000;
-                modified = s.execute(named_params! {":limit": modified})?;
+                modified = s.execute([])?;
                 if modified == 0 {
                     break;
                 }
