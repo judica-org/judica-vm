@@ -52,7 +52,7 @@ impl<'a> MsgDBHandle<'a> {
         key: XOnlyPublicKey,
     ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
         let pk_nonce = nonce.get_public(secp);
-        let mut stmt = self.0.prepare(include_str!("sql/insert_nonce.sql"))?;
+        let mut stmt = self.0.prepare(include_str!("sql/insert/nonce.sql"))?;
         stmt.insert(rusqlite::params![key.to_hex(), pk_nonce, nonce,])?;
         Ok(pk_nonce)
     }
@@ -118,7 +118,7 @@ impl<'a> MsgDBHandle<'a> {
     ) -> Result<Envelope, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get_message_by_height_and_user.sql"))?;
+            .prepare(include_str!("sql/get/message_by_height_and_user.sql"))?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
 
@@ -129,7 +129,7 @@ impl<'a> MsgDBHandle<'a> {
     ) -> Result<Envelope, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/message_tips_by_user.sql"))?;
+            .prepare(include_str!("sql/get/message_tips_by_user.sql"))?;
         stmt.query_row([key.to_hex()], |r| r.get(0))
     }
 
@@ -137,7 +137,7 @@ impl<'a> MsgDBHandle<'a> {
     pub fn get_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get_tips_for_known_keys.sql"))?;
+            .prepare(include_str!("sql/get/tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
@@ -146,7 +146,7 @@ impl<'a> MsgDBHandle<'a> {
     pub fn get_disconnected_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get_disconnected_tips_for_known_keys.sql"))?;
+            .prepare(include_str!("sql/get/disconnected_tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
@@ -170,10 +170,10 @@ impl<'a> MsgDBHandle<'a> {
         rusqlite::Error,
     > {
         let mut stmt = if newer.is_some() {
-            self.0.prepare(include_str!("sql/get_all_messages.sql"))?
+            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
         } else {
             self.0
-                .prepare(include_str!("sql/get_all_messages_after.sql"))?
+                .prepare(include_str!("sql/get/all_messages_after.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([i])?,
@@ -210,10 +210,10 @@ impl<'a> MsgDBHandle<'a> {
         map: &mut HashMap<CanonicalEnvelopeHash, Envelope>,
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
-            self.0.prepare(include_str!("sql/get_all_messages.sql"))?
+            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
         } else {
             self.0
-                .prepare(include_str!("sql/get_all_messages_after.sql"))?
+                .prepare(include_str!("sql/get/all_messages_after.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -232,7 +232,7 @@ impl<'a> MsgDBHandle<'a> {
     pub fn get_reused_nonces(
         &self,
     ) -> Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, rusqlite::Error> {
-        let mut stmt = self.0.prepare(include_str!("sql/get_reused_nonces.sql"))?;
+        let mut stmt = self.0.prepare(include_str!("sql/get/reused_nonces.sql"))?;
         let rows = stmt.query([])?;
         let vs = rows
             .map(|r| r.get::<_, Envelope>(0))
@@ -261,7 +261,7 @@ impl<'a> MsgDBHandle<'a> {
     ) -> Result<Result<Vec<Envelope>, (Envelope, Envelope)>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/load_all_messages_by_key.sql"))?;
+            .prepare(include_str!("sql/get/all_messages_by_key.sql"))?;
         let rows = stmt.query(params![key.to_hex()])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get(0)).collect()?;
         let _prev = sha256::Hash::hash(&[]);
@@ -369,7 +369,7 @@ impl<'a> MsgDBHandle<'a> {
         data: Authenticated<Envelope>,
     ) -> Result<(), rusqlite::Error> {
         let data = data.inner();
-        let mut stmt = self.0.prepare(include_str!("sql/insert_envelope.sql"))?;
+        let mut stmt = self.0.prepare(include_str!("sql/insert/envelope.sql"))?;
         let time = attest_util::now();
 
         stmt.insert(rusqlite::named_params! {
