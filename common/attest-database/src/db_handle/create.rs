@@ -21,11 +21,18 @@ where
         msg: Value,
         keypair: &KeyPair,
         secp: &Secp256k1<C>,
+        #[cfg(test)] bypass_envelope: Option<Envelope>,
     ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {
         let key: XOnlyPublicKey = keypair.x_only_public_key().0;
         // Side effect free...
         let tips = self.get_tips_for_all_users()?;
         let my_tip = self.get_tip_for_user_by_key(key)?;
+        #[cfg(test)]
+        let my_tip = if let Some(envelope) = bypass_envelope {
+            envelope
+        } else {
+            self.get_tip_for_user_by_key(key)?
+        };
         let sent_time_ms = attest_util::now();
         let secret = self.get_secret_for_public_nonce(my_tip.header.next_nonce)?;
         // Has side effects!
@@ -33,7 +40,12 @@ where
         let mut msg = Envelope {
             header: Header {
                 height: my_tip.header.height + 1,
-                prev_msg: my_tip.canonicalized_hash().unwrap(),
+                genesis: if my_tip.header.genesis.is_genesis() {
+                    my_tip.canonicalized_hash_ref().unwrap()
+                } else {
+                    my_tip.header.genesis
+                },
+                prev_msg: my_tip.canonicalized_hash_ref().unwrap(),
                 tips: tips
                     .iter()
                     .map(|tip| {

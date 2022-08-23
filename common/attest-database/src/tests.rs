@@ -3,7 +3,7 @@ use crate::db_handle::MsgDBHandle;
 use super::connection::MsgDB;
 use super::*;
 use attest_messages::nonce::PrecomittedNonce;
-use attest_messages::{CanonicalEnvelopeHash, Envelope, Header, Unsigned};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, Header, Unsigned};
 use fallible_iterator::FallibleIterator;
 use rusqlite::{params, Connection};
 
@@ -36,12 +36,12 @@ async fn test_reused_nonce() {
     let handle = conn.get_handle().await;
     let kp = make_test_user(&secp, &handle, test_user);
     let envelope_1 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
         .unwrap()
         .unwrap();
     let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
     let envelope_2 = handle
-        .wrap_message_in_envelope_for_user_by_key(json!("distinct"), &kp, &secp)
+        .wrap_message_in_envelope_for_user_by_key(json!("distinct"), &kp, &secp, None)
         .unwrap()
         .unwrap();
     let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
@@ -63,7 +63,7 @@ async fn test_reused_nonce() {
         );
         // Inserting more messages shouldn't change anything
         let envelope_i = handle
-            .wrap_message_in_envelope_for_user_by_key(json!({ "distinct": i }), &kp, &secp)
+            .wrap_message_in_envelope_for_user_by_key(json!({ "distinct": i }), &kp, &secp, None)
             .unwrap()
             .unwrap();
         let envelope_i = envelope_i.clone().self_authenticate(&secp).unwrap();
@@ -90,6 +90,20 @@ fn print_db(handle: &MsgDBHandle) {
             row.get::<_, String>(4).unwrap(),
         );
     }
+    println!("###########################");
+
+    let mut stm = handle
+        .0
+        .prepare("select genesis, hash from messages")
+        .unwrap();
+    let mut rows = stm.query([]).unwrap();
+    while let Ok(Some(row)) = rows.next() {
+        println!(
+            "   - gen({:?}) me({})",
+            row.get::<_, String>(0).unwrap(),
+            row.get::<_, String>(1).unwrap(),
+        );
+    }
 }
 #[tokio::test]
 async fn test_envelope_creation() {
@@ -101,7 +115,7 @@ async fn test_envelope_creation() {
 
     print_db(&handle);
     let envelope_1 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
         .unwrap()
         .unwrap();
     let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
@@ -128,7 +142,7 @@ async fn test_envelope_creation() {
     }
 
     let envelope_2 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
         .unwrap()
         .unwrap();
     let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
@@ -153,10 +167,16 @@ async fn test_envelope_creation() {
     }
     print_db(&handle);
 
-    let mut envs = vec![];
-    for i in 0..10 {
+    let mut envs: Vec<(CanonicalEnvelopeHash, Authenticated<Envelope>)> = vec![];
+    let special_idx = 5;
+    for i in 0..10isize {
         let envelope_disconnected = handle
-            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp)
+            .wrap_message_in_envelope_for_user_by_key(
+                Value::Null,
+                &kp,
+                &secp,
+                envs.get((i - 1) as usize).map(|a| a.1.inner_ref().clone()),
+            )
             .unwrap()
             .unwrap();
         let envelope_disconnected = envelope_disconnected
@@ -170,29 +190,31 @@ async fn test_envelope_creation() {
                 .unwrap(),
             envelope_disconnected.clone(),
         ));
-        handle
-            .try_insert_authenticated_envelope(envelope_disconnected.clone())
-            .unwrap();
-        {
-            let tips = handle.get_tips_for_all_users().unwrap();
-            assert_eq!(tips.len(), 1);
-            assert_eq!(&tips[0], envelope_disconnected.inner_ref());
-        }
-        {
-            let my_tip = handle
-                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+        if i != special_idx {
+            handle
+                .try_insert_authenticated_envelope(envelope_disconnected.clone())
                 .unwrap();
-            assert_eq!(&my_tip, envelope_disconnected.inner_ref());
-        }
-        {
-            let known_tips = handle.get_tip_for_known_keys().unwrap();
-            assert_eq!(known_tips.len(), 1);
-            assert_eq!(&known_tips[0], envelope_disconnected.inner_ref());
+            {
+                let tips = handle.get_tips_for_all_users().unwrap();
+                assert_eq!(tips.len(), 1);
+                assert_eq!(&tips[0], envelope_disconnected.inner_ref());
+            }
+            {
+                let my_tip = handle
+                    .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                    .unwrap();
+                assert_eq!(&my_tip, envelope_disconnected.inner_ref());
+            }
+            {
+                let known_tips = handle.get_tip_for_known_keys().unwrap();
+                assert_eq!(known_tips.len(), 1);
+                assert_eq!(&known_tips[0], envelope_disconnected.inner_ref());
+            }
         }
     }
 
     {
-        handle.drop_message_by_hash(envs[5].0).unwrap();
+        // handle.drop_message_by_hash(envs[5].0).unwrap();
         print_db(&handle);
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
@@ -215,10 +237,11 @@ async fn test_envelope_creation() {
             .unwrap();
     }
 
+    print_db(&handle);
     let kp_2 = make_test_user(&secp, &handle, "TestUser2".into());
 
     let envelope_3 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp_2, &secp)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp_2, &secp, None)
         .unwrap()
         .unwrap();
     let envelope_3 = envelope_3.clone().self_authenticate(&secp).unwrap();

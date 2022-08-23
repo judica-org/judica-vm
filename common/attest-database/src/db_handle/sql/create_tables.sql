@@ -1,3 +1,5 @@
+PRAGMA foreign_keys = ON;
+
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     nickname TEXT,
@@ -14,6 +16,7 @@ CREATE TABLE IF NOT EXISTS messages (
     height INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.height')) STORED,
     sent_time INTEGER NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.sent_time_ms')) STORED,
     prev_msg TEXT NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.prev_msg')) STORED,
+    genesis TEXT NOT NULL GENERATED ALWAYS AS (json_extract(body, '$.header.genesis')) STORED,
     nonce TEXT NOT NULL GENERATED ALWAYS AS (
         substr(
             json_extract(body, '$.header.unsigned.signature'),
@@ -32,7 +35,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TRIGGER IF NOT EXISTS message_connectedness
 AFTER
 INSERT
-    ON messages
+    ON messages -- when the NEW message has a direct parent
     WHEN EXISTS (
         SELECT
             M.message_id
@@ -58,7 +61,6 @@ SET
     )
 WHERE
     message_id = NEW.message_id;
-
 END;
 
 /* When the new incoming message has a disconnected child,
@@ -70,7 +72,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS message_connectedness2
 AFTER
 INSERT
-    ON messages
+    ON messages -- when there are messages who think this is their parent message
     WHEN EXISTS (
         SELECT
             *
@@ -85,7 +87,6 @@ SET
     prev_msg_id = NEW.message_id
 WHERE
     prev_msg = NEW.hash;
-
 END;
 
 CREATE TABLE IF NOT EXISTS hidden_services (
