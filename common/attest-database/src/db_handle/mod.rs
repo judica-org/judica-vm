@@ -8,6 +8,7 @@ mod create;
 mod get;
 mod insert;
 mod setup;
+mod update;
 pub struct MsgDBHandle<'a, T=handle_type::All>(pub MutexGuard<'a, Connection>,pub PhantomData<T>);
 
 pub enum ConsistentMessages {
@@ -19,8 +20,10 @@ pub mod handle_type {
     pub trait Insert {}
     pub trait Get {}
     pub trait Setup {}
+    pub trait Update{}
     pub struct All;
     impl Insert for All {}
     impl Get for All {}
     impl Setup for All {}
+    impl Update for All {}
 }

@@ -113,7 +113,7 @@ async fn test_envelope_creation() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
     let test_user = "TestUser".into();
-    let handle = conn.get_handle().await;
+    let mut handle = conn.get_handle().await;
     let kp = make_test_user(&secp, &handle, test_user);
 
     print_db(&handle);
@@ -258,31 +258,7 @@ async fn test_envelope_creation() {
             );
         }
 
-        let mut s = handle
-            .0
-            .prepare(include_str!("db_handle/sql/update/resolve_prev_ids.sql"))
-            .unwrap();
-        loop {
-            let mut modified = 1000;
-            modified = s.execute(named_params! {":limit": modified}).unwrap();
-            println!("Marked {} rows", modified);
-            if modified == 0 {
-                break;
-            }
-        }
-        print_db(&handle);
-        let mut s = handle
-            .0
-            .prepare(include_str!("db_handle/sql/update/do_connect.sql"))
-            .unwrap();
-        loop {
-            let mut modified = 1000;
-            modified = s.execute(named_params! {":limit": modified}).unwrap();
-            println!("Marked {} rows", modified);
-            if modified == 0 {
-                break;
-            }
-        }
+        handle.attach_tips().unwrap();
     }
 
     print_db(&handle);
