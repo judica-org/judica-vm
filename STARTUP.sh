@@ -26,7 +26,8 @@ export ATTEST_CONFIG_JSON="{\
                 \"tor\":{\"directory\":\"$ROOTPATH/attest/tor\",\
                          \"socks_port\":14457,\
                          \"application_port\":13328,\
-                         \"application_path\": \"service1\"}\
+                         \"application_path\": \"service1\"},\
+                \"control\" : {\"port\": 15532}\
                             }"
 export GAME_HOST_CONFIG_JSON="{\
                 \"tor\":{\"directory\":\"$ROOTPATH/game-host/tor\", \"socks_port\":14458,\"application_port\":13329 ,\"application_path\": \"service1\"},\
