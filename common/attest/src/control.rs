@@ -20,16 +20,20 @@ use tower_http::cors::{Any, CorsLayer};
 #[derive(Serialize, Deserialize)]
 pub struct Status {
     peers: Vec<(String, u16)>,
+    tips: Vec<Envelope>,
 }
 async fn get_status(
     db: Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<Status>), (StatusCode, String)> {
-    let r =
-        db.0.get_handle()
-            .await
-            .get_all_hidden_services()
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let status = Status { peers: r };
+    let handle = db.0.get_handle().await;
+    let peers = handle
+        .get_all_hidden_services()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let tips = handle.get_tips_for_all_users()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let status = Status { peers, tips };
+
     Ok((
         Response::builder()
             .status(200)
