@@ -7,7 +7,9 @@ import { PowerPlant, PowerPlants } from './power-plant-list';
 import EnergyExchange, { NFTSale } from './energy-exchange';
 import Globe from 'react-globe.gl';
 // import { MakeGlobe } from './globe-display';
-import CustomGlobe, { MakeGlobe } from './CustomGlobe';
+import React from 'react';
+import earth from './earth-dark.jpeg';
+import World from "./CustomGlobe";
 
 function MoveForm() {
   const [schema, set_schema] = useState<null | any>(null);
@@ -120,7 +122,7 @@ const invoke_once = () => {
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
   const [power_plants, set_power_plants] = useState<PowerPlant[]>([]); // use empty list for now so it will render
-  const [countries, setCountries] = useState<{features: any[]}>({ features: [] });
+  const [countries, setCountries] = useState<{ features: any[] }>({ features: [] });
 
   useEffect(() => {
     setCountries(countries);
@@ -149,16 +151,7 @@ function App() {
     <div className="App">
       {game_board && <GameBoard g={game_board}></GameBoard>}
       {power_plants && <PowerPlants power_plants={power_plants}></PowerPlants>}
-      {<Globe width={500}
-        height={500}
-        globeImageUrl={"//unpkg.com/three-globe/example/img/earth-dark.jpg"}
-        hexPolygonsData={countries.features}
-        hexPolygonResolution={3}
-        hexPolygonMargin={0.3}
-        hexPolygonColor={useCallback(() => "#1b66b1", [])}
-      ></Globe>}
-      {<CustomGlobe></CustomGlobe>}
-      {<MakeGlobe></MakeGlobe>}
+      <World></World>
       {<EnergyExchange listings={[{
         price: 937,
         currency: 'donuts',
