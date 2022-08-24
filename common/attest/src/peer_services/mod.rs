@@ -2,6 +2,8 @@ use tokio::{sync::mpsc::error::TryRecvError, time::MissedTickBehavior};
 
 use attest_util::INFER_UNIT;
 
+use crate::attestations::client::AttestationClient;
+
 use super::*;
 
 #[derive(Hash, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
@@ -15,7 +17,7 @@ pub fn startup(
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     let jh = tokio::spawn(async move {
         let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", config.tor.socks_port))?;
-        let client = reqwest::Client::builder().proxy(proxy).build()?;
+        let client = AttestationClient(reqwest::Client::builder().proxy(proxy).build()?);
         let secp = Arc::new(Secp256k1::new());
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);

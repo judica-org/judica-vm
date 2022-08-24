@@ -1,3 +1,6 @@
+use crate::attestations::client::AttestationClient;
+use crate::attestations::query::Tips;
+
 use super::*;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
@@ -9,7 +12,7 @@ use tokio::time::MissedTickBehavior;
 
 pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
     secp: Arc<Secp256k1<C>>,
-    client: reqwest::Client,
+    client: AttestationClient,
     url: (String, u16),
     conn: MsgDB,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
@@ -110,7 +113,7 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
 /// tip_fetcher periodically (randomly) pings a hidden service for it's
 /// latest tips
 pub(crate) fn tip_fetcher(
-    client: reqwest::Client,
+    client: AttestationClient,
     (url, port): (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
@@ -119,12 +122,7 @@ pub(crate) fn tip_fetcher(
     tokio::spawn(async move {
         loop {
             tracing::debug!("Sending message...");
-            let resp: Vec<Envelope> = client
-                .get(format!("http://{}:{}/tips", url, port))
-                .send()
-                .await?
-                .json()
-                .await?;
+            let resp: Vec<Envelope> = client.get_latest_tips(&url, port).await?;
             tx_envelope.send(resp)?;
             let d = Duration::from_secs(15)
                 + Duration::from_millis(rand::thread_rng().gen_range(0, 1000));
@@ -137,7 +135,7 @@ pub(crate) fn tip_fetcher(
 /// tip_resolver ingests a Vec<Hash> and queries a service for the envelope
 /// of those hashes, then sends those envelopers for processing.
 pub(crate) fn tip_resolver(
-    client: reqwest::Client,
+    client: AttestationClient,
     (url, port): (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<CanonicalEnvelopeHash>>,
@@ -145,13 +143,7 @@ pub(crate) fn tip_resolver(
     tokio::spawn(async move {
         loop {
             if let Some(tips) = rx.recv().await {
-                let resp: Vec<Envelope> = client
-                    .get(format!("http://{}:{}/tips", url, port))
-                    .query(&Tips { tips })
-                    .send()
-                    .await?
-                    .json()
-                    .await?;
+                let resp = client.get_tips(Tips { tips }, &url, port).await?;
                 tx_envelope.send(resp)?;
             }
         }
