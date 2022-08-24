@@ -1,5 +1,5 @@
 import FactoryIcon from '@mui/icons-material/Factory';
-import { makeStyles, Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, createStyles } from '@mui/material';
+import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, createStyles } from '@mui/material';
 
 export type NFTSale = {
   price: number,
@@ -8,39 +8,6 @@ export type NFTSale = {
   transfer_count: number,
   // add plant type
 }
-
-// const useStyles = makeStyles(({ spacing }: {spacing: Spacing}) => createStyles({
-//   card: {
-//     marginTop: 40,
-//     borderRadius: spacing(0.5),
-//     transition: '0.3s',
-//     width: '90%',
-//     overflow: 'initial',
-//     background: '#ffffff',
-//   },
-//   content: {
-//     paddingTop: 0,
-//     textAlign: 'left',
-//     overflowX: 'auto',
-//     '& table': {
-//       marginBottom: 0,
-//     }
-//   },
-//   root: ({ bgColor = 'primary.main', offset = '-40px', ...styles }) => ({
-//     backgroundColor: 'grey',
-//     borderRadius: spacing(2),
-//     margin: `${offset} auto 0`,
-//     width: '88%',
-//     ...styles,
-//   }),
-//   title: {
-//     color: 'white',
-//     fontWeight: 'bold',
-//   },
-//   subheader: {
-//     color: 'rgba(255, 255, 255, 0.76)',
-//   },
-// }));
 
 // const EnergyExchange = React.memo(function EnergyExchangeWithHeader({ listings }: { listings: NFTSale[] }) {
   export const EnergyExchange = ({listings}: {listings: NFTSale[]}) => {

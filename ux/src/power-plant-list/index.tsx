@@ -8,6 +8,7 @@ export type PowerPlant = {
   plant_type: string //how does PlantType enum show up
   watts: number,
   coordinates: number[],
+  owner: number,
   has_miners: boolean,
   for_sale: boolean,
 }
