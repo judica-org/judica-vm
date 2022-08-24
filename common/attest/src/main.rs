@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::debug!("Database Connection Setup");
     let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
     let mut tor_service = tor::start(config.clone());
-    let mut fetching_client = peer_services::client_fetching(config.clone(), mdb.clone());
+    let mut fetching_client = peer_services::startup(config.clone(), mdb.clone());
     let mut control_server = control::run(config.clone(), mdb.clone()).await;
 
     tracing::debug!("Starting Subservices");
