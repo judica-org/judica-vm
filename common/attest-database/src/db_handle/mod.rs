@@ -4,11 +4,11 @@ use super::sql_serializers::{self};
 use rusqlite::Connection;
 use tokio::sync::MutexGuard;
 
-mod create;
-mod get;
-mod insert;
-mod setup;
-mod update;
+pub mod create;
+pub mod get;
+pub mod insert;
+pub mod setup;
+pub mod update;
 pub struct MsgDBHandle<'a, T=handle_type::All>(pub MutexGuard<'a, Connection>,pub PhantomData<T>);
 
 pub enum ConsistentMessages {

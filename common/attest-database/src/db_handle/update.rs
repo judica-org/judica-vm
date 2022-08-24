@@ -29,4 +29,20 @@ where
         let mut s = self.0.prepare(include_str!("sql/update/do_connect.sql"))?;
         s.execute([])
     }
+
+    /// adds a hidden service to our connection list
+    /// Won't fail if already exists
+    pub fn upsert_hidden_service(
+        &self,
+        s: String,
+        port: u16,
+        fetch_from: Option<bool>,
+        push_to: Option<bool>,
+    ) -> Result<(), rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare(include_str!("sql/update/hidden_service.sql"))?;
+        stmt.insert(rusqlite::named_params!{":service_url":s, ":port":port, ":fetch_from":fetch_from, ":push_to": push_to})?;
+        Ok(())
+    }
 }

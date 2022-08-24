@@ -1,5 +1,5 @@
 use crate::Config;
-use attest_database::connection::MsgDB;
+use attest_database::{connection::MsgDB, db_handle::get::PeerInfo};
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
@@ -19,7 +19,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Serialize, Deserialize)]
 pub struct Status {
-    peers: Vec<(String, u16)>,
+    peers: Vec<PeerInfo>,
     tips: Vec<Envelope>,
 }
 async fn get_status(
@@ -29,7 +29,8 @@ async fn get_status(
     let peers = handle
         .get_all_hidden_services()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let tips = handle.get_tips_for_all_users()
+    let tips = handle
+        .get_tips_for_all_users()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let status = Status { peers, tips };
@@ -56,7 +57,7 @@ async fn listen_to_service(
     let r =
         db.0.get_handle()
             .await
-            .insert_hidden_service(subscribe.url, subscribe.port)
+            .upsert_hidden_service(subscribe.url, subscribe.port, Some(true), Some(true))
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Peer {
-    pub tor: String,
+    pub service_url: String,
     pub port: u16,
 }
 #[derive(Serialize, Deserialize)]

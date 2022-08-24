@@ -39,11 +39,17 @@ where
 
     /// adds a hidden service to our connection list
     /// Won't fail if already exists
-    pub fn insert_hidden_service(&self, s: String, port: u16) -> Result<(), rusqlite::Error> {
+    pub fn insert_hidden_service(
+        &self,
+        s: String,
+        port: u16,
+        fetch_from: bool,
+        push_to: bool,
+    ) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("INSERT OR IGNORE INTO hidden_services (service_url, port) VALUES (?,?)")?;
-        stmt.insert(rusqlite::params![s, port])?;
+            .prepare(include_str!("sql/insert/hidden_service.sql"))?;
+        stmt.insert(rusqlite::named_params!{":service_url":s, ":port":port, ":fetch_from":fetch_from, ":push_to": push_to})?;
         Ok(())
     }
 

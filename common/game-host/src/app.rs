@@ -1,5 +1,5 @@
 use crate::Config;
-use attest_database::connection::MsgDB;
+use attest_database::{connection::MsgDB, db_handle::get::PeerInfo};
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use axum::{
     extract::Query,
@@ -27,7 +27,14 @@ pub async fn get_users(
         .get_all_hidden_services()
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
         .into_iter()
-        .map(|(tor, port)| Peer { tor, port })
+        .map(
+            |PeerInfo {
+                 service_url,
+                 port,
+                 fetch_from,
+                 push_to,
+             }| Peer { service_url, port },
+        )
         .collect();
     Ok((
         Response::builder()
@@ -46,7 +53,9 @@ pub async fn add_user(
     {
         tracing::debug!("Inserting Into Database");
         let locked = db.get_handle().await;
-        locked.insert_hidden_service(peer.tor, peer.port).ok();
+        locked
+            .upsert_hidden_service(peer.service_url, peer.port, Some(true), Some(true))
+            .ok();
     }
     Ok((
         Response::builder()
