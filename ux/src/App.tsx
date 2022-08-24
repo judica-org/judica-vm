@@ -1,12 +1,10 @@
 import { appWindow } from '@tauri-apps/api/window';
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import './App.css';
 import Form, { FormSubmit } from "@rjsf/core";
-import { PowerPlant, PowerPlants } from './power-plant-list';
+import { PowerPlant} from './power-plant-list';
 import EnergyExchange, { NFTSale } from './energy-exchange';
-import Globe from 'react-globe.gl';
-// import { MakeGlobe } from './globe-display';
-import CustomGlobe, { MakeGlobe } from './CustomGlobe';
+import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials';
 import { tauri_host } from './tauri_host';
 import { SwitchToGame } from './SwitchToGame';
@@ -142,28 +140,11 @@ function App() {
     }
   }, [game_board, countries, setCountries]);
 
-  // update deps, 
-  // image file should be local
-  // tauri toolbar - add a reload button?
-  // when there's no background its unhappy
-  // bug in the FE rust logic - because no game initialized just keeps checking for game. <-fix ux-scheduler branch - merge in.
-
-
   return (
     <div className="App">
       {game_board && <GameBoard g={game_board}></GameBoard>}
       <RawMaterialsMarket></RawMaterialsMarket>
-      {power_plants && <PowerPlants power_plants={power_plants}></PowerPlants>}
-      {<Globe width={500}
-        height={500}
-        globeImageUrl={"//unpkg.com/three-globe/example/img/earth-dark.jpg"}
-        hexPolygonsData={countries.features}
-        hexPolygonResolution={3}
-        hexPolygonMargin={0.3}
-        hexPolygonColor={useCallback(() => "#1b66b1", [])}
-      ></Globe>}
-      {<CustomGlobe></CustomGlobe>}
-      {<MakeGlobe></MakeGlobe>}
+      <WorkingGlobe power_plants={power_plants}></WorkingGlobe>
       {<EnergyExchange listings={[{
         price: 937,
         currency: 'donuts',
