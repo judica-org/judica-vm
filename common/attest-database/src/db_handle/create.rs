@@ -21,14 +21,12 @@ where
         msg: Value,
         keypair: &KeyPair,
         secp: &Secp256k1<C>,
-        #[cfg(test)] bypass_envelope: Option<Envelope>,
+        dangerous_bypass_tip: Option<Envelope>,
     ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {
         let key: XOnlyPublicKey = keypair.x_only_public_key().0;
         // Side effect free...
         let tips = self.get_tips_for_all_users()?;
-        let my_tip = self.get_tip_for_user_by_key(key)?;
-        #[cfg(test)]
-        let my_tip = if let Some(envelope) = bypass_envelope {
+        let my_tip = if let Some(envelope) = dangerous_bypass_tip {
             envelope
         } else {
             self.get_tip_for_user_by_key(key)?

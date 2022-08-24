@@ -107,7 +107,7 @@ async fn make_move_inner(
     let sk = keys.get(&user).ok_or(())?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
     let msg = handle
-        .wrap_message_in_envelope_for_user_by_key(v, &keypair, secp.inner())
+        .wrap_message_in_envelope_for_user_by_key(v, &keypair, secp.inner(), None)
         .ok()
         .ok_or(())?
         .ok()
