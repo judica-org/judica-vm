@@ -110,36 +110,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut control_server = control::run(config.clone(), mdb.clone()).await;
 
     tracing::debug!("Starting Subservices");
-    tokio::select!(
+    let mut skip = "";
+    let to_skip = tokio::select!(
     a = &mut attestation_server => {
         tracing::debug!("Error From Attestation Server: {:?}", a);
+        skip = "attest";
+
     },
     b = &mut tor_service => {
         tracing::debug!("Error From Tor Server: {:?}", b);
+        skip ="tor";
     },
     c = &mut fetching_client => {
         tracing::debug!("Error From Fetching Server: {:?}", c);
+        skip = "fetch";
     },
     d = &mut checkpoint_service => {
         tracing::debug!("Error From Checkpoint Server: {:?}", d);
+        skip = "checkpoint";
     }
     e = &mut control_server => {
         tracing::debug!("Error From Control Server: {:?}", e);
+        skip = "control";
     });
     tracing::debug!("Shutting Down Subservices");
     quit.store(true, Ordering::Relaxed);
-    attestation_server.abort();
-    tor_service.abort();
-    fetching_client.abort();
-    checkpoint_service.abort();
-    control_server.abort();
-    futures::future::join_all([
-        tor_service,
-        attestation_server,
-        fetching_client,
-        checkpoint_service,
-        control_server,
-    ])
+    let svcs = [
+        ("tor", tor_service),
+        ("attest", attestation_server),
+        ("fetch", fetching_client),
+        ("checkpoint", checkpoint_service),
+        ("control", control_server),
+    ];
+    for svc in &svcs {
+        tracing::debug!("Abort Subservice: {}", svc.0);
+        svc.1.abort();
+    }
+    futures::future::join_all(svcs.into_iter().filter_map(|x| {
+        if x.0 == skip {
+            tracing::debug!("Skipping Wait for Terminated Subservice: {}", x.0);
+            None
+        } else {
+            tracing::debug!("Waiting for Subservice: {}", x.0);
+            Some(x.1)
+        }
+    }))
     .await;
 
     tracing::debug!("Exiting");
