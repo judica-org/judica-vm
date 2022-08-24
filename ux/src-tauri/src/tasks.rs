@@ -257,7 +257,8 @@ pub(crate) fn start_game(
             if let Some(game) = game.as_mut() {
                 game.board.play(game_move, s);
                 // TODO: Maybe notify less often?
-                game.notify.notify_waiters();
+                game.should_notify.notify_waiters();
+                println!("NOTIFYING");
             }
         }
     });
