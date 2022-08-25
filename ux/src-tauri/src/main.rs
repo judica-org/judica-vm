@@ -163,7 +163,7 @@ pub struct Database(OnceCell<MsgDB>);
 impl Database {
     async fn get(&self) -> Result<MsgDB, Box<dyn Error>> {
         self.0
-            .get_or_try_init(|| setup_db("attestations.mining-game"))
+            .get_or_try_init(|| setup_db("attestations.mining-game", None))
             .await
             .map(|v| v.clone())
     }
