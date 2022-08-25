@@ -38,12 +38,12 @@ async fn test_reused_nonce() {
     let handle = conn.get_handle().await;
     let kp = make_test_user(&secp, &handle, test_user);
     let envelope_1 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None, None)
         .unwrap()
         .unwrap();
     let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
     let envelope_2 = handle
-        .wrap_message_in_envelope_for_user_by_key(json!("distinct"), &kp, &secp, None)
+        .wrap_message_in_envelope_for_user_by_key(json!("distinct"), &kp, &secp, None, None)
         .unwrap()
         .unwrap();
     let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
@@ -64,7 +64,7 @@ async fn test_reused_nonce() {
         );
         // Inserting more messages shouldn't change anything
         let envelope_i = handle
-            .wrap_message_in_envelope_for_user_by_key(json!({ "distinct": i }), &kp, &secp, None)
+            .wrap_message_in_envelope_for_user_by_key(json!({ "distinct": i }), &kp, &secp, None, None)
             .unwrap()
             .unwrap();
         let envelope_i = envelope_i.clone().self_authenticate(&secp).unwrap();
@@ -161,7 +161,7 @@ async fn test_envelope_creation() {
         let kp = make_test_user(&secp, &handle, test_user);
 
         let envelope_1 = handle
-            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
+            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None, None)
             .unwrap()
             .unwrap();
         let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
@@ -171,7 +171,7 @@ async fn test_envelope_creation() {
         verify_tip(&handle, &envelope_1, user_id, kp, &all_past_tips);
 
         let envelope_2 = handle
-            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None)
+            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None, None)
             .unwrap()
             .unwrap();
         let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
@@ -188,6 +188,7 @@ async fn test_envelope_creation() {
                     Value::Null,
                     &kp,
                     &secp,
+                    None,
                     envs.get((i - 1) as usize).map(|a| a.1.inner_ref().clone()),
                 )
                 .unwrap()
@@ -282,7 +283,7 @@ async fn test_envelope_creation() {
     let kp_2 = make_test_user(&secp, &handle, "TestUser2".into());
 
     let envelope_3 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp_2, &secp, None)
+        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp_2, &secp, None, None)
         .unwrap()
         .unwrap();
     let envelope_3 = envelope_3.clone().self_authenticate(&secp).unwrap();
