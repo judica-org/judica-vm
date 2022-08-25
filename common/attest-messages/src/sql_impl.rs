@@ -1,6 +1,5 @@
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 use crate::{CanonicalEnvelopeHash, Envelope};
-use ruma_serde::CanonicalJsonValue;
 use rusqlite::types::{FromSql, FromSqlError};
 use rusqlite::ToSql;
 use sapio_bitcoin::hashes::hex::ToHex;
@@ -13,10 +12,11 @@ impl ToSql for Envelope {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         let s = serde_json::to_value(self)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        let c: BTreeMap<String, CanonicalJsonValue> = serde_json::from_value(s)
+        let c: BTreeMap<String, ruma_serde::CanonicalJsonValue> = serde_json::from_value(s)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        Ok(ruma_signatures::canonical_json(&c)
+        Ok(ruma_serde::to_canonical_value(&c)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?
+            .to_string()
             .into())
     }
 }

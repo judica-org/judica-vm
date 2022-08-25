@@ -95,10 +95,7 @@ dependencies = [
 name = "attest-messages"
 version = "0.1.0"
 dependencies = [
- "fallible-iterator",
- "futures",
  "ruma-serde",
- "ruma-signatures",
  "rusqlite",
  "sapio-bitcoin",
  "serde",
@@ -206,16 +203,7 @@ version = "0.1.0"
 dependencies = [
  "attest-messages",
  "bitcoincore-rpc-async",
- "ed25519-dalek",
- "fallible-iterator",
- "futures",
- "ruma-serde",
- "ruma-signatures",
- "rusqlite",
  "sapio-bitcoin",
- "serde",
- "serde_derive",
- "serde_json",
  "tokio",
 ]
 

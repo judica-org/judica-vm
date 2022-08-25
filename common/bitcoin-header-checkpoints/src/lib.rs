@@ -2,7 +2,6 @@ use attest_messages::checkpoints::BitcoinCheckPoints;
 use bitcoincore_rpc_async as rpc;
 use rpc::{Client, RpcApi};
 use sapio_bitcoin::BlockHash;
-use serde::{Deserialize, Serialize};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
