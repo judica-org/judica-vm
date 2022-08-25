@@ -1,4 +1,10 @@
-use tokio::{sync::mpsc::error::TryRecvError, time::MissedTickBehavior};
+use tokio::{
+    sync::{
+        mpsc::Receiver,
+        oneshot::{self, Sender},
+    },
+    time::MissedTickBehavior,
+};
 
 use attest_util::INFER_UNIT;
 
@@ -6,15 +12,20 @@ use crate::attestations::client::AttestationClient;
 
 use super::*;
 
-#[derive(Hash, Eq, Ord, PartialEq, PartialOrd, Copy, Clone)]
+#[derive(Hash, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize)]
 pub enum PeerType {
     Push,
     Fetch,
 }
+
+pub enum PeerQuery {
+    RunningTasks(Sender<Vec<(String, u16, PeerType)>>),
+}
 pub fn startup(
     config: Arc<Config>,
     db: MsgDB,
-    quit: Arc<AtomicBool>
+    quit: Arc<AtomicBool>,
+    mut status: Receiver<PeerQuery>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     let jh = tokio::spawn(async move {
         let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", config.tor.socks_port))?;
@@ -22,11 +33,25 @@ pub fn startup(
         let secp = Arc::new(Secp256k1::new());
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        type Inboundness = bool;
         let mut task_set: HashMap<(String, u16, PeerType), JoinHandle<Result<(), _>>> =
             HashMap::new();
-        loop {
-            interval.tick().await;
+        'outer: loop {
+            tokio::select! {
+                query = status.recv() => {
+                    match query {
+                        Some(query) => {
+                            match query {
+                                PeerQuery::RunningTasks(r) => {
+                                    r.send(task_set.keys().cloned().collect());
+                                },
+                            }
+                        }
+                        None => continue 'outer,
+                    }
+                }
+                _ = interval.tick() => { // do main loop
+                }
+            };
             let mut create_services: HashSet<_> = db
                 .get_handle()
                 .await
@@ -69,7 +94,7 @@ pub fn startup(
                                 client,
                                 (url.0, url.1),
                                 db.clone(),
-                                quit.clone()
+                                quit.clone(),
                             )),
                         );
                     }

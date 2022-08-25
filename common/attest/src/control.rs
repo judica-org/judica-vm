@@ -1,4 +1,7 @@
-use crate::Config;
+use crate::{
+    peer_services::{PeerQuery, PeerType},
+    Config,
+};
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo};
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use attest_util::{AbstractResult, INFER_UNIT};
@@ -15,15 +18,18 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{net::SocketAddr, sync::Arc};
+use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Serialize, Deserialize)]
 pub struct Status {
     peers: Vec<PeerInfo>,
     tips: Vec<Envelope>,
+    peer_connections: Vec<(String, u16, PeerType)>,
 }
 async fn get_status(
     db: Extension<MsgDB>,
+    peer_status: Extension<Sender<PeerQuery>>,
 ) -> Result<(Response<()>, Json<Status>), (StatusCode, String)> {
     let handle = db.0.get_handle().await;
     let peers = handle
@@ -32,8 +38,17 @@ async fn get_status(
     let tips = handle
         .get_tips_for_all_users()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let (tx, rx) = oneshot::channel();
+    peer_status.send(PeerQuery::RunningTasks(tx)).await;
+    let peer_connections = rx
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let status = Status { peers, tips };
+    let status = Status {
+        peers,
+        tips,
+        peer_connections,
+    };
 
     Ok((
         Response::builder()
@@ -68,7 +83,11 @@ async fn listen_to_service(
         Json(json!({"success":true})),
     ))
 }
-pub async fn run(config: Arc<Config>, db: MsgDB) -> tokio::task::JoinHandle<AbstractResult<()>> {
+pub async fn run(
+    config: Arc<Config>,
+    db: MsgDB,
+    peer_status: Sender<PeerQuery>,
+) -> tokio::task::JoinHandle<AbstractResult<()>> {
     return tokio::spawn(async move {
         // build our application with a route
         let app = Router::new()
@@ -86,7 +105,8 @@ pub async fn run(config: Arc<Config>, db: MsgDB) -> tokio::task::JoinHandle<Abst
                         .allow_origin(Any),
                 ),
             )
-            .layer(Extension(db));
+            .layer(Extension(db))
+            .layer(Extension(peer_status));
 
         // run our app with hyper
         // `axum::Server` is a re-export of `hyper::Server`

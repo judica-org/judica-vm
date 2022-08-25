@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc::channel;
 use tokio::task::JoinHandle;
 mod attestations;
 mod control;
@@ -105,8 +106,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::debug!("Database Connection Setup");
     let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
     let mut tor_service = tor::start(config.clone());
-    let mut fetching_client = peer_services::startup(config.clone(), mdb.clone(), quit.clone());
-    let mut control_server = control::run(config.clone(), mdb.clone()).await;
+    let (tx_peer_status, rx_peer_status) = channel(1);
+    let mut fetching_client =
+        peer_services::startup(config.clone(), mdb.clone(), quit.clone(), rx_peer_status);
+    let mut control_server = control::run(config.clone(), mdb.clone(), tx_peer_status).await;
 
     tracing::debug!("Starting Subservices");
     let mut skip = "";
