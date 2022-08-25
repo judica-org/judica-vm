@@ -115,7 +115,7 @@ async fn init_main(
         .map_err(|e| format!("{}", e))?;
     tracing::debug!("Database Connection Setup");
     let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
-    let mut tor_service = tor::start(config.clone());
+    let mut tor_service = tor::start(config.clone()).await?;
     let (tx_peer_status, rx_peer_status) = channel(1);
     let mut fetching_client =
         peer_services::startup(config.clone(), mdb.clone(), quit.clone(), rx_peer_status);
@@ -212,58 +212,68 @@ mod test {
             },
         }
     }
+    fn get_test_id() -> Option<u16> {
+        let test_one = std::env::var("ATTEST_TEST_ONE").is_ok();
+        let test_two = std::env::var("ATTEST_TEST_TWO").is_ok();
+        if !test_one && !test_two {
+            tracing::debug!("Skipping Test, not enabled");
+            return None;
+        } else {
+            tracing::debug!("One XOR Two? {}", test_one ^ test_two);
+            assert!(test_one ^ test_two);
+        }
+        Some(if test_one { 0 } else { 1 })
+    }
     macro_rules! test_setup {
         {$name:ident, $code:tt} => {
     #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
     async fn $name() {
-        let btc_config = get_btc_config();
-        let quit1 = Arc::new(AtomicBool::new(false));
-        let dir = temp_dir();
-        let tor_dir = dir.join("tor");
-        let config1 = Config {
-            bitcoin: btc_config.clone(),
-            subname: "cf1".into(),
-            tor: TorConfig {
-                directory: tor_dir,
-                attestation_port: 12556,
-                socks_port: 13556,
-            },
-            control: ControlConfig { port: 14556 },
-            prefix: Some(dir),
+        let test_id = if let Some(tid) = get_test_id() {
+            tid
+        } else {
+            return
         };
-        let quit2 = Arc::new(AtomicBool::new(false));
-        let dir = temp_dir();
+        let btc_config = get_btc_config();
+        let quit = Arc::new(AtomicBool::new(false));
+        let mut dir = temp_dir();
+        let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
+        use sapio_bitcoin::secp256k1::rand::Rng;
+        let bytes : [u8; 16] = rng.gen();
+        use sapio_bitcoin::hashes::hex::ToHex;
+        dir.push(format!("test-rust-{}",bytes.to_hex()));
+        tracing::debug!("Using tmpdir: {}", dir.display());
         let tor_dir = dir.join("tor");
-        let config2 = Config {
+        let config = Config {
             bitcoin: btc_config.clone(),
-            subname: "cf2".into(),
+            subname: format!("subname-{}", test_id),
             tor: TorConfig {
                 directory: tor_dir,
-                attestation_port: 12557,
-                socks_port: 13557,
+                attestation_port: 12556 + test_id,
+                socks_port: 13556 + test_id,
             },
-            control: ControlConfig { port: 14557 },
+            control: ControlConfig { port: 14556 +test_id },
             prefix: Some(dir),
         };
 
         let main_task = {
-            let quit1 = quit1.clone();
-            let quit2 = quit2.clone();
+            let quit = quit.clone();
             spawn(async move {
                 $code
-                quit1.store(true, Ordering::Relaxed);
-                quit2.store(true, Ordering::Relaxed);
-                INFER_UNIT
+                quit.store(true, Ordering::Relaxed);
+                ()
             })
         };
+        let quit = quit.clone();
+        let task_one = spawn(async  move{
+            init_main(Arc::new(config), quit).await
+        });
         tokio::select!{
             _ = main_task => {
+                tracing::debug!("Main Task Completed");
                 return;
             }
-            r = spawn(async { init_main(Arc::new(config2), quit2).await }) => {
-                r.unwrap().unwrap();
-            }
-            r = spawn(async { init_main(Arc::new(config1), quit1).await }) => {
+            r = task_one => {
+                tracing::debug!("Task One Completed");
                 r.unwrap().unwrap();
             }
         };
@@ -273,14 +283,19 @@ mod test {
     }
 
     test_setup!(sleep_for_five, {
+        let test_id = if let Some(tid) = get_test_id() {
+            tid
+        } else {
+            return
+        };
         tokio::time::sleep(Duration::from_secs(5)).await;
         let base = Client::new();
         let client = AttestationClient(base.clone());
         for _ in 0..10 {
-            let client1_resp = client.get_latest_tips(&"127.0.0.1".into(), 12557).await;
-            let client2_resp = client.get_latest_tips(&"127.0.0.1".into(), 12558).await;
-            tracing::debug!("Got:{:?}", client1_resp);
-            tracing::debug!("Got:{:?}", client2_resp);
+            let resp = client
+                .get_latest_tips(&"127.0.0.1".into(), 12556 + test_id)
+                .await;
+            tracing::debug!("Got:{:?}", resp);
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     });
