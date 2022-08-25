@@ -1,5 +1,6 @@
 import FactoryIcon from '@mui/icons-material/Factory';
-import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, createStyles } from '@mui/material';
+import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
+import FormModal from '../form-modal';
 
 export type NFTSale = {
   price: number,
@@ -10,7 +11,7 @@ export type NFTSale = {
 }
 
 // const EnergyExchange = React.memo(function EnergyExchangeWithHeader({ listings }: { listings: NFTSale[] }) {
-  export const EnergyExchange = ({listings}: {listings: NFTSale[]}) => {
+export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
 
   // const classes = useStyles();
   return (
@@ -32,14 +33,15 @@ export type NFTSale = {
                   <TableCell align="right">Price ($)</TableCell>
                   <TableCell align="right">Currency (token)</TableCell>
                   <TableCell align="right">Transfer Count</TableCell>
+                  <TableCell align="right"></TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {listings.map((listing, index) => (
                   <TableRow key={index}>
                     <TableCell>
-                    {/* color code these in the future */}
-                    <FactoryIcon className='sale-factory-icon' /> 
+                      {/* color code these in the future */}
+                      <FactoryIcon className='sale-factory-icon' />
                     </TableCell>
                     <TableCell component="th" scope="row">
                       {listing.seller}
@@ -47,6 +49,7 @@ export type NFTSale = {
                     <TableCell align="right">{listing.price}</TableCell>
                     <TableCell align="right">{listing.currency}</TableCell>
                     <TableCell align="right">{listing.transfer_count}</TableCell>
+                    <TableCell align="right"><FormModal title={"Purchase"} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -56,6 +59,6 @@ export type NFTSale = {
       </div>
     </div>
   )
-// });
-                };
+  // });
+};
 export default EnergyExchange;

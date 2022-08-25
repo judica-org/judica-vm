@@ -9,6 +9,7 @@ import { tauri_host } from './tauri_host';
 import { SwitchToGame } from './SwitchToGame';
 import { SwitchToDB } from './SwitchToDB';
 import { invoke } from '@tauri-apps/api';
+import PurchaseOfferForm from './purchase-offer';
 
 export type PowerPlant = {
   id: number,
