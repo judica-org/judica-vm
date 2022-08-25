@@ -1,6 +1,6 @@
 use self::checkpoints::BitcoinCheckPoints;
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
-use ruma_serde::CanonicalJsonValue;
+
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};

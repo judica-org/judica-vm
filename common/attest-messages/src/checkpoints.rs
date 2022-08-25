@@ -1,8 +1,5 @@
 use sapio_bitcoin::BlockHash;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
-use crate::util::{AbstractResult, INFER_UNIT};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BitcoinCheckPoints {

@@ -1,7 +1,7 @@
 use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc};
 
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::Config;

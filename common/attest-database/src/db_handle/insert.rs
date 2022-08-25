@@ -1,13 +1,13 @@
-use crate::sql_serializers::PK;
-use crate::sql_serializers::SK;
 use super::handle_type;
 use super::MsgDBHandle;
+use crate::sql_serializers::PK;
+use crate::sql_serializers::SK;
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Authenticated;
 use attest_messages::Envelope;
 use rusqlite::ffi;
-use rusqlite::ffi::SQLITE_CONSTRAINT;
+
 use rusqlite::params;
 use rusqlite::ErrorCode;
 use sapio_bitcoin::{

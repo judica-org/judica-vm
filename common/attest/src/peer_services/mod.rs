@@ -1,8 +1,5 @@
 use tokio::{
-    sync::{
-        mpsc::Receiver,
-        oneshot::{self, Sender},
-    },
+    sync::{mpsc::Receiver, oneshot::Sender},
     time::MissedTickBehavior,
 };
 

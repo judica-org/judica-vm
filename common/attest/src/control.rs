@@ -3,10 +3,9 @@ use crate::{
     Config,
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
-use attest_messages::{ CanonicalEnvelopeHash, Envelope};
+use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
-    extract::Query,
     http::Response,
     http::StatusCode,
     routing::{get, post},
@@ -110,7 +109,7 @@ async fn listen_to_service(
     db: Extension<MsgDB>,
     Json(subscribe): Json<Subscribe>,
 ) -> Result<(Response<()>, Json<Value>), (StatusCode, String)> {
-    let r =
+    let _r =
         db.0.get_handle()
             .await
             .upsert_hidden_service(subscribe.url, subscribe.port, Some(true), Some(true))

@@ -121,7 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::debug!("Starting Subservices");
     let mut skip = "";
-    let to_skip = tokio::select!(
+    let _to_skip = tokio::select!(
     a = &mut attestation_server => {
         tracing::debug!("Error From Attestation Server: {:?}", a);
         skip = "attest";

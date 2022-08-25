@@ -5,7 +5,7 @@ use tokio::{
 
 use super::*;
 pub async fn push_to_peer<C: Verification + 'static>(
-    secp: Arc<Secp256k1<C>>,
+    _secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
     conn: MsgDB,

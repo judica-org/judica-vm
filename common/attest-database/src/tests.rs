@@ -2,13 +2,12 @@ use crate::db_handle::MsgDBHandle;
 
 use super::connection::MsgDB;
 use super::*;
-use attest_messages::nonce::PrecomittedNonce;
-use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, Header, Unsigned};
-use fallible_iterator::FallibleIterator;
-use rusqlite::{named_params, params, Connection};
 
-use sapio_bitcoin::blockdata::opcodes::all;
-use sapio_bitcoin::secp256k1::{rand, All, Secp256k1};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
+use fallible_iterator::FallibleIterator;
+use rusqlite::{params, Connection};
+
+use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use sapio_bitcoin::KeyPair;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
@@ -64,7 +63,13 @@ async fn test_reused_nonce() {
         );
         // Inserting more messages shouldn't change anything
         let envelope_i = handle
-            .wrap_message_in_envelope_for_user_by_key(json!({ "distinct": i }), &kp, &secp, None, None)
+            .wrap_message_in_envelope_for_user_by_key(
+                json!({ "distinct": i }),
+                &kp,
+                &secp,
+                None,
+                None,
+            )
             .unwrap()
             .unwrap();
         let envelope_i = envelope_i.clone().self_authenticate(&secp).unwrap();
@@ -116,42 +121,41 @@ async fn test_envelope_creation() {
     let mut disconnected = vec![];
     let mut kps = vec![];
     let mut final_msg = vec![];
-    let mut verify_tip =
-        |handle: &MsgDBHandle,
-         envelope: &Authenticated<Envelope>,
-         user_id: usize,
-         kp: KeyPair,
-         all_past_tips: &BTreeSet<CanonicalEnvelopeHash>| {
-            {
-                let tips = handle.get_tips_for_all_users().unwrap();
-                assert_eq!(tips.len(), user_id + 1);
-                assert!(tips.contains(envelope.inner_ref()));
-                assert_eq!(
-                    tips.iter()
-                        .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
-                        .count(),
-                    1
-                );
-            }
-            {
-                let my_tip = handle
-                    .get_tip_for_user_by_key(kp.x_only_public_key().0)
-                    .unwrap();
-                assert_eq!(&my_tip, envelope.inner_ref());
-            }
-            {
-                let known_tips = handle.get_tip_for_known_keys().unwrap();
-                assert_eq!(known_tips.len(), user_id + 1);
-                assert!(known_tips.contains(envelope.inner_ref()));
-                assert_eq!(
-                    known_tips
-                        .iter()
-                        .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
-                        .count(),
-                    1
-                );
-            }
-        };
+    let verify_tip = |handle: &MsgDBHandle,
+                      envelope: &Authenticated<Envelope>,
+                      user_id: usize,
+                      kp: KeyPair,
+                      all_past_tips: &BTreeSet<CanonicalEnvelopeHash>| {
+        {
+            let tips = handle.get_tips_for_all_users().unwrap();
+            assert_eq!(tips.len(), user_id + 1);
+            assert!(tips.contains(envelope.inner_ref()));
+            assert_eq!(
+                tips.iter()
+                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
+                    .count(),
+                1
+            );
+        }
+        {
+            let my_tip = handle
+                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .unwrap();
+            assert_eq!(&my_tip, envelope.inner_ref());
+        }
+        {
+            let known_tips = handle.get_tip_for_known_keys().unwrap();
+            assert_eq!(known_tips.len(), user_id + 1);
+            assert!(known_tips.contains(envelope.inner_ref()));
+            assert_eq!(
+                known_tips
+                    .iter()
+                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
+                    .count(),
+                1
+            );
+        }
+    };
     let secp = Secp256k1::new();
     let conn = setup_db().await;
     let mut handle = conn.get_handle().await;
@@ -292,7 +296,7 @@ async fn test_envelope_creation() {
         .unwrap();
 
     {
-        let mut known_tips = handle.get_tip_for_known_keys().unwrap();
+        let known_tips = handle.get_tip_for_known_keys().unwrap();
         assert_eq!(known_tips.len(), kps.len() + 1);
         let mut tip_hashes: Vec<_> = known_tips
             .iter()
@@ -311,7 +315,7 @@ fn make_test_user(
     name: String,
 ) -> KeyPair {
     let (kp, nonce, envelope) = generate_new_user(secp).unwrap();
-    let u = handle.save_keypair(kp).unwrap();
+    let _u = handle.save_keypair(kp).unwrap();
     let genesis = envelope.self_authenticate(secp).unwrap();
     handle
         .insert_user_by_genesis_envelope(name, genesis)

@@ -12,8 +12,8 @@ use axum::{
 };
 use sapio_bitcoin::secp256k1::Secp256k1;
 use serde_json::{json, Value};
-use tower_http::trace::TraceLayer;
 use std::{net::SocketAddr, sync::Arc};
+use tower_http::trace::TraceLayer;
 
 pub async fn get_tip_handler(
     Extension(db): Extension<MsgDB>,

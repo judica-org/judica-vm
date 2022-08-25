@@ -1,15 +1,14 @@
 use crate::Config;
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo};
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_messages::CanonicalEnvelopeHash;
 use axum::{
-    extract::Query,
     http::Response,
     http::StatusCode,
     routing::{get, post},
     Extension, Json, Router,
 };
 use game_host_messages::Peer;
-use sapio_bitcoin::secp256k1::Secp256k1;
+
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -31,8 +30,8 @@ pub async fn get_users(
             |PeerInfo {
                  service_url,
                  port,
-                 fetch_from,
-                 push_to,
+                 fetch_from: _,
+                 push_to: _,
              }| Peer { service_url, port },
         )
         .collect();

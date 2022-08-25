@@ -4,7 +4,7 @@ use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
 use sapio_bitcoin::{
     secp256k1::{
-        rand::{self, OsRng},
+        rand::{self},
         Secp256k1,
     },
     KeyPair, XOnlyPublicKey,
