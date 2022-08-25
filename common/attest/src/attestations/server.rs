@@ -12,6 +12,7 @@ use axum::{
 };
 use sapio_bitcoin::secp256k1::Secp256k1;
 use serde_json::{json, Value};
+use tower_http::trace::TraceLayer;
 use std::{net::SocketAddr, sync::Arc};
 
 pub async fn get_tip_handler(
@@ -80,7 +81,8 @@ pub async fn run(config: Arc<Config>, db: MsgDB) -> tokio::task::JoinHandle<Abst
             // `POST /msg` goes to `msg`
             .route("/msg", post(post_message))
             .route("/tips", get(get_tip_handler))
-            .layer(Extension(db));
+            .layer(Extension(db))
+            .layer(TraceLayer::new_for_http());
 
         // run our app with hyper
         // `axum::Server` is a re-export of `hyper::Server`

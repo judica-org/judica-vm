@@ -226,7 +226,7 @@ where
     pub fn get_keymap(&self) -> Result<BTreeMap<XOnlyPublicKey, SecretKey>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT (public_key, private_key) FROM private_keys")?;
+            .prepare("SELECT public_key, private_key FROM private_keys")?;
         let rows = stmt.query([])?;
         rows.map(|r| {
             Ok((
@@ -307,5 +307,17 @@ where
         stmt.query_row([key.to_hex()], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })
+    }
+
+    pub fn get_all_users(&self) -> Result<Vec<(XOnlyPublicKey, String)>, rusqlite::Error> {
+        let mut stmt = self.0.prepare("SELECT key, nickname  FROM users")?;
+        let q = stmt.query([])?;
+
+        q.mapped(|row| {
+            let xonly_public_key = row.get::<_, sql_serializers::PK>(0)?.0;
+            let nickname = row.get::<_, String>(1)?;
+            Ok((xonly_public_key, nickname))
+        })
+        .collect()
     }
 }

@@ -1,3 +1,5 @@
+use crate::sql_serializers::PK;
+use crate::sql_serializers::SK;
 use super::handle_type;
 use super::MsgDBHandle;
 use attest_messages::nonce::PrecomittedNonce;
@@ -37,7 +39,7 @@ where
     ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
         let pk_nonce = nonce.get_public(secp);
         let mut stmt = self.0.prepare(include_str!("sql/insert/nonce.sql"))?;
-        stmt.insert(rusqlite::params![key.to_hex(), pk_nonce, nonce,])?;
+        stmt.insert(rusqlite::params![PK(key), pk_nonce, nonce,])?;
         Ok(pk_nonce)
     }
 
@@ -64,8 +66,8 @@ where
                                             INSERT INTO private_keys (public_key, private_key) VALUES (?, ?)
                                             ")?;
         stmt.insert(rusqlite::params![
-            kp.x_only_public_key().0.to_hex(),
-            kp.secret_bytes().to_hex()
+            PK(kp.x_only_public_key().0),
+            SK(kp.secret_key())
         ])?;
         Ok(())
     }
@@ -79,10 +81,10 @@ where
         let mut stmt = self
             .0
             .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
-        let hex_key = envelope.inner_ref().header.key.to_hex();
+        let hex_key = PK(envelope.inner_ref().header.key);
         stmt.insert(params![nickname, hex_key])?;
         self.try_insert_authenticated_envelope(envelope)?;
-        Ok(hex_key)
+        Ok(hex_key.0.to_hex())
     }
     /// attempts to put an authenticated envelope in the DB
     ///
@@ -102,7 +104,7 @@ where
                 ":hash": data.clone()
                     .canonicalized_hash()
                     .expect("Hashing should always succeed?"),
-                ":key": data.header.key.to_hex(),
+                ":key": PK(data.header.key),
                 ":received_time": time
         }) {
             Ok(_rowid) => Ok(true),
