@@ -7,8 +7,7 @@ VALUES
         IFNULL(:fetch_from, 0),
         IFNULL(:push_to, 0)
     ) ON CONFLICT DO
+UPDATE
 SET
-    (fetch_from, push_to) = (
-        IFNULL(:fetch_from, fetch_from),
-        IFNULL(:push_to, push_to)
-    )
+    fetch_from = IFNULL(:fetch_from, fetch_from),
+    push_to = IFNULL(:push_to, push_to)
