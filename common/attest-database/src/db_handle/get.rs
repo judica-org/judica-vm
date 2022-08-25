@@ -211,7 +211,7 @@ where
 
     /// get all added hidden services
     pub fn get_all_hidden_services(&self) -> Result<Vec<(String, u16)>, rusqlite::Error> {
-        let mut stmt = self.0.prepare("SELECT service_url FROM hidden_services")?;
+        let mut stmt = self.0.prepare("SELECT service_url, port FROM hidden_services")?;
         let results = stmt
             .query([])?
             .map(|r| Ok((r.get::<_, String>(0)?, r.get(1)?)))

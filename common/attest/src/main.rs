@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 mod attestations;
+mod control;
 mod peer_services;
 mod tor;
 
@@ -48,11 +49,21 @@ pub struct TorConfig {
     #[serde(default = "default_socks_port")]
     socks_port: u16,
 }
+
+fn default_control_port() -> u16 {
+    14322
+}
+#[derive(Serialize, Deserialize)]
+pub struct ControlConfig {
+    #[serde(default = "default_control_port")]
+    port: u16,
+}
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     bitcoin: BitcoinConfig,
     pub subname: String,
     pub tor: TorConfig,
+    pub control: ControlConfig,
 }
 
 fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
@@ -96,33 +107,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
     let mut tor_service = tor::start(config.clone());
     let mut fetching_client = peer_services::client_fetching(config.clone(), mdb.clone());
+    let mut control_server = control::run(config.clone(), mdb.clone()).await;
 
     tracing::debug!("Starting Subservices");
     tokio::select!(
     a = &mut attestation_server => {
-        a?
+        tracing::debug!("Error From Attestation Server: {:?}", a);
     },
     b = &mut tor_service => {
-        b?
+        tracing::debug!("Error From Tor Server: {:?}", b);
     },
     c = &mut fetching_client => {
-        c?
+        tracing::debug!("Error From Fetching Server: {:?}", c);
     },
     d = &mut checkpoint_service => {
-        d?
-    })
-    .map_err(|e| format!("{}", e))?;
+        tracing::debug!("Error From Checkpoint Server: {:?}", d);
+    }
+    e = &mut control_server => {
+        tracing::debug!("Error From Control Server: {:?}", e);
+    });
+    tracing::debug!("Shutting Down Subservices");
     quit.store(true, Ordering::Relaxed);
     attestation_server.abort();
     tor_service.abort();
     fetching_client.abort();
     checkpoint_service.abort();
+    control_server.abort();
     futures::future::join_all([
         tor_service,
         attestation_server,
         fetching_client,
         checkpoint_service,
+        control_server,
     ])
     .await;
+
+    tracing::debug!("Exiting");
     Ok(())
 }
