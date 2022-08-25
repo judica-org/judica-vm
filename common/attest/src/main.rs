@@ -1,6 +1,7 @@
 use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use bitcoin_header_checkpoints::BitcoinCheckPointCache;
+use bitcoincore_rpc_async as rpc;
 use rpc::Client;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
@@ -18,7 +19,6 @@ mod control;
 mod peer_services;
 mod tor;
 
-use bitcoincore_rpc_async as rpc;
 const fn default_port() -> u16 {
     46789
 }

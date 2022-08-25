@@ -45,13 +45,10 @@ dependencies = [
  "bitcoincore-rpc-async",
  "directories",
  "ed25519-dalek",
- "fallible-iterator",
  "futures",
  "libtor",
  "openssl-sys",
  "reqwest",
- "ruma-serde",
- "ruma-signatures",
  "rusqlite",
  "sapio-bitcoin",
  "serde",
@@ -70,17 +67,8 @@ version = "0.1.0"
 dependencies = [
  "attest-messages",
  "attest-util",
- "axum",
- "bitcoincore-rpc-async",
  "directories",
- "ed25519-dalek",
  "fallible-iterator",
- "futures",
- "libtor",
- "openssl-sys",
- "reqwest",
- "ruma-serde",
- "ruma-signatures",
  "rusqlite",
  "sapio-bitcoin",
  "serde",
@@ -88,7 +76,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -297,12 +284,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "const-oid"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d6f2aa4d0537bcc1c74df8755072bd31c1ef1a3a1b85a68e8404a8c353b7b8b"
-
-[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -338,15 +319,6 @@ dependencies = [
  "rand_core 0.5.1",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "der"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79b71cca7d95d7681a4b3b9cdf63c8dbc3730d0584c2c74e31416d64a90493f4"
-dependencies = [
- "const-oid",
 ]
 
 [[package]]
@@ -1151,17 +1123,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
-name = "pkcs8"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee3ef9b64d26bad0536099c816c6734379e45bbd5f14798def6809e5cc350447"
-dependencies = [
- "der",
- "spki",
- "zeroize",
-]
-
-[[package]]
 name = "pkg-config"
 version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1455,42 +1416,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ruma-identifiers"
-version = "0.22.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96856e0753470c67b03846af7457abf037ad069dae25c7946267902175424d6c"
-dependencies = [
- "percent-encoding",
- "ruma-identifiers-macros",
- "ruma-identifiers-validation",
- "ruma-serde",
- "ruma-serde-macros",
- "serde",
- "url",
-]
-
-[[package]]
-name = "ruma-identifiers-macros"
-version = "0.22.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13714800ecdfc9690d5667ab597efbf588203ffebf2b21cdea9049d00c0bf438"
-dependencies = [
- "quote",
- "ruma-identifiers-validation",
- "syn",
-]
-
-[[package]]
-name = "ruma-identifiers-validation"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dc675917d537c870035d4681d7a2b939683fb908bbc036aa55889b09c5794f1"
-dependencies = [
- "thiserror",
- "url",
-]
-
-[[package]]
 name = "ruma-serde"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1516,23 +1441,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "ruma-signatures"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f08deeb5241428e6f1db085bc0ae6aeb469d20f45164a7f5500901add47770d"
-dependencies = [
- "base64",
- "ed25519-dalek",
- "pkcs8",
- "rand 0.7.3",
- "ruma-identifiers",
- "ruma-serde",
- "serde_json",
- "sha2",
- "thiserror",
 ]
 
 [[package]]
@@ -1790,15 +1698,6 @@ checksum = "66d72b759436ae32898a2af0a14218dbf55efde3feeb170eb623637db85ee1e0"
 dependencies = [
  "libc",
  "winapi",
-]
-
-[[package]]
-name = "spki"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c01a0c15da1b0b0e1494112e7af814a678fec9bd157881b49beac661e9b6f32"
-dependencies = [
- "der",
 ]
 
 [[package]]
