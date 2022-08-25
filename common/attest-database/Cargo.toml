@@ -15,6 +15,7 @@ fallible-iterator = "0.2.0"
 
 [dependencies.attest-util]
 path = "../attest-util"
+features = ["tokio"]
 
 [dependencies.attest-messages]
 path = "../attest-messages"

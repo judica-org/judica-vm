@@ -1,6 +1,7 @@
 use std::{error::Error, path::PathBuf, sync::Arc};
 
 use attest_messages::{nonce::PrecomittedNonce, CanonicalEnvelopeHash, Envelope, Header, Unsigned};
+use attest_util::ensure_dir;
 use connection::MsgDB;
 use rusqlite::Connection;
 use sapio_bitcoin::{
@@ -17,7 +18,8 @@ pub mod sql_serializers;
 mod tests;
 
 pub async fn setup_db_at(dir: PathBuf, name: &str) -> Result<MsgDB, Box<dyn Error>> {
-    let dir: PathBuf = ensure_dir(dir).await?;
+    let dir: PathBuf = ensure_dir(dir)
+        .await?;
     let mut db_file = dir.clone();
     db_file.set_file_name(name);
     db_file.set_extension("sqlite3");
@@ -36,15 +38,6 @@ pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgD
         data_dir
     };
     setup_db_at(data_dir, "attestations").await
-}
-
-async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
-    let dir = tokio::fs::create_dir_all(&data_dir).await;
-    match dir.as_ref().map_err(std::io::Error::kind) {
-        Err(std::io::ErrorKind::AlreadyExists) => (),
-        _e => dir?,
-    };
-    Ok(data_dir)
 }
 
 pub fn generate_new_user<C: Signing>(
