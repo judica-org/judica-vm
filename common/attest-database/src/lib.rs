@@ -16,16 +16,26 @@ pub mod sql_serializers;
 #[cfg(test)]
 mod tests;
 
-pub async fn setup_db(application: &str) -> Result<MsgDB, Box<dyn Error>> {
-    let dirs = directories::ProjectDirs::from("org", "judica", application).unwrap();
-    let data_dir: PathBuf = ensure_dir(dirs.data_dir().into()).await?;
-    let mut chat_db_file = data_dir.clone();
-    chat_db_file.push("chat.sqlite3");
+pub async fn setup_db_at(dir: PathBuf, name: &str) -> Result<MsgDB, Box<dyn Error>> {
+    let dir: PathBuf = ensure_dir(dir).await?;
+    let mut db_file = dir.clone();
+    db_file.set_file_name(name);
+    db_file.set_extension("sqlite3");
     let mdb = MsgDB::new(Arc::new(tokio::sync::Mutex::new(
-        Connection::open(chat_db_file).unwrap(),
+        Connection::open(db_file).unwrap(),
     )));
     mdb.get_handle().await.setup_tables();
     Ok(mdb)
+}
+pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgDB, Box<dyn Error>> {
+    let dirs = directories::ProjectDirs::from("org", "judica", application).unwrap();
+    let mut data_dir = dirs.data_dir().into();
+    data_dir = if let Some(prefix) = prefix {
+        prefix.join(data_dir)
+    } else {
+        data_dir
+    };
+    setup_db_at(data_dir, "attestations").await
 }
 
 async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {

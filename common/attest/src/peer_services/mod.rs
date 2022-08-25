@@ -39,7 +39,7 @@ pub fn startup(
                         Some(query) => {
                             match query {
                                 PeerQuery::RunningTasks(r) => {
-                                    r.send(task_set.keys().cloned().collect());
+                                    r.send(task_set.keys().cloned().collect()).ok();
                                 },
                             }
                         }

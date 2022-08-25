@@ -1,5 +1,6 @@
 use attest_database::connection::MsgDB;
 use attest_database::setup_db;
+use attest_util::INFER_UNIT;
 use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use bitcoincore_rpc_async as rpc;
 use rpc::Client;
@@ -31,7 +32,7 @@ pub enum Auth {
     CookieFile(PathBuf),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BitcoinConfig {
     pub url: String,
     #[serde(with = "Auth")]
@@ -64,6 +65,8 @@ pub struct Config {
     pub subname: String,
     pub tor: TorConfig,
     pub control: ControlConfig,
+    #[serde(default)]
+    pub prefix: Option<PathBuf>,
 }
 
 fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
@@ -72,7 +75,7 @@ fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
     let quit = Arc::new(AtomicBool::new(false));
     let args: Vec<String> = std::env::args().into_iter().collect();
@@ -89,6 +92,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             config
         }
     };
+    init_main(config, quit).await
+}
+async fn init_main(
+    config: Arc<Config>,
+    quit: Arc<AtomicBool>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::debug!("Config Loaded");
     let bitcoin_client =
         Arc::new(Client::new(config.bitcoin.url.clone(), config.bitcoin.auth.clone()).await?);
@@ -104,7 +113,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("Checkpoint service already started")?;
     tracing::debug!("Checkpoint Service Started");
     let application = format!("attestations.{}", config.subname);
-    let mdb = setup_db(&application).await?;
+    let mdb = setup_db(&application, config.prefix.clone())
+        .await
+        .map_err(|e| format!("{}", e))?;
     tracing::debug!("Database Connection Setup");
     let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
     let mut tor_service = tor::start(config.clone());
@@ -120,28 +131,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await;
 
     tracing::debug!("Starting Subservices");
-    let mut skip = "";
+    let mut skip = None;
     let _to_skip = tokio::select!(
     a = &mut attestation_server => {
         tracing::debug!("Error From Attestation Server: {:?}", a);
-        skip = "attest";
-
+        skip.replace("attest");
     },
     b = &mut tor_service => {
         tracing::debug!("Error From Tor Server: {:?}", b);
-        skip ="tor";
+        skip.replace("tor");
     },
     c = &mut fetching_client => {
         tracing::debug!("Error From Fetching Server: {:?}", c);
-        skip = "fetch";
+        skip.replace("fetch");
     },
     d = &mut checkpoint_service => {
         tracing::debug!("Error From Checkpoint Server: {:?}", d);
-        skip = "checkpoint";
+        skip.replace("checkpoint");
     }
     e = &mut control_server => {
         tracing::debug!("Error From Control Server: {:?}", e);
-        skip = "control";
+        skip.replace("control");
     });
     tracing::debug!("Shutting Down Subservices");
     quit.store(true, Ordering::Relaxed);
@@ -157,7 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         svc.1.abort();
     }
     futures::future::join_all(svcs.into_iter().filter_map(|x| {
-        if x.0 == skip {
+        if Some(x.0) == skip {
             tracing::debug!("Skipping Wait for Terminated Subservice: {}", x.0);
             None
         } else {
@@ -168,5 +178,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await;
 
     tracing::debug!("Exiting");
-    Ok(())
+    INFER_UNIT
+}
+
+#[cfg(test)]
+mod test {
+    use std::{
+        env::temp_dir,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
+
+    use attest_util::INFER_UNIT;
+    use bitcoincore_rpc_async::Auth;
+    use futures::future::join_all;
+    use test_log::test;
+    use tokio::spawn;
+
+    use crate::{init_main, BitcoinConfig, Config, ControlConfig, TorConfig};
+
+    // Connect to a specific local server for testing, or assume there is an
+    // open-to-world server available locally
+    fn get_btc_config() -> BitcoinConfig {
+        match std::env::var("TEST_BTC_CONF") {
+            Ok(s) => serde_json::from_str(&s).unwrap(),
+            Err(_) => BitcoinConfig {
+                url: "http://127.0.0.1".into(),
+                auth: Auth::None,
+            },
+        }
+    }
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 2))]
+    async fn make_two_nodes() {
+        let btc_config = get_btc_config();
+        let quit1 = Arc::new(AtomicBool::new(false));
+        let dir = temp_dir();
+        let tor_dir = dir.join("tor");
+        let config1 = Config {
+            bitcoin: btc_config.clone(),
+            subname: "cf1".into(),
+            tor: TorConfig {
+                directory: tor_dir,
+                attestation_port: 12556,
+                socks_port: 13556,
+            },
+            control: ControlConfig { port: 14556 },
+            prefix: Some(dir),
+        };
+        let quit2 = Arc::new(AtomicBool::new(false));
+        let dir = temp_dir();
+        let tor_dir = dir.join("tor");
+        let config2 = Config {
+            bitcoin: btc_config.clone(),
+            subname: "cf2".into(),
+            tor: TorConfig {
+                directory: tor_dir,
+                attestation_port: 12557,
+                socks_port: 13557,
+            },
+            control: ControlConfig { port: 14557 },
+            prefix: Some(dir),
+        };
+
+        let main_task = {
+            let quit1 = quit1.clone();
+            let quit2 = quit2.clone();
+            spawn(async move {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                quit1.store(true, Ordering::Relaxed);
+                quit2.store(true, Ordering::Relaxed);
+                INFER_UNIT
+            })
+        };
+        let results = join_all([
+            main_task,
+            spawn(async { init_main(Arc::new(config2), quit2).await }),
+            spawn(async { init_main(Arc::new(config1), quit1).await }),
+        ])
+        .await;
+        let () = results[0].as_ref().unwrap().as_ref().unwrap();
+    }
 }

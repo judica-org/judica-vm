@@ -50,3 +50,7 @@ features = ["serde_json"]
 [dependencies.sapio-bitcoin]
 version = "0.28.1"
 features=['use-serde', 'rand']
+
+[dev-dependencies]
+env_logger = "0.9.0"
+test-log = "0.2.11"

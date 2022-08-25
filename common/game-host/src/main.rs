@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     error::Error,
+    path::PathBuf,
     sync::Arc,
 };
 use tor::TorConfig;
@@ -22,6 +23,8 @@ mod tor;
 pub struct Config {
     tor: TorConfig,
     key: Option<XOnlyPublicKey>,
+    #[serde(default)]
+    prefix: Option<PathBuf>,
 }
 
 async fn get_oracle_key(key: &XOnlyPublicKey, db: MsgDB) -> Result<KeyPair, Box<dyn Error>> {
@@ -37,7 +40,7 @@ fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
 async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt::init();
     let mut config = get_config()?;
-    let db = setup_db("attestations.mining-game-host").await?;
+    let db = setup_db("attestations.mining-game-host", config.prefix.clone()).await?;
     if config.key.is_none() {
         let handle = db.get_handle().await;
         let kp = KeyPair::new(&Secp256k1::new(), &mut rand::thread_rng());
