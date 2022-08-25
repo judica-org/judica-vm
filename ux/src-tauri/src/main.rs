@@ -23,7 +23,7 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
-use std::{error::Error, path::PathBuf, sync::Arc};
+use std::{error::Error, path::PathBuf, sync::Arc, collections::BTreeMap};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::{
@@ -77,12 +77,19 @@ async fn game_synchronizer(
             p
         };
 
+
+        let power_plants = {
+            let game = s.inner().lock().await;
+            let p = game.as_ref().map(|g| g.board.get_power_plants()).unwrap().unwrap_or(UXNFTRegistry { power_plant_data: BTreeMap::new()});
+            p
+        };
         println!("Emitting!");
         window.emit("available-sequencers", list_of_chains);
         window.emit("host-key", key).unwrap();
         window.emit("db-connection", (appName, prefix)).unwrap();
         window.emit("game-board", gamestring).unwrap();
         window.emit("materials-price-data", raw_price_data).unwrap();
+        window.emit("power-plants",  power_plants.power_plant_data).unwrap();
         if let Some(w) = wait_on {
             w.await;
         } else {
@@ -94,6 +101,11 @@ async fn game_synchronizer(
 #[tauri::command]
 fn get_move_schema() -> RootSchema {
     schema_for!(GameMove)
+}
+
+#[tauri::command]
+fn get_purchase_schema() -> RootSchema {
+    schema_for!(PurchaseNFT)
 }
 
 // get transfer_token schema, get list of tokens, and make individual components around each
@@ -275,6 +287,7 @@ fn main() {
             game_synchronizer,
             get_move_schema,
             get_materials_schema,
+            get_purchase_schema,
             make_move_inner,
             switch_to_game,
             switch_to_db,
