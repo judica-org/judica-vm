@@ -4,12 +4,16 @@ use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Authenticated;
 use attest_messages::Envelope;
+use rusqlite::ffi;
+use rusqlite::ffi::SQLITE_CONSTRAINT;
 use rusqlite::params;
+use rusqlite::ErrorCode;
 use sapio_bitcoin::{
     hashes::hex::ToHex,
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
+use std::os::raw::c_int;
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Insert,
@@ -83,22 +87,54 @@ where
     /// attempts to put an authenticated envelope in the DB
     ///
     /// Will fail if the key is not registered.
+    ///
+    /// Will return false if the message already existed
     pub fn try_insert_authenticated_envelope(
         &self,
         data: Authenticated<Envelope>,
-    ) -> Result<(), rusqlite::Error> {
+    ) -> Result<bool, rusqlite::Error> {
         let data = data.inner();
         let mut stmt = self.0.prepare(include_str!("sql/insert/envelope.sql"))?;
         let time = attest_util::now();
 
-        stmt.insert(rusqlite::named_params! {
+        match stmt.insert(rusqlite::named_params! {
                 ":body": data,
                 ":hash": data.clone()
                     .canonicalized_hash()
                     .expect("Hashing should always succeed?"),
                 ":key": data.header.key.to_hex(),
                 ":received_time": time
-        })?;
-        Ok(())
+        }) {
+            Ok(_rowid) => Ok(true),
+            Err(e) => match e {
+                rusqlite::Error::SqliteFailure(err, ref _msg) => match err {
+                    ffi::Error {
+                        code: ErrorCode::ConstraintViolation,
+                        extended_code: SQLITE_CONSTRAINT_UNIQUE,
+                    } => Ok(false),
+                    _ => Err(e),
+                },
+                err => Err(err),
+            },
+        }
     }
 }
+
+/// Constant for Unique Contraint Violation
+/// Yes, pattern matching works.
+///```
+/// use std::os::raw::c_int;
+/// const X: c_int = 0;
+/// struct Y {
+///     val: c_int,
+/// }
+/// match (Y { val: 1 }) {
+///     Y { val: X } => panic!("bad"),
+///     Y { val: b } => println!("good"),
+/// }
+/// match (Y { val: 0 }) {
+///     Y { val: X } => println!("good"),
+///     Y { val: b } => panic!("bad"),
+/// }
+///```
+const SQLITE_CONSTRAINT_UNIQUE: c_int = 2067;

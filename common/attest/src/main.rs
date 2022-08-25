@@ -1,7 +1,6 @@
 use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_messages::checkpoints::BitcoinCheckPointCache;
-use attestations::server::Tips;
 use rpc::Client;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
@@ -106,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::debug!("Database Connection Setup");
     let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
     let mut tor_service = tor::start(config.clone());
-    let mut fetching_client = peer_services::startup(config.clone(), mdb.clone());
+    let mut fetching_client = peer_services::startup(config.clone(), mdb.clone(), quit.clone());
     let mut control_server = control::run(config.clone(), mdb.clone()).await;
 
     tracing::debug!("Starting Subservices");

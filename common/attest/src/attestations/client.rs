@@ -1,4 +1,5 @@
 use attest_messages::Envelope;
+use axum::Json;
 use reqwest::Client;
 
 use super::query::Tips;
@@ -42,5 +43,22 @@ impl AttestationClient {
             .json()
             .await?;
         Ok(resp)
+    }
+
+    pub async fn post_messages(
+        &self,
+        envelopes: Vec<Envelope>,
+        url: &String,
+        port: u16,
+    ) -> Result<(), reqwest::Error> {
+        let resp: () = self
+            .as_ref()
+            .post(format!("http://{}:{}/msg", url, port))
+            .json(&envelopes)
+            .send()
+            .await?
+            .json()
+            .await?;
+        Ok(())
     }
 }

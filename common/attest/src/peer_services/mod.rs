@@ -14,6 +14,7 @@ pub enum PeerType {
 pub fn startup(
     config: Arc<Config>,
     db: MsgDB,
+    quit: Arc<AtomicBool>
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     let jh = tokio::spawn(async move {
         let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", config.tor.socks_port))?;
@@ -68,6 +69,7 @@ pub fn startup(
                                 client,
                                 (url.0, url.1),
                                 db.clone(),
+                                quit.clone()
                             )),
                         );
                     }

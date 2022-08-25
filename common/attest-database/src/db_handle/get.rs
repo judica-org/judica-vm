@@ -5,7 +5,7 @@ use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use fallible_iterator::FallibleIterator;
-use rusqlite::params;
+use rusqlite::{named_params, params};
 use sapio_bitcoin::{
     hashes::{hex::ToHex, sha256, Hash},
     secp256k1::SecretKey,
@@ -35,6 +35,26 @@ where
         stmt.query_row([nonce], |r| r.get::<_, PrecomittedNonce>(0))
     }
 
+    /// Returns the message at a given height for a key
+    pub fn get_connected_messages_newer_than_envelopes<'v, It>(
+        &self,
+        envelopes: It,
+    ) -> Result<Vec<Envelope>, rusqlite::Error>
+    where
+        It: Iterator<Item = &'v Envelope>,
+    {
+        let mut stmt = self.0.prepare(include_str!(
+            "sql/get/connected_messages_newer_than_for_genesis.sql"
+        ))?;
+        let mut res = vec![];
+        for envelope in envelopes {
+            let rs = stmt
+                .query(named_params! {":genesis": envelope.header.genesis, ":height": envelope.header.height})?;
+            let mut envs = rs.map(|r| r.get::<_, Envelope>(0)).collect()?;
+            res.append(&mut envs);
+        }
+        Ok(res)
+    }
     /// Returns the message at a given height for a key
     pub fn get_message_at_height_for_user(
         &self,

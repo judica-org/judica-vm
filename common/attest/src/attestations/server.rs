@@ -1,6 +1,7 @@
+use super::query::Tips;
 use crate::Config;
 use attest_database::connection::MsgDB;
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_messages::Envelope;
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     extract::Query,
@@ -10,15 +11,9 @@ use axum::{
     Extension, Json, Router,
 };
 use sapio_bitcoin::secp256k1::Secp256k1;
-use serde::Deserialize;
-use serde::Serialize;
 use serde_json::{json, Value};
 use std::{net::SocketAddr, sync::Arc};
 
-#[derive(Deserialize, Serialize)]
-pub struct Tips {
-    pub tips: Vec<CanonicalEnvelopeHash>,
-}
 pub async fn get_tip_handler(
     Extension(db): Extension<MsgDB>,
     Query(query): Query<Option<Tips>>,
@@ -45,19 +40,28 @@ pub async fn get_tip_handler(
 }
 pub async fn post_message(
     Extension(db): Extension<MsgDB>,
-    Json(envelope): Json<Envelope>,
+    Json(envelopes): Json<Vec<Envelope>>,
 ) -> Result<(Response<()>, Json<Value>), (StatusCode, &'static str)> {
-    tracing::debug!("Envelope Received: {:?}", envelope);
-    let envelope = envelope
-        .self_authenticate(&Secp256k1::new())
-        .map_err(|_| (StatusCode::UNAUTHORIZED, "Envelope not valid"))?;
-    tracing::debug!("Verified Signatures");
+    let mut authed = Vec::with_capacity(envelopes.len());
+    for envelope in envelopes {
+        tracing::debug!("Envelope Received: {:?}", envelope);
+        let envelope = envelope.self_authenticate(&Secp256k1::new()).map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Envelope not valid. Only valid data should be sent.",
+            )
+        })?;
+        tracing::debug!("Verified Signatures");
+        authed.push(envelope);
+    }
     {
-        tracing::debug!("Inserting Into Database");
         let locked = db.get_handle().await;
-        locked
-            .try_insert_authenticated_envelope(envelope.clone())
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+        for envelope in authed {
+            tracing::debug!("Inserting Into Database");
+            locked
+                .try_insert_authenticated_envelope(envelope)
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+        }
     }
     Ok((
         Response::builder()
