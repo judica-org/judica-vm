@@ -2,7 +2,6 @@ import { appWindow } from '@tauri-apps/api/window';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import './App.css';
 import Form, { FormSubmit } from "@rjsf/core";
-import { PowerPlant} from './power-plant-list';
 import EnergyExchange, { NFTSale } from './energy-exchange';
 import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials';
@@ -10,6 +9,16 @@ import { tauri_host } from './tauri_host';
 import { SwitchToGame } from './SwitchToGame';
 import { SwitchToDB } from './SwitchToDB';
 import { invoke } from '@tauri-apps/api';
+
+export type PowerPlant = {
+  id: number,
+  plant_type: string //how does PlantType enum show up
+  watts: number,
+  coordinates: number[],
+  owner: number,
+  has_miners: boolean,
+  for_sale: boolean,
+}
 
 function MoveForm() {
   const [schema, set_schema] = useState<null | any>(null);
@@ -110,7 +119,7 @@ function GameBoard(props: { g: game_board }) {
 }
 
 let invoked = false;
-const invoke_once = () => {
+export const invoke_once = () => {
   if (invoked) return;
   invoked = true;
   invoke("game_synchronizer")
@@ -118,12 +127,8 @@ const invoke_once = () => {
 
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
-  const [power_plants, set_power_plants] = useState<PowerPlant[]>([]); // use empty list for now so it will render
-  const [countries, setCountries] = useState<{features: any[]}>({ features: [] });
 
   useEffect(() => {
-    setCountries(countries);
-    console.log("loaded countries", countries.features[0]);
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
       set_game_board(JSON.parse(ev.payload as string) as game_board)
@@ -134,13 +139,13 @@ function App() {
         (await unlisten_game_board)();
       })();
     }
-  }, [game_board, countries, setCountries]);
+  }, [game_board]);
 
   return (
     <div className="App">
       {game_board && <GameBoard g={game_board}></GameBoard>}
       <RawMaterialsMarket></RawMaterialsMarket>
-      <WorkingGlobe power_plants={power_plants}></WorkingGlobe>
+      <WorkingGlobe></WorkingGlobe>
       {<EnergyExchange listings={[{
         price: 937,
         currency: 'donuts',

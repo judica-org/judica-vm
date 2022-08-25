@@ -1,17 +1,7 @@
 import { Card, CardContent, CardHeader } from '@mui/material';
 // import MapCanvas from '../map-canvas';
 import { useEffect, useRef, useState } from 'react';
-
-
-export type PowerPlant = {
-  id: number,
-  plant_type: string //how does PlantType enum show up
-  watts: number,
-  coordinates: number[],
-  owner: number,
-  has_miners: boolean,
-  for_sale: boolean,
-}
+import { PowerPlant } from '../App';
 
 export function PowerPlants({ power_plants }: { power_plants: PowerPlant[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

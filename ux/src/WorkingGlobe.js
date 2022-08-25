@@ -1,3 +1,4 @@
+import { appWindow } from '@tauri-apps/api/window';
 import React from "react";
 import countries_data from "./countries.json";
 import earth from "./earth-dark.jpeg";
@@ -35,14 +36,22 @@ const plant_data = [{
 }]
 
 // eslint-disable-next-line import/no-anonymous-default-export
-export default ({ power_plants }) => {
-    const [countries, setCountries] = useState({ features: [] });
-    const [plants, setPlants] = useState([]);
+export default () => {
+    const [power_plants, set_power_plants] = useState([]); // use empty list for now so it will render
+    const [countries, setCountries] = useState([]);
     useEffect(() => {
-        // load data
         setCountries(countries_data);
-        setPlants(plant_data);
-    }, [plants]);
+      const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
+        console.log(['game-board-event'], ev);
+        set_power_plants(JSON.parse(ev.payload))
+      });
+  
+      return () => {
+        (async () => {
+          (await unlisten_power_plants)();
+        })();
+      }
+    }, [power_plants]);
 
     return <div className='globe-container'>
         <Card>
@@ -56,7 +65,7 @@ export default ({ power_plants }) => {
                     globeImageUrl={earth}
                     width={500}
                     height={500}
-                    labelsData={plants}
+                    labelsData={power_plants}
                     labelText={'text'}
                     labelSize={2}
                     labelColor={() => 'white'}

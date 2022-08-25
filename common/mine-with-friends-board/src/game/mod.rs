@@ -388,14 +388,18 @@ impl GameBoard {
                 if let Some(_nft_sale) = &self.nft_sales.nfts.get(&pointer) {
                     for_sale = true;
                 }
+                // unwrap should be safe here - we have problems if we cant find the NFT.
+                let owner = *&self.nfts.nfts.get(pointer).unwrap().owner();
+
                 power_plant_data.insert(
                     *pointer,
                     UXPlantData {
+                        coordinates: power_plant.coordinates,
+                        for_sale,
+                        has_miners: false,
+                        owner,
                         plant_type: power_plant.plant_type.clone(),
                         watts: power_plant.watts,
-                        coordinates: power_plant.coordinates,
-                        has_miners: false,
-                        for_sale,
                     },
                 );
             });
@@ -406,13 +410,15 @@ impl GameBoard {
     pub fn get_energy_market(&self) -> Result<UXForSaleList, ()> {
         let mut listings = BTreeMap::new();
         self.nft_sales.nfts.iter().for_each(|(pointer, listing)| {
-            listings.insert(*pointer, NFTSale {
-                price: listing.price.clone(),
-                currency: listing.currency,
-                seller: listing.seller,
-                transfer_count: listing.transfer_count
-                
-            });
+            listings.insert(
+                *pointer,
+                NFTSale {
+                    price: listing.price.clone(),
+                    currency: listing.currency,
+                    seller: listing.seller,
+                    transfer_count: listing.transfer_count,
+                },
+            );
         });
         return Ok(UXForSaleList { listings });
     }

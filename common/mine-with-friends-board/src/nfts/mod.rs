@@ -108,13 +108,16 @@ impl NFT for BaseNFT {
     }
 }
 
+#[derive(Serialize, Clone)]
 pub struct UXPlantData {
+    pub coordinates: Location,
+    pub for_sale: ForSale,
+    pub has_miners: HasMiners,
+    pub owner: EntityID,
     pub plant_type: PlantType,
     pub watts: Watts,
-    pub coordinates: Location,
-    pub has_miners: HasMiners,
-    pub for_sale: ForSale
 }
+#[derive(Serialize, Clone)]
 pub struct UXNFTRegistry {
     pub power_plant_data: BTreeMap<NftPtr, UXPlantData>,
 }
