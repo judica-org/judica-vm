@@ -22,6 +22,7 @@ impl AttestationClient {
         let resp: Vec<Envelope> = self
             .as_ref()
             .get(format!("http://{}:{}/tips", url, port))
+            .json(&None::<Tips>)
             .send()
             .await?
             .json()
@@ -37,7 +38,7 @@ impl AttestationClient {
         let resp: Vec<Envelope> = self
             .as_ref()
             .get(format!("http://{}:{}/tips", url, port))
-            .query(&tips)
+            .json(&tips)
             .send()
             .await?
             .json()

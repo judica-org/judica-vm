@@ -17,7 +17,7 @@ use tower_http::trace::TraceLayer;
 
 pub async fn get_tip_handler(
     Extension(db): Extension<MsgDB>,
-    Query(query): Query<Option<Tips>>,
+    Json(query): Json<Option<Tips>>,
 ) -> Result<(Response<()>, Json<Vec<Envelope>>), (StatusCode, &'static str)> {
     let handle = db.get_handle().await;
     let r = match query {
