@@ -23,22 +23,28 @@ pub struct BitcoinCheckPointCache {
     running: Arc<AtomicBool>,
 }
 impl BitcoinCheckPointCache {
+    // Creates a new BitcoinCheckPointCache.
+    // Default initialized if client cannot connect.
     pub async fn new(
         client: Arc<Client>,
         frequency: Option<Duration>,
         quit: Arc<AtomicBool>,
-    ) -> Result<Option<Self>, rpc::Error> {
-        let new = fresh(&client, None).await?;
-        Ok(new.map(|entry: BitcoinCheckPoints| BitcoinCheckPointCache {
-            cache: Arc::new(RwLock::new(entry)),
+    ) -> Self {
+        let new = fresh(&client, None)
+            .await
+            .unwrap_or_default()
+            .unwrap_or(BitcoinCheckPoints::default());
+        BitcoinCheckPointCache {
+            cache: Arc::new(RwLock::new(new)),
             client,
             frequency: frequency.unwrap_or(Duration::from_secs(30)),
             quit,
             running: Arc::new(AtomicBool::new(false)),
-        }))
+        }
     }
 
-    pub async fn run_cache_service(&self) -> Option<JoinHandle<AbstractResult<()>>> {
+    pub fn run_cache_service(&self) -> Option<JoinHandle<AbstractResult<()>>> {
+        tracing::debug!("Bitcoin Client Starting...");
         if self
             .running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -48,12 +54,14 @@ impl BitcoinCheckPointCache {
             Some(tokio::spawn(async move {
                 while !this.quit.load(Ordering::Relaxed) {
                     tokio::time::sleep(this.frequency).await;
+                    tracing::debug!("Attempting Cache Refresh");
                     this.refresh_cache().await;
                 }
                 this.running.store(false, Ordering::Relaxed);
                 INFER_UNIT
             }))
         } else {
+            tracing::error!("Bitcoin Client Already Started...");
             None
         }
     }
@@ -90,6 +98,7 @@ async fn fresh(
         let h_month = client.get_block_hash(height - (144 * 30)).await?;
         let h_check = client.get_best_block_hash().await?;
         if h_check != h1 {
+            tracing::debug!("New Block Found During Refresh");
             continue;
         }
         break Ok(Some(BitcoinCheckPoints {

@@ -76,6 +76,7 @@ pub async fn post_message(
 
 pub async fn run(config: Arc<Config>, db: MsgDB) -> tokio::task::JoinHandle<AbstractResult<()>> {
     return tokio::spawn(async move {
+        tracing::debug!("Starting Task for Attestation Server");
         // build our application with a route
         let app = Router::new()
             // `POST /msg` goes to `msg`
@@ -87,7 +88,7 @@ pub async fn run(config: Arc<Config>, db: MsgDB) -> tokio::task::JoinHandle<Abst
         // run our app with hyper
         // `axum::Server` is a re-export of `hyper::Server`
         let addr = SocketAddr::from(([127, 0, 0, 1], config.tor.attestation_port));
-        tracing::debug!("listening on {}", addr);
+        tracing::debug!("Attestation Server Listening on {}", addr);
         axum::Server::bind(&addr)
             .serve(app.into_make_service())
             .await

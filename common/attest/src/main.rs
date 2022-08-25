@@ -102,16 +102,13 @@ async fn init_main(
     let bitcoin_client =
         Arc::new(Client::new(config.bitcoin.url.clone(), config.bitcoin.auth.clone()).await?);
     tracing::debug!("Bitcoin Client Loaded");
-    let bitcoin_checkpoints = Arc::new(
-        BitcoinCheckPointCache::new(bitcoin_client, None, quit.clone())
-            .await?
-            .ok_or("Failed to create a cache")?,
-    );
+    let bitcoin_checkpoints =
+        Arc::new(BitcoinCheckPointCache::new(bitcoin_client, None, quit.clone()).await);
     let mut checkpoint_service = bitcoin_checkpoints
         .run_cache_service()
-        .await
         .ok_or("Checkpoint service already started")?;
     tracing::debug!("Checkpoint Service Started");
+    tracing::debug!("Opening DB");
     let application = format!("attestations.{}", config.subname);
     let mdb = setup_db(&application, config.prefix.clone())
         .await
@@ -195,10 +192,14 @@ mod test {
     use attest_util::INFER_UNIT;
     use bitcoincore_rpc_async::Auth;
     use futures::future::join_all;
+    use reqwest::Client;
     use test_log::test;
     use tokio::spawn;
 
-    use crate::{init_main, BitcoinConfig, Config, ControlConfig, TorConfig};
+    use crate::{
+        attestations::client::AttestationClient, init_main, BitcoinConfig, Config, ControlConfig,
+        TorConfig,
+    };
 
     // Connect to a specific local server for testing, or assume there is an
     // open-to-world server available locally
@@ -211,8 +212,10 @@ mod test {
             },
         }
     }
-    #[test(tokio::test(flavor = "multi_thread", worker_threads = 2))]
-    async fn make_two_nodes() {
+    macro_rules! test_setup {
+        {$name:ident, $code:tt} => {
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
+    async fn $name() {
         let btc_config = get_btc_config();
         let quit1 = Arc::new(AtomicBool::new(false));
         let dir = temp_dir();
@@ -247,18 +250,38 @@ mod test {
             let quit1 = quit1.clone();
             let quit2 = quit2.clone();
             spawn(async move {
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                $code
                 quit1.store(true, Ordering::Relaxed);
                 quit2.store(true, Ordering::Relaxed);
                 INFER_UNIT
             })
         };
-        let results = join_all([
-            main_task,
-            spawn(async { init_main(Arc::new(config2), quit2).await }),
-            spawn(async { init_main(Arc::new(config1), quit1).await }),
-        ])
-        .await;
-        let () = results[0].as_ref().unwrap().as_ref().unwrap();
+        tokio::select!{
+            _ = main_task => {
+                return;
+            }
+            r = spawn(async { init_main(Arc::new(config2), quit2).await }) => {
+                r.unwrap().unwrap();
+            }
+            r = spawn(async { init_main(Arc::new(config1), quit1).await }) => {
+                r.unwrap().unwrap();
+            }
+        };
     }
+
+        };
+    }
+
+    test_setup!(sleep_for_five, {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        let base = Client::new();
+        let client = AttestationClient(base.clone());
+        for _ in 0..10 {
+            let client1_resp = client.get_latest_tips(&"127.0.0.1".into(), 12557).await;
+            let client2_resp = client.get_latest_tips(&"127.0.0.1".into(), 12558).await;
+            tracing::debug!("Got:{:?}", client1_resp);
+            tracing::debug!("Got:{:?}", client2_resp);
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    });
 }

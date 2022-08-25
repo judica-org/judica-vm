@@ -214,6 +214,7 @@ dependencies = [
  "bitcoincore-rpc-async",
  "sapio-bitcoin",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
