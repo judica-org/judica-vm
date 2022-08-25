@@ -1,5 +1,5 @@
 [package]
-name = "attest-messages"
+name = "bitcoin-header-checkpoints"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,8 +10,17 @@ serde = "1.0.136"
 serde_derive = "1.0.136"
 ruma-signatures = "0.10.0"
 ruma-serde = "0.6.0"
+tokio = { version = "1.19.0", features = ["full"] }
 fallible-iterator = "0.2.0"
 futures = "0.3.21"
+bitcoincore-rpc-async = "4.0.1-alpha.1"
+
+[dependencies.attest-messages]
+path = "../attest-messages"
+
+[dependencies.ed25519-dalek]
+version= "1.0.1"
+features=['serde']
 
 [dependencies.rusqlite]
 version = "0.27.0"

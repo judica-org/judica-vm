@@ -5,6 +5,7 @@ members = [
     "common/attest-messages",
     "common/attest-database",
     "common/attest-util",
+    "common/bitcoin-header-checkpoints",
     "common/game-host",
     "common/game-host-messages",
 ]

@@ -39,6 +39,9 @@ path = "../attest-database"
 path = "../attest-messages"
 features = ["rusqlite"]
 
+[dependencies.bitcoin-header-checkpoints]
+path = "../bitcoin-header-checkpoints"
+
 [dependencies.ed25519-dalek]
 version= "1.0.1"
 features=['serde']

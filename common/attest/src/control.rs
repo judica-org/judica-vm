@@ -3,7 +3,7 @@ use crate::{
     Config,
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
-use attest_messages::{checkpoints::BitcoinCheckPointCache, CanonicalEnvelopeHash, Envelope};
+use attest_messages::{ CanonicalEnvelopeHash, Envelope};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     extract::Query,
@@ -12,6 +12,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
+use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use reqwest::Method;
 use sapio_bitcoin::{
     secp256k1::{All, Secp256k1},

@@ -1,6 +1,5 @@
 use super::handle_type;
 use super::MsgDBHandle;
-use attest_messages::checkpoints::BitcoinCheckPointCache;
 use attest_messages::checkpoints::BitcoinCheckPoints;
 use attest_messages::Envelope;
 use attest_messages::Header;

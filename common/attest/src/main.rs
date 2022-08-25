@@ -1,6 +1,6 @@
 use attest_database::connection::MsgDB;
 use attest_database::setup_db;
-use attest_messages::checkpoints::BitcoinCheckPointCache;
+use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use rpc::Client;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
