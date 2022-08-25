@@ -58,8 +58,6 @@ type NFTs = {
   }[]
 }
 
-
-
 type game_board = {
   erc20s: any,
   swap: any, // determine TS swap shape
@@ -108,8 +106,6 @@ function GameBoard(props: { g: game_board }) {
     <li>
       NFT Sales: {JSON.stringify(props.g.nft_sales)}
     </li>
-
-
   </ul>;
 }
 

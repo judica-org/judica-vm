@@ -65,23 +65,12 @@ export default ({ power_plants }) => {
                     labelDotRadius={0.5}
                     labelDotOrientation={() => 'top'}
                     labelLabel={
-                        (l) => {
-                            if (l.for_sale) {
-
-                                return `
+                        (l) => `
                             <b>ID: ${l.id}</b> <br />
                             Owner: <i>${l.owner}</i> <br />
                             Watts: <i>${l.watts}</i> <br />
-                            For Sale
-                            `}
-                            else {
-                                return `
-                                <b>ID: ${l.id}</b> <br />
-                                Owner: <i>${l.owner}</i> <br />
-                                Watts: <i>${l.watts}</i> <br />   
-                                `
-                            }
-                        }
+                            ${l.for_sale ? 'For Sale' : ''}
+                            `
                     }
                     hexPolygonsData={countries.features}
                     hexPolygonResolution={3}
