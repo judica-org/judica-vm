@@ -174,8 +174,9 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
                 channel: "default".into(),
             })?;
             let handle = db.get_handle().await;
+            // TODO: Run a tipcache
             let wrapped = handle
-                .wrap_message_in_envelope_for_user_by_key(msg, &keypair, &secp, None)??
+                .wrap_message_in_envelope_for_user_by_key(msg, &keypair, &secp, None, None)??
                 .self_authenticate(&secp)?;
             handle.try_insert_authenticated_envelope(wrapped)?;
         }

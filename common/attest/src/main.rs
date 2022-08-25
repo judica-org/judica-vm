@@ -93,9 +93,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bitcoin_client =
         Arc::new(Client::new(config.bitcoin.url.clone(), config.bitcoin.auth.clone()).await?);
     tracing::debug!("Bitcoin Client Loaded");
-    let bitcoin_checkpoints = BitcoinCheckPointCache::new(bitcoin_client, None, quit.clone())
-        .await?
-        .ok_or("Failed to create a cache")?;
+    let bitcoin_checkpoints = Arc::new(
+        BitcoinCheckPointCache::new(bitcoin_client, None, quit.clone())
+            .await?
+            .ok_or("Failed to create a cache")?,
+    );
     let mut checkpoint_service = bitcoin_checkpoints
         .run_cache_service()
         .await
@@ -109,7 +111,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx_peer_status, rx_peer_status) = channel(1);
     let mut fetching_client =
         peer_services::startup(config.clone(), mdb.clone(), quit.clone(), rx_peer_status);
-    let mut control_server = control::run(config.clone(), mdb.clone(), tx_peer_status).await;
+    let mut control_server = control::run(
+        config.clone(),
+        mdb.clone(),
+        tx_peer_status,
+        bitcoin_checkpoints,
+    )
+    .await;
 
     tracing::debug!("Starting Subservices");
     let mut skip = "";

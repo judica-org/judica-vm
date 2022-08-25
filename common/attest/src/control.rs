@@ -3,7 +3,7 @@ use crate::{
     Config,
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_messages::{checkpoints::BitcoinCheckPointCache, CanonicalEnvelopeHash, Envelope};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     extract::Query,
@@ -132,6 +132,7 @@ struct PushMsg {
 async fn push_message_dangerous(
     db: Extension<MsgDB>,
     secp: Extension<Secp256k1<All>>,
+    bitcoin_tipcache: Extension<Arc<BitcoinCheckPointCache>>,
     Json(PushMsg { msg, key }): Json<PushMsg>,
 ) -> Result<(Response<()>, Json<Value>), (StatusCode, String)> {
     let handle = db.0.get_handle().await;
@@ -145,8 +146,9 @@ async fn push_message_dangerous(
         .get(&key)
         .map(|k| KeyPair::from_secret_key(&secp, k))
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
+    let tips = bitcoin_tipcache.0.read_cache().await;
     let env = handle
-        .wrap_message_in_envelope_for_user_by_key(msg, &kp, &secp.0, None)
+        .wrap_message_in_envelope_for_user_by_key(msg, &kp, &secp.0, Some(tips), None)
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -217,6 +219,7 @@ pub async fn run(
     config: Arc<Config>,
     db: MsgDB,
     peer_status: Sender<PeerQuery>,
+    bitcoin_tipcache: Arc<BitcoinCheckPointCache>,
 ) -> tokio::task::JoinHandle<AbstractResult<()>> {
     return tokio::spawn(async move {
         // build our application with a route
@@ -273,6 +276,7 @@ pub async fn run(
             .layer(Extension(db))
             .layer(Extension(peer_status))
             .layer(Extension(Secp256k1::new()))
+            .layer(Extension(bitcoin_tipcache))
             .layer(tower_http::trace::TraceLayer::new_for_http());
 
         // run our app with hyper
