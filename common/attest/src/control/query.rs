@@ -9,9 +9,13 @@ pub struct PushMsg {
     pub key: XOnlyPublicKey,
 }
 
-
 #[derive(Serialize, Deserialize)]
 pub struct Subscribe {
     pub url: String,
     pub port: u16,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Outcome {
+    pub success: bool,
 }

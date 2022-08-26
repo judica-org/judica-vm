@@ -200,7 +200,10 @@ mod test {
 
     use crate::{
         attestations::client::AttestationClient,
-        control::{client::ControlClient, query::PushMsg},
+        control::{
+            client::ControlClient,
+            query::{Outcome, PushMsg, Subscribe},
+        },
         init_main, BitcoinConfig, Config, ControlConfig, TorConfig,
     };
 
@@ -351,7 +354,10 @@ mod test {
                 });
             let resp = join_all(it).await;
             println!("Created {:?}", resp);
-            let pushmsg_resp = resp.into_iter().collect::<Result<Vec<Value>, _>>().unwrap();
+            let pushmsg_resp = resp
+                .into_iter()
+                .collect::<Result<Vec<Outcome>, _>>()
+                .unwrap();
 
             let it = ports.iter().map(|(port, ctrl)| {
                 let client = client.clone();
@@ -364,9 +370,48 @@ mod test {
                     .flat_map(|r| r.ok().unwrap())
                     .map(|m| m.msg)
                     .collect::<Vec<_>>(),
-                ports.iter().map(|_| -> Value { "Test!".into() }).collect::<Vec<_>>()
+                ports
+                    .iter()
+                    .map(|_| -> Value { "Test!".into() })
+                    .collect::<Vec<_>>()
             );
 
+            let it = ports.iter().map(|(port, ctrl)| {
+                let control_client = control_client.clone();
+                let ports = ports.clone();
+                async move {
+                    let mut futs = move |to, cli: ControlClient| async move {
+                        cli.add_service(
+                            &Subscribe {
+                                url: "127.0.0.1".into(),
+                                port: to,
+                            },
+                            &"127.0.0.1".into(),
+                            *ctrl,
+                        )
+                        .await
+                    };
+                    let subbed: Vec<_> = join_all(
+                        ports
+                            .iter()
+                            // don't connect to self
+                            .filter(|(p, _)| p != port)
+                            .map(|(port, ctl)| futs(*port, control_client.clone())),
+                    )
+                    .await
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                    subbed
+                }
+            });
+            let resp = join_all(it).await;
+            // No Failures
+            assert!(resp.iter().flatten().all(|o| o.success));
+            // handshaking lemma would be better, but this checks
+            // more strictly each one had the right number of responses
+            assert!(resp.iter().all(|v| v.len() == ports.len() - 1));
+            println!("All Connected");
             ()
         })
         .await

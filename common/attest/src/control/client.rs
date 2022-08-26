@@ -2,7 +2,7 @@ use attest_messages::Envelope;
 use reqwest::Client;
 use serde_json::Value;
 
-use super::query::{PushMsg, Subscribe};
+use super::query::{PushMsg, Subscribe, Outcome};
 
 #[derive(Clone)]
 pub struct ControlClient(pub Client);
@@ -35,7 +35,7 @@ impl ControlClient {
         p: &PushMsg,
         url: &String,
         port: u16,
-    ) -> Result<Value, reqwest::Error> {
+    ) -> Result<Outcome, reqwest::Error> {
         let resp = self
             .as_ref()
             .post(format!("http://{}:{}/push_message_dangerous", url, port))
@@ -51,7 +51,7 @@ impl ControlClient {
         sub: &Subscribe,
         url: &String,
         port: u16,
-    ) -> Result<Value, reqwest::Error> {
+    ) -> Result<Outcome, reqwest::Error> {
         let resp = self
             .as_ref()
             .post(format!("http://{}:{}/service", url, port))

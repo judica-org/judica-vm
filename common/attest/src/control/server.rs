@@ -24,7 +24,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
 
-use super::query::{PushMsg, Subscribe};
+use super::query::{PushMsg, Subscribe, Outcome};
 
 #[derive(Serialize, Deserialize)]
 pub struct TipData {
@@ -105,7 +105,7 @@ async fn get_status(
 async fn listen_to_service(
     db: Extension<MsgDB>,
     Json(subscribe): Json<Subscribe>,
-) -> Result<(Response<()>, Json<Value>), (StatusCode, String)> {
+) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
     let _r =
         db.0.get_handle()
             .await
@@ -117,7 +117,7 @@ async fn listen_to_service(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(json!({"success":true})),
+        Json(Outcome{success:true}),
     ))
 }
 
@@ -126,7 +126,7 @@ async fn push_message_dangerous(
     secp: Extension<Secp256k1<All>>,
     bitcoin_tipcache: Extension<Arc<BitcoinCheckPointCache>>,
     Json(PushMsg { msg, key }): Json<PushMsg>,
-) -> Result<(Response<()>, Json<Value>), (StatusCode, String)> {
+) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
     let handle = db.0.get_handle().await;
     let keys = handle.get_keymap().map_err(|e| {
         (
@@ -167,7 +167,7 @@ async fn push_message_dangerous(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(json!({"success":true})),
+        Json(Outcome{success:true}),
     ))
 }
 async fn make_genesis(
