@@ -181,6 +181,7 @@ async fn init_main(
 #[cfg(test)]
 mod test {
     use std::{
+        collections::BTreeSet,
         env::temp_dir,
         sync::{
             atomic::{AtomicBool, Ordering},
@@ -288,7 +289,7 @@ mod test {
     }
 
     #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
-    async fn sleep_for_five() {
+    async fn connect_and_test_nodes() {
         const NODES: u8 = 3;
         test_context(NODES, |ports| async move {
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -412,6 +413,75 @@ mod test {
             // more strictly each one had the right number of responses
             assert!(resp.iter().all(|v| v.len() == ports.len() - 1));
             println!("All Connected");
+            // TODO: Allow configurable speed of re-peering  / signal that notifies after re-peering?
+            let it = ports.iter().map(|(port, ctrl)| {
+                let client = client.clone();
+                async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
+            });
+            let resp = join_all(it).await;
+            let mut old_tips: BTreeSet<_> = resp
+                .iter()
+                .flatten()
+                .flatten()
+                .map(|c| c.canonicalized_hash_ref())
+                .flatten()
+                .collect();
+            tracing::info!("Sleeping to enable re-peering time. Feel free to open monitors...");
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            tracing::info!("Waking Up!");
+
+            let it = ports
+                .iter()
+                .zip(genesis_resp.iter())
+                .map(|((port, ctrl), genesis)| {
+                    let control_client = control_client.clone();
+                    let genesis = genesis.clone();
+                    async move {
+                        control_client
+                            .push_message_dangerous(
+                                &PushMsg {
+                                    key: genesis.header.key,
+                                    msg: "Test 2!".into(),
+                                },
+                                &"127.0.0.1".into(),
+                                *ctrl,
+                            )
+                            .await
+                    }
+                });
+            let resp = join_all(it).await;
+            tracing::info!("Sleeping to enable re-peering time. Feel free to open monitors...");
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            tracing::info!("Waking Up!");
+
+            let it = ports.iter().map(|(port, ctrl)| {
+                let client = client.clone();
+                async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
+            });
+            let resp = join_all(it).await;
+            let mut new_tips = resp
+                .iter()
+                .flatten()
+                .flatten()
+                .map(|c| c.canonicalized_hash_ref())
+                .flatten()
+                .collect::<BTreeSet<_>>();
+            old_tips.append(&mut new_tips);
+            for r in &resp {
+                for e in r.as_ref().unwrap() {
+                    let s = e
+                        .header
+                        .tips
+                        .iter()
+                        .map(|tip| tip.2)
+                        .collect::<BTreeSet<_>>();
+                    assert_eq!(s.len(), ports.len());
+                    let diff = s.difference(&old_tips);
+                    let diff: Vec<_> = diff.cloned().collect();
+                    assert_eq!(diff, vec![]);
+                }
+            }
+
             ()
         })
         .await
