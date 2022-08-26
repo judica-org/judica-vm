@@ -32,10 +32,10 @@ pub async fn setup_db_at(dir: PathBuf, name: &str) -> Result<MsgDB, Box<dyn Erro
 }
 pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgDB, Box<dyn Error>> {
     let dirs = directories::ProjectDirs::from("org", "judica", application).unwrap();
-    let data_dir = dirs.data_dir().into();
+    let data_dir: PathBuf = dirs.data_dir().into();
     let data_dir = if let Some(prefix) = prefix {
         tracing::debug!("Creating DB with Prefix {}", prefix.display());
-        prefix.join(data_dir)
+        prefix.join(&data_dir.strip_prefix("/")?)
     } else {
         data_dir
     };
