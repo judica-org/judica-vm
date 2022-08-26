@@ -1,3 +1,4 @@
+use attest_messages::Envelope;
 use reqwest::Client;
 use serde_json::Value;
 
@@ -18,7 +19,7 @@ impl ControlClient {
         nickname: &String,
         url: &String,
         port: u16,
-    ) -> Result<Value, reqwest::Error> {
+    ) -> Result<Envelope, reqwest::Error> {
         let resp = self
             .as_ref()
             .post(format!("http://{}:{}/make_genesis", url, port))
