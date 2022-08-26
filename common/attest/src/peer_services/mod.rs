@@ -25,8 +25,26 @@ pub fn startup(
     mut status: Receiver<PeerQuery>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     let jh = tokio::spawn(async move {
-        let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", config.tor.socks_port))?;
-        let client = AttestationClient(reqwest::Client::builder().proxy(proxy).build()?);
+        let mut bld = reqwest::Client::builder();
+        if let Some(tor_config) = config.tor.clone() {
+            // Local Pass if in test mode
+            // TODO: make this programmatic?
+            #[cfg(test)]
+            {
+                bld = bld.proxy(reqwest::Proxy::custom(move |url| {
+                    if url.host_str() == Some("127.0.0.1") {
+                        Some("127.0.0.1")
+                    } else {
+                        None
+                    }
+                }));
+            }
+            let proxy =
+                reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", tor_config.socks_port))?;
+            bld = bld.proxy(proxy);
+        }
+        let inner_client = bld.build()?;
+        let client = AttestationClient(inner_client);
         let secp = Arc::new(Secp256k1::new());
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);

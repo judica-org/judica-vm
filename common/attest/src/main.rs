@@ -42,11 +42,9 @@ pub struct BitcoinConfig {
 fn default_socks_port() -> u16 {
     19050
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TorConfig {
     directory: PathBuf,
-    #[serde(default = "default_port")]
-    pub attestation_port: u16,
     #[serde(default = "default_socks_port")]
     socks_port: u16,
 }
@@ -63,7 +61,9 @@ pub struct ControlConfig {
 pub struct Config {
     bitcoin: BitcoinConfig,
     pub subname: String,
-    pub tor: TorConfig,
+    pub tor: Option<TorConfig>,
+    #[serde(default = "default_port")]
+    pub attestation_port: u16,
     pub control: ControlConfig,
     #[serde(default)]
     pub prefix: Option<PathBuf>,
@@ -191,7 +191,7 @@ mod test {
 
     use attest_util::INFER_UNIT;
     use bitcoincore_rpc_async::Auth;
-    use futures::future::join_all;
+    use futures::{future::join_all, Future};
     use reqwest::Client;
     use test_log::test;
     use tokio::spawn;
@@ -224,79 +224,73 @@ mod test {
         }
         Some(if test_one { 0 } else { 1 })
     }
-    macro_rules! test_setup {
-        {$name:ident, $code:tt} => {
-    #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
-    async fn $name() {
+    async fn test_context<T>(code: T) -> ()
+    where
+        T: Future + Send + 'static,
+        T::Output: Send + 'static,
+    {
         let test_id = if let Some(tid) = get_test_id() {
             tid
         } else {
-            return
+            return;
         };
         let btc_config = get_btc_config();
         let quit = Arc::new(AtomicBool::new(false));
         let mut dir = temp_dir();
         let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
         use sapio_bitcoin::secp256k1::rand::Rng;
-        let bytes : [u8; 16] = rng.gen();
+        let bytes: [u8; 16] = rng.gen();
         use sapio_bitcoin::hashes::hex::ToHex;
-        dir.push(format!("test-rust-{}",bytes.to_hex()));
+        dir.push(format!("test-rust-{}", bytes.to_hex()));
         tracing::debug!("Using tmpdir: {}", dir.display());
-        let tor_dir = dir.join("tor");
+        let dir = attest_util::ensure_dir(dir).await.unwrap();
         let config = Config {
             bitcoin: btc_config.clone(),
             subname: format!("subname-{}", test_id),
-            tor: TorConfig {
-                directory: tor_dir,
-                attestation_port: 12556 + test_id,
-                socks_port: 13556 + test_id,
+            attestation_port: 12556 + test_id,
+            tor: None,
+            control: ControlConfig {
+                port: 14556 + test_id,
             },
-            control: ControlConfig { port: 14556 +test_id },
             prefix: Some(dir),
         };
 
-        let main_task = {
-            let quit = quit.clone();
-            spawn(async move {
-                $code
-                quit.store(true, Ordering::Relaxed);
-                ()
-            })
-        };
         let quit = quit.clone();
-        let task_one = spawn(async  move{
-            init_main(Arc::new(config), quit).await
-        });
-        tokio::select!{
-            _ = main_task => {
+        let quit2 = quit.clone();
+        let task_one = spawn(async move { init_main(Arc::new(config), quit).await });
+        tokio::select! {
+            _ = code => {
                 tracing::debug!("Main Task Completed");
+                quit2.store(true, Ordering::Relaxed);
                 return;
             }
             r = task_one => {
                 tracing::debug!("Task One Completed");
                 r.unwrap().unwrap();
             }
-        };
-    }
-
-        };
-    }
-
-    test_setup!(sleep_for_five, {
-        let test_id = if let Some(tid) = get_test_id() {
-            tid
-        } else {
-            return
-        };
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        let base = Client::new();
-        let client = AttestationClient(base.clone());
-        for _ in 0..10 {
-            let resp = client
-                .get_latest_tips(&"127.0.0.1".into(), 12556 + test_id)
-                .await;
-            tracing::debug!("Got:{:?}", resp);
-            tokio::time::sleep(Duration::from_secs(5)).await;
         }
-    });
+    }
+
+    #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
+    async fn sleep_for_five() {
+        test_context(async {
+            let test_id = if let Some(tid) = get_test_id() {
+                tid
+            } else {
+                return;
+            };
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            let base = Client::new();
+            let client = AttestationClient(base.clone());
+            for _ in 0..10 {
+                let resp = client
+                    .get_latest_tips(&"127.0.0.1".into(), 12556 + test_id)
+                    .await;
+                tracing::debug!("Got:{:?}", resp);
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+            ()
+        })
+        .await
+    }
 }
