@@ -24,6 +24,8 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
 
+use super::query::{PushMsg, Subscribe};
+
 #[derive(Serialize, Deserialize)]
 pub struct TipData {
     envelope: Envelope,
@@ -100,11 +102,6 @@ async fn get_status(
     ))
 }
 
-#[derive(Serialize, Deserialize)]
-struct Subscribe {
-    url: String,
-    port: u16,
-}
 async fn listen_to_service(
     db: Extension<MsgDB>,
     Json(subscribe): Json<Subscribe>,
@@ -124,11 +121,6 @@ async fn listen_to_service(
     ))
 }
 
-#[derive(Serialize, Deserialize)]
-struct PushMsg {
-    msg: Value,
-    key: XOnlyPublicKey,
-}
 async fn push_message_dangerous(
     db: Extension<MsgDB>,
     secp: Extension<Secp256k1<All>>,
