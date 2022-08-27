@@ -52,20 +52,17 @@ VALUES
                 1
         ), (
             SELECT
-                IIF(
-                    :height = 0,
-                    1,
-                    IFNULL(
-                        (
-                            SELECT
-                                connected
-                            FROM
-                                messages M
-                            WHERE
-                                M.hash = :prev_msg
-                        ),
-                        0
-                    )
+                :height = 0
+                OR EXISTS(
+                    SELECT
+                        1
+                    FROM
+                        messages M
+                    WHERE
+                        M.hash = :prev_msg
+                        AND M.connected
+                    LIMIT
+                        1
                 )
         )
     )
