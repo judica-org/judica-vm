@@ -208,7 +208,8 @@ async fn make_genesis(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Creating Genesis Message failed: {}", e),
             )
-        })?;
+        })?
+        .expect("Should always succeed at inserting a fresh Genesis");
 
     Ok((
         Response::builder()
