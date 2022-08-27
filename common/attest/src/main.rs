@@ -251,7 +251,7 @@ mod test {
     use sapio_bitcoin::XOnlyPublicKey;
     use test_log::test;
     use tokio::spawn;
-    use tracing::info;
+    use tracing::{debug, info};
 
     use crate::{
         attestations::client::AttestationClient,
@@ -353,9 +353,9 @@ mod test {
 
     #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
     async fn connect_and_test_nodes() {
-        const NODES: u8 = 3;
+        const NODES: u8 = 2;
         test_context(NODES, |ports| async move {
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
             // TODO: Guarantee all clients are started?
             let base = Client::new();
             let client = AttestationClient(base.clone());
@@ -367,10 +367,8 @@ mod test {
                     async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
                 });
                 let resp = join_all(it).await;
-                assert_eq!(
-                    resp.into_iter().map(|r| r.ok()).collect::<Vec<_>>(),
-                    vec![Some(vec![]), Some(vec![]), Some(vec![])]
-                );
+                let empty = (0..NODES).map(|_|Some(vec![])).collect::<Vec<_>>();
+                assert_eq!(resp.into_iter().map(|r| r.ok()).collect::<Vec<_>>(), empty);
             }
             // Create a genesis envelope for each node
             let genesis_envelopes = {
@@ -383,7 +381,7 @@ mod test {
                     }
                 });
                 let resp = join_all(it).await;
-                println!("Created {:?}", resp);
+                debug!("Created {:?}", resp);
                 let genesis_resp = resp
                     .into_iter()
                     .collect::<Result<Vec<Envelope>, _>>()
@@ -397,7 +395,7 @@ mod test {
                     async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
                 });
                 let resp = join_all(it).await;
-                println!("Got {:?}", resp);
+                debug!("Got {:?}", resp);
                 assert_eq!(
                     resp.into_iter()
                         .flat_map(|r| r.ok().unwrap())
@@ -413,6 +411,7 @@ mod test {
                 let ports = ports.clone();
                 let keys = genesis_envelopes.iter().map(|g| g.header.key).collect::<Vec<_>>();
                 async move {
+                info!(n, "Making messages");
                 let make_message = |((port, ctrl), key): ((u16, u16), XOnlyPublicKey)| {
                     let control_client = control_client.clone();
                     async move {
@@ -434,7 +433,7 @@ mod test {
                     .zip(keys.into_iter())
                     .map(make_message);
                 let resp = join_all(it).await;
-                info!("Made Messages: {:?}", resp);
+                info!(n, "Made Messages: {:?}", resp);
                 let pushmsg_resp = resp
                     .into_iter()
                     .collect::<Result<Vec<Outcome>, _>>()
@@ -447,6 +446,7 @@ mod test {
                 let ports = ports.clone();
                 let client = client.clone();
                 async move {
+                    info!(n, "Checking for synchronization");
                     let mut expected = ports
                         .iter()
                         .map(|(port, _)| nth_msg_per_port(*port, n))
@@ -481,6 +481,8 @@ mod test {
                         }
                         break 'resync;
                     }
+
+                    info!(n, "Synchronization success");
                 }
             };
 
@@ -523,7 +525,9 @@ mod test {
                 // handshaking lemma n*n-1 would be "cleaner", but this checks
                 // more strictly each one had the right number of responses
                 assert!(resp.iter().all(|v| v.len() == ports.len() - 1));
-                println!("All Connected");
+                debug!("All Connected");
+                check_synched(1, true).await;
+                info!("All Synchronized")
             }
             let get_all_tips = || async {
                 let it = ports.iter().map(|(port, ctrl)| {
@@ -542,16 +546,19 @@ mod test {
             // TODO: signal that notifies after re-peering successful?
             // Get tips for all clients (doesn't depend on past bit processing yet)
             let mut old_tips: BTreeSet<_> = get_all_tips().await;
-            // TODO: Replace with querying status tasks?
-            tracing::info!("Sleeping to enable re-peering time. Feel free to open monitors...");
-            tokio::time::sleep(Duration::from_secs(3)).await;
-            tracing::info!("Waking Up!");
+            debug!(current_tips = ?old_tips, "Tips before adding a new message");
             // Create a new message on all chain tips
             make_nth(2).await;
             check_synched(2, true).await;
 
+            // wait twice the time for our attach_tips to get called (TODO: have a non-race condition?)
+            tokio::time::sleep(Duration::from_millis(2000)).await;
+
             let mut new_tips = get_all_tips().await;
+            debug!(all_tips = ?new_tips, "Adding Tips");
             old_tips.append(&mut new_tips);
+
+            debug!(all_tips = ?old_tips, "Tips to Check For");
             // Attempt to check that the latest tips of all clients Envelopes are in sync
             {
                 let it = ports.iter().map(|(port, ctrl)| {
@@ -562,16 +569,18 @@ mod test {
 
                 for r in &resp {
                     for e in r.as_ref().unwrap() {
+                        debug!(envelope=?e, "Checking Tips On");
                         let s = e
                             .header
                             .tips
                             .iter()
                             .map(|tip| tip.2)
                             .collect::<BTreeSet<_>>();
-                        assert_eq!(s.len(), ports.len());
+                        assert_eq!(s.len(), ports.len() -1 );
                         let diff = s.difference(&old_tips);
                         let diff: Vec<_> = diff.cloned().collect();
                         assert_eq!(diff, vec![]);
+                        assert!(!s.contains(&e.header.prev_msg));
                     }
                 }
             }
