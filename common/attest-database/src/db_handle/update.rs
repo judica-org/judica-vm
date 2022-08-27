@@ -38,11 +38,18 @@ where
         port: u16,
         fetch_from: Option<bool>,
         push_to: Option<bool>,
+        allow_unsolicited_tips: Option<bool>,
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare(include_str!("sql/update/hidden_service.sql"))?;
-        stmt.insert(rusqlite::named_params!{":service_url":s, ":port":port, ":fetch_from":fetch_from, ":push_to": push_to})?;
+        stmt.insert(rusqlite::named_params!(
+            ":service_url": s,
+            ":port": port,
+            ":fetch_from": fetch_from,
+            ":push_to": push_to,
+            ":allow_unsolicited_tips": allow_unsolicited_tips
+        ))?;
         Ok(())
     }
 }

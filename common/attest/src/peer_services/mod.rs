@@ -1,22 +1,27 @@
+use std::pin::Pin;
+
+use futures::{TryFutureExt, FutureExt};
 use tokio::{
+    spawn,
     sync::{mpsc::Receiver, oneshot::Sender},
     time::MissedTickBehavior,
 };
 
 use attest_util::INFER_UNIT;
+use tracing::{debug, info};
 
 use crate::attestations::client::AttestationClient;
 
 use super::*;
 
-#[derive(Hash, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize)]
+#[derive(Hash, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum PeerType {
     Push,
     Fetch,
 }
 
 pub enum PeerQuery {
-    RunningTasks(Sender<Vec<(String, u16, PeerType)>>),
+    RunningTasks(Sender<Vec<(String, u16, PeerType, bool)>>),
 }
 pub fn startup(
     config: Arc<Config>,
@@ -48,8 +53,12 @@ pub fn startup(
         let secp = Arc::new(Secp256k1::new());
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        let mut task_set: HashMap<(String, u16, PeerType), JoinHandle<Result<(), _>>> =
-            HashMap::new();
+        type AllowsUnsolicited = bool;
+        type Host = String;
+        let mut task_set: HashMap<
+            (String, u16, PeerType, AllowsUnsolicited),
+            JoinHandle<Result<(), _>>,
+        > = HashMap::new();
         'outer: loop {
             tokio::select! {
                 query = status.recv() => {
@@ -75,23 +84,43 @@ pub fn startup(
                 .flat_map(|p| {
                     let mut v = [None, None];
                     if p.fetch_from {
-                        v[0] = Some((p.service_url.clone(), p.port, PeerType::Fetch))
+                        v[0] = Some((
+                            p.service_url.clone(),
+                            p.port,
+                            PeerType::Fetch,
+                            p.allow_unsolicited_tips,
+                        ))
                     }
                     if p.push_to {
-                        v[1] = Some((p.service_url, p.port, PeerType::Push))
+                        v[1] = Some((
+                            p.service_url,
+                            p.port,
+                            PeerType::Push,
+                            p.allow_unsolicited_tips,
+                        ))
                     }
                     v
                 })
                 .flatten()
                 .collect();
             // Drop anything that is finished, we will re-add it later if still in create_services
-            task_set.retain(|_k, v| !v.is_finished());
+            task_set.retain(|k, v| {
+                if !v.is_finished() {
+                    true
+                } else {
+                    // this is safe because v is finished
+                    let val = v.now_or_never();
+                    info!(result=?val,"Task Finished: {:?}", k);
+                    false
+                }
+            });
             // If it is no longer in our services DB, drop it / disconnect, and also
             // remove it from our to create set (only if it is in the to retain set, mind you)
             task_set.retain(
                 |service_id, service| match create_services.take(service_id) {
                     Some(_) => true,
                     None => {
+                        info!("Aborting Task: {:?}", service_id);
                         service.abort();
                         false
                     }
@@ -99,6 +128,7 @@ pub fn startup(
             );
             // Open connections to all services on the list and put into our task set.
             for url in create_services.into_iter() {
+                info!("Starting Task: {:?}", url);
                 let client = client.clone();
                 match url.2 {
                     PeerType::Push => {
@@ -121,6 +151,7 @@ pub fn startup(
                                 client,
                                 (url.0, url.1),
                                 db.clone(),
+                                url.3,
                             )),
                         );
                     }

@@ -24,7 +24,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
 
-use super::query::{PushMsg, Subscribe, Outcome};
+use super::query::{Outcome, PushMsg, Subscribe};
 
 #[derive(Serialize, Deserialize)]
 pub struct TipData {
@@ -35,7 +35,7 @@ pub struct TipData {
 pub struct Status {
     peers: Vec<PeerInfo>,
     tips: Vec<TipData>,
-    peer_connections: Vec<(String, u16, PeerType)>,
+    peer_connections: Vec<(String, u16, PeerType, bool)>,
     all_users: Vec<(XOnlyPublicKey, String, bool)>,
 }
 async fn get_status(
@@ -109,7 +109,13 @@ async fn listen_to_service(
     let _r =
         db.0.get_handle()
             .await
-            .upsert_hidden_service(subscribe.url, subscribe.port, Some(true), Some(true))
+            .upsert_hidden_service(
+                subscribe.url,
+                subscribe.port,
+                Some(true),
+                Some(true),
+                Some(true),
+            )
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()
@@ -117,7 +123,7 @@ async fn listen_to_service(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(Outcome{success:true}),
+        Json(Outcome { success: true }),
     ))
 }
 
@@ -167,7 +173,7 @@ async fn push_message_dangerous(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(Outcome{success:true}),
+        Json(Outcome { success: true }),
     ))
 }
 async fn make_genesis(

@@ -14,13 +14,14 @@ pub async fn push_to_peer<C: Verification + 'static>(
     let tip_db = Arc::new(Mutex::new(HashMap::new()));
     let new_tips = Arc::new(Notify::new());
     let mut t1 = spawn({
+        let service = service.clone();
         let shutdown = shutdown.clone();
         let tip_db = tip_db.clone();
         let client = client.clone();
         let (url, port) = service.clone();
         let new_tips = new_tips.clone();
         async move {
-            while shutdown.load(Ordering::Relaxed) {
+            while !shutdown.load(Ordering::Relaxed) {
                 // Get the tips this client claims to have
                 let tips = client.get_latest_tips(&url, port).await?;
                 let mut any_new = false;
@@ -39,41 +40,55 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     }
                 }
                 if any_new {
+                    info!(?service, "New Tips to Push");
                     new_tips.notify_one();
                 }
                 tokio::time::sleep(Duration::from_secs(10)).await;
             }
+            info!(?service, "Shutting Down Push New Envelope Subtask");
             INFER_UNIT
         }
     });
     let mut t2 = spawn({
+        let service = service.clone();
         let shutdown = shutdown.clone();
         let tip_db = tip_db.clone();
         let client = client.clone();
         let (url, port) = service.clone();
         let new_tips = new_tips.clone();
         async move {
-            while shutdown.load(Ordering::Relaxed) {
+            while !shutdown.load(Ordering::Relaxed) {
                 new_tips.notified().await;
+                info!(?service, "Notified of new tips to Push");
                 let to_broadcast = {
                     let handle = conn.get_handle().await;
                     let tip_db = tip_db.lock().await;
                     // TODO: Profile if should copy out of tip_db or if hold lock during query.
                     handle.get_connected_messages_newer_than_envelopes(tip_db.values())?
                 };
-                client.post_messages(to_broadcast, &url, port).await?;
+                if !to_broadcast.is_empty() {
+                    info!(?service, "Sending {} messages", to_broadcast.len());
+                    client.post_messages(to_broadcast, &url, port).await?;
+                } else {
+                    info!(?service, "Erroneous Wakeup");
+                }
             }
+            info!(?service, "Shutting Down Push Envelope Sending Subtask");
             INFER_UNIT
         }
     });
 
-    let _ = tokio::select! {
+    let r = tokio::select! {
         a = &mut t1 => {
+            info!(?service, error=?a, "New Envelope Detecting Subtask");
             a??
         },
         a = &mut t2 => {
+            info!(?service, error=?a, "Envelope Pushing subtask");
             a??
         }
     };
+    t1.abort();
+    t2.abort();
     Ok(())
 }

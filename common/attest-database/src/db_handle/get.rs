@@ -19,6 +19,7 @@ pub struct PeerInfo {
     pub port: u16,
     pub fetch_from: bool,
     pub push_to: bool,
+    pub allow_unsolicited_tips: bool,
 }
 impl<'a, T> MsgDBHandle<'a, T>
 where
@@ -241,7 +242,7 @@ where
     pub fn get_all_hidden_services(&self) -> Result<Vec<PeerInfo>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT service_url, port, fetch_from, push_to FROM hidden_services")?;
+            .prepare("SELECT service_url, port, fetch_from, push_to, allow_unsolicited_tips FROM hidden_services")?;
         let results = stmt
             .query([])?
             .map(|r| {
@@ -249,11 +250,13 @@ where
                 let port = r.get(1)?;
                 let fetch_from = r.get(2)?;
                 let push_to = r.get(3)?;
+                let allow_unsolicited_tips = r.get(4)?;
                 Ok(PeerInfo {
                     service_url,
                     port,
                     fetch_from,
                     push_to,
+                    allow_unsolicited_tips,
                 })
             })
             .collect()?;

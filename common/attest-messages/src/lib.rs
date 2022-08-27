@@ -1,6 +1,7 @@
 use self::checkpoints::BitcoinCheckPoints;
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 
+use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
@@ -76,6 +77,11 @@ impl CanonicalEnvelopeHash {
     }
     pub fn is_genesis(&self) -> bool {
         *self == Self::genesis()
+    }
+}
+impl ToHex for CanonicalEnvelopeHash{
+    fn to_hex(&self) -> String {
+        self.0.to_hex()
     }
 }
 
