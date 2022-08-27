@@ -306,6 +306,14 @@ mod test {
             dir.push(format!("test-rust-{}", bytes.to_hex()));
             tracing::debug!("Using tmpdir: {}", dir.display());
             let dir = attest_util::ensure_dir(dir).await.unwrap();
+            let timer_override = crate::PeerServicesTimers {
+                reconnect_rate: Duration::from_secs(1),
+                scan_for_unsent_tips_rate: Duration::from_millis(500),
+                attach_tip_while_busy_rate: Duration::from_millis(1000),
+                tip_fetch_rate: Duration::from_millis(1000),
+                entropy_range: Duration::from_millis(10),
+            };
+            let timer_override = Default::default();
             let config = Config {
                 bitcoin: btc_config.clone(),
                 subname: format!("subname-{}", test_id),
@@ -315,15 +323,7 @@ mod test {
                     port: 14556 + test_id as u16,
                 },
                 prefix: Some(dir),
-                peer_service: crate::PeerServiceConfig {
-                    timer_override: crate::PeerServicesTimers {
-                        reconnect_rate: Duration::from_secs(1),
-                        scan_for_unsent_tips_rate: Duration::from_millis(500),
-                        attach_tip_while_busy_rate: Duration::from_millis(1000),
-                        tip_fetch_rate: Duration::from_millis(1000),
-                        entropy_range: Duration::from_millis(10),
-                    },
-                },
+                peer_service: crate::PeerServiceConfig { timer_override },
             };
             ports.push((config.attestation_port, config.control.port));
             let task_one = spawn(async move { init_main(Arc::new(config), quit).await });
@@ -479,6 +479,7 @@ mod test {
                                 }
                             }
                         }
+                        tokio::time::sleep(Duration::from_secs(5)).await;
                         break 'resync;
                     }
 

@@ -20,7 +20,7 @@ use sapio_bitcoin::{
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -37,6 +37,25 @@ pub struct Status {
     tips: Vec<TipData>,
     peer_connections: Vec<TaskID>,
     all_users: Vec<(XOnlyPublicKey, String, bool)>,
+}
+
+async fn get_expensive_db_snapshot(
+    db: Extension<MsgDB>,
+) -> Result<(Response<()>, Json<HashMap<CanonicalEnvelopeHash, Envelope>>), (StatusCode, String)> {
+    let handle = db.get_handle().await;
+    let mut map = Default::default();
+    let mut newer = None;
+    let r = handle
+        .get_all_messages_collect_into_inconsistent(&mut newer, &mut map)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok((
+        Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(())
+            .expect("Response<()> should always be valid"),
+        Json(map),
+    ))
 }
 async fn get_status(
     db: Extension<MsgDB>,
@@ -233,6 +252,18 @@ pub async fn run(
             .route(
                 "/status",
                 get(get_status).layer(
+                    CorsLayer::new()
+                        .allow_methods([Method::GET, Method::OPTIONS])
+                        .allow_headers([
+                            reqwest::header::ACCESS_CONTROL_ALLOW_HEADERS,
+                            reqwest::header::CONTENT_TYPE,
+                        ])
+                        .allow_origin(Any),
+                ),
+            )
+            .route(
+                "/expensive_db_snapshot",
+                get(get_expensive_db_snapshot).layer(
                     CorsLayer::new()
                         .allow_methods([Method::GET, Method::OPTIONS])
                         .allow_headers([

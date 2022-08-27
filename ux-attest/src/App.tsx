@@ -58,6 +58,7 @@ function App() {
       {status && <TaskSet tasks={status.peer_connections}></TaskSet>}
       {status && <Tips tips={status.tips}></Tips>}
       {status && url && <Users users={status.all_users} url={url}></Users>}
+      {url && <ExpensiveMsgDB url={url}></ExpensiveMsgDB>}
 
     </div>
   );
@@ -123,10 +124,10 @@ function Users(props: { users: Array<[String, String, boolean]>, url: String }) 
     </tbody>
   </table>
 }
-function Tips(props: { tips: Array<{ envelope: { header: { genesis: string, height: string }, msg: any }, hash: string }> }) {
+function Tips(props: { tips: Array<{ envelope: { header: { ancestors?:{genesis: string}, height: string }, msg: any }, hash: string }> }) {
 
   const rows = props.tips.map((x) => <tr key={x.hash}>
-    <td>{x.envelope.header.genesis.substring(0, 16)}</td>
+    <td>{x.envelope.header.ancestors?.genesis.substring(0, 16)??""}</td>
     <td>{x.hash.substring(0, 16)}</td>
     <td>{x.envelope.header.height}</td>
     <td>{JSON.stringify(x.envelope.msg).substring(0, 20)}</td>
@@ -146,6 +147,44 @@ function Tips(props: { tips: Array<{ envelope: { header: { genesis: string, heig
       {rows}
     </tbody>
   </table>
+}
+
+function ExpensiveMsgDB(props: { url: string }) {
+  const [data, set_data] = React.useState({});
+  const handle = async () => {
+    const target = `${props.url}/expensive_db_snapshot`;
+    console.log("Fetching...", target);
+    try {
+      const resp = await fetch(target);
+      const js = await resp.json();
+      set_data(js);
+    }
+    catch { }
+  };
+  const rows = Object.entries(data).map(([k, envelope]: [string, any]) => <tr key={k}>
+    <td>{k.substring(0, 16)}</td>
+    <td>{envelope.header.ancestors?.genesis.substring(0, 16) ?? ""}</td>
+    <td>{envelope.header.height}</td>
+    <td>{JSON.stringify(envelope.msg).substring(0, 20)}</td>
+    <td><button onClick={() => console.log(envelope)}>log msg</button></td>
+  </tr>);
+  return <div>
+    <button onClick={handle}>Refresh</button>
+    <table>
+      <thead>
+        <tr>
+          <th>Msg Hash</th>
+          <th>Genesis</th>
+          <th>Height</th>
+          <th>Msg</th>
+          <th>To Console</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows}
+      </tbody>
+    </table>
+  </div>
 }
 
 
