@@ -27,7 +27,7 @@ pub async fn get_tip_handler(
             tips.dedup();
             handle.messages_by_hash(tips.iter())
         }
-        None => handle.get_tip_for_known_keys(),
+        None => handle.get_tips_for_all_users(),
     }
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     Ok((
