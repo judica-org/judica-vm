@@ -51,8 +51,7 @@ pub fn startup(
         let inner_client = bld.build()?;
         let client = AttestationClient(inner_client);
         let secp = Arc::new(Secp256k1::new());
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
-        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut interval = config.peer_service.timer_override.reconnect_interval();
         type AllowsUnsolicited = bool;
         type Host = String;
         let mut task_set: HashMap<
@@ -135,6 +134,7 @@ pub fn startup(
                         task_set.insert(
                             url.clone(),
                             tokio::spawn(push_peer::push_to_peer(
+                                config.clone(),
                                 secp.clone(),
                                 client,
                                 (url.0, url.1),
@@ -147,6 +147,7 @@ pub fn startup(
                         task_set.insert(
                             url.clone(),
                             tokio::spawn(fetch_peer::fetch_from_peer(
+                                config.clone(),
                                 secp.clone(),
                                 client,
                                 (url.0, url.1),

@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
 use tokio::task::JoinHandle;
+use tokio::time::{Interval, MissedTickBehavior};
 mod attestations;
 mod control;
 mod peer_services;
@@ -57,6 +58,58 @@ pub struct ControlConfig {
     #[serde(default = "default_control_port")]
     port: u16,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct PeerServicesTimers {
+    pub reconnect_rate: Duration,
+    pub scan_for_unsent_tips_rate: Duration,
+    pub attach_tip_while_busy_rate: Duration,
+    pub tip_fetch_rate: Duration,
+    pub entropy_range: Duration,
+}
+
+impl Default for PeerServicesTimers {
+    fn default() -> Self {
+        Self {
+            reconnect_rate: Duration::from_secs(30),
+            scan_for_unsent_tips_rate: Duration::from_secs(10),
+            attach_tip_while_busy_rate: Duration::from_secs(30),
+            tip_fetch_rate: Duration::from_secs(15),
+            entropy_range: Duration::from_millis(1000),
+        }
+    }
+}
+impl PeerServicesTimers {
+    fn rand(&self) -> Duration {
+        rand::thread_rng().gen_range(Duration::ZERO, self.entropy_range)
+    }
+    fn reconnect_interval(&self) -> Interval {
+        let mut interval = tokio::time::interval(self.reconnect_rate);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        interval
+    }
+    async fn scan_for_unsent_tips_delay(&self) {
+        let d = self.scan_for_unsent_tips_rate + self.rand();
+        tokio::time::sleep(d).await
+    }
+    async fn tip_fetch_delay(&self) {
+        let d = self.tip_fetch_rate + self.rand();
+        tokio::time::sleep(d).await
+    }
+    // todo: add randomization
+    fn attach_tip_while_busy_interval(&self) -> Interval {
+        let mut interval = tokio::time::interval(self.attach_tip_while_busy_rate);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        interval
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PeerServiceConfig {
+    #[serde(default)]
+    pub timer_override: PeerServicesTimers,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     bitcoin: BitcoinConfig,
@@ -67,6 +120,7 @@ pub struct Config {
     pub control: ControlConfig,
     #[serde(default)]
     pub prefix: Option<PathBuf>,
+    pub peer_service: PeerServiceConfig,
 }
 
 fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
@@ -261,6 +315,15 @@ mod test {
                     port: 14556 + test_id as u16,
                 },
                 prefix: Some(dir),
+                peer_service: crate::PeerServiceConfig {
+                    timer_override: crate::PeerServicesTimers {
+                        reconnect_rate: Duration::from_secs(1),
+                        scan_for_unsent_tips_rate: Duration::from_millis(500),
+                        attach_tip_while_busy_rate: Duration::from_millis(1000),
+                        tip_fetch_rate: Duration::from_millis(1000),
+                        entropy_range: Duration::from_millis(10),
+                    },
+                },
             };
             ports.push((config.attestation_port, config.control.port));
             let task_one = spawn(async move { init_main(Arc::new(config), quit).await });
@@ -427,7 +490,7 @@ mod test {
                 .flatten()
                 .collect();
             tracing::info!("Sleeping to enable re-peering time. Feel free to open monitors...");
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
             tracing::info!("Waking Up!");
 
             let it = ports
@@ -451,7 +514,7 @@ mod test {
                 });
             let resp = join_all(it).await;
             tracing::info!("Sleeping to enable re-peering time. Feel free to open monitors...");
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
             tracing::info!("Waking Up!");
 
             let it = ports.iter().map(|(port, ctrl)| {

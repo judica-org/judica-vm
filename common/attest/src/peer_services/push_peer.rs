@@ -5,6 +5,7 @@ use tokio::{
 
 use super::*;
 pub async fn push_to_peer<C: Verification + 'static>(
+    config: Arc<Config>,
     _secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
@@ -43,7 +44,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     info!(?service, "New Tips to Push");
                     new_tips.notify_one();
                 }
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                config.peer_service.timer_override.scan_for_unsent_tips_delay().await;
             }
             info!(?service, "Shutting Down Push New Envelope Subtask");
             INFER_UNIT

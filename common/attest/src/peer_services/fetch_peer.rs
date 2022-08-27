@@ -15,6 +15,7 @@ use tokio::time::MissedTickBehavior;
 use tracing::info;
 
 pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
+    config: Arc<Config>,
     secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     url: (String, u16),
@@ -24,10 +25,22 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Vec<CanonicalEnvelopeHash>>();
     let (tx_envelope, rx_envelope) = tokio::sync::mpsc::unbounded_channel::<Vec<Envelope>>();
 
-    let mut envelope_processor =
-        envelope_processor(conn, secp, rx_envelope, tx, allow_unsolicited_tips);
-    let mut tip_resolver = tip_resolver(client.clone(), url.clone(), tx_envelope.clone(), rx);
-    let mut tip_fetcher = tip_fetcher(client, url, tx_envelope);
+    let mut envelope_processor = envelope_processor(
+        config.clone(),
+        conn,
+        secp,
+        rx_envelope,
+        tx,
+        allow_unsolicited_tips,
+    );
+    let mut tip_resolver = tip_resolver(
+        config.clone(),
+        client.clone(),
+        url.clone(),
+        tx_envelope.clone(),
+        rx,
+    );
+    let mut tip_fetcher = tip_fetcher(config.clone(), client, url, tx_envelope);
     let _: () = tokio::select! {
         a = &mut envelope_processor => {a??}
         a = &mut tip_fetcher => {a??}
@@ -44,6 +57,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
 /// enevelope processor verifies an envelope and then forwards any unknown tips
 /// to the tip_resolver.
 pub(crate) fn envelope_processor<C: Verification + 'static>(
+    config: Arc<Config>,
     conn: MsgDB,
     secp: Arc<Secp256k1<C>>,
     mut rx_envelope: tokio::sync::mpsc::UnboundedReceiver<Vec<Envelope>>,
@@ -58,8 +72,7 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
             // One initial permit, to let the attach_tips method enter first,
             // one time
 
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-            interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            let mut interval = config.peer_service.timer_override.attach_tip_while_busy_interval();
             wake_if_no_work_left.notify_one();
             loop {
                 tokio::select! {
@@ -149,6 +162,7 @@ async fn handle_envelope<C: Verification + 'static>(
 /// tip_fetcher periodically (randomly) pings a hidden service for it's
 /// latest tips
 pub(crate) fn tip_fetcher(
+    config: Arc<Config>,
     client: AttestationClient,
     (url, port): (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
@@ -160,9 +174,7 @@ pub(crate) fn tip_fetcher(
             tracing::debug!("Sending message...");
             let resp: Vec<Envelope> = client.get_latest_tips(&url, port).await?;
             tx_envelope.send(resp)?;
-            let d = Duration::from_secs(15)
-                + Duration::from_millis(rand::thread_rng().gen_range(0, 1000));
-            tokio::time::sleep(d).await;
+            config.peer_service.timer_override.tip_fetch_delay().await;
         }
         // INFER_UNIT
     })
@@ -171,6 +183,7 @@ pub(crate) fn tip_fetcher(
 /// tip_resolver ingests a Vec<Hash> and queries a service for the envelope
 /// of those hashes, then sends those envelopers for processing.
 pub(crate) fn tip_resolver(
+    config: Arc<Config>,
     client: AttestationClient,
     service: (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
