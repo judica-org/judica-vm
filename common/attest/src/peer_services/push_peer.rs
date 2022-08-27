@@ -25,26 +25,31 @@ pub async fn push_to_peer<C: Verification + 'static>(
             while !shutdown.load(Ordering::Relaxed) {
                 // Get the tips this client claims to have
                 let tips = client.get_latest_tips(&url, port).await?;
-                let mut any_new = false;
+                debug!(url, port, ?tips, "Fetching saw peer at state");
                 {
                     let mut tip_db = tip_db.lock().await;
+
                     for t in tips {
-                        let previous = tip_db.entry(t.header.genesis).or_insert_with(|| {
-                            any_new = true;
+                        let genesis = t.get_genesis_hash();
+                        let previous = tip_db.entry(genesis).or_insert_with(|| {
+                            debug!(url, port, ?t, ?genesis, "Inserting Unseen Genesis");
                             t.clone()
                         });
                         // TODO: detect if previous is in our chain?
                         if previous.header.height < t.header.height {
+                            debug!(url, port, ?t, ?genesis, "Inserting New Message");
                             *previous = t;
-                            any_new = true;
+                        } else {
+                            debug!(url, port, ?t, ?genesis, "Skipping Old Message");
                         }
                     }
                 }
-                if any_new {
-                    info!(?service, "New Tips to Push");
-                    new_tips.notify_one();
-                }
-                config.peer_service.timer_override.scan_for_unsent_tips_delay().await;
+                new_tips.notify_one();
+                config
+                    .peer_service
+                    .timer_override
+                    .scan_for_unsent_tips_delay()
+                    .await;
             }
             info!(?service, "Shutting Down Push New Envelope Subtask");
             INFER_UNIT
@@ -60,15 +65,23 @@ pub async fn push_to_peer<C: Verification + 'static>(
         async move {
             while !shutdown.load(Ordering::Relaxed) {
                 new_tips.notified().await;
-                info!(?service, "Notified of new tips to Push");
+                info!(?service, "Push: TipDB is up to date");
                 let to_broadcast = {
+                    // get the DB first as it is more contended, and we're OK
+                    // waiting on the other thread later
                     let handle = conn.get_handle().await;
-                    let tip_db = tip_db.lock().await;
-                    // TODO: Profile if should copy out of tip_db or if hold lock during query.
-                    handle.get_connected_messages_newer_than_envelopes(tip_db.values())?
+                    // if we can't get the lock on tip_db, it means we'll have fresh-er results soon,
+                    // so it's fine to wait again.
+                    let tip_db = tip_db.try_lock();
+                    if let Ok(tip_db) = tip_db {
+                        // TODO: Profile if should copy out of tip_db or if hold lock during query.
+                        handle.get_connected_messages_newer_than_envelopes(tip_db.values())?
+                    } else {
+                        continue;
+                    }
                 };
                 if !to_broadcast.is_empty() {
-                    info!(?service, "Sending {} messages", to_broadcast.len());
+                    info!(?service, n = to_broadcast.len(), "Pushing Messages!");
                     client.post_messages(to_broadcast, &url, port).await?;
                 } else {
                     info!(?service, "Erroneous Wakeup");

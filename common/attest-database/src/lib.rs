@@ -52,8 +52,7 @@ pub fn generate_new_user<C: Signing>(
     let mut msg = Envelope {
         header: Header {
             height: 0,
-            prev_msg: CanonicalEnvelopeHash::genesis(),
-            genesis: CanonicalEnvelopeHash::genesis(),
+            ancestors: None,
             tips: Vec::new(),
             next_nonce: next_nonce.get_public(&secp),
             key: keypair.public_key().x_only_public_key().0,

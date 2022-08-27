@@ -1,5 +1,5 @@
 use crate::{
-    peer_services::{PeerQuery, PeerType},
+    peer_services::{PeerQuery, PeerType, TaskID},
     Config,
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
@@ -35,7 +35,7 @@ pub struct TipData {
 pub struct Status {
     peers: Vec<PeerInfo>,
     tips: Vec<TipData>,
-    peer_connections: Vec<(String, u16, PeerType, bool)>,
+    peer_connections: Vec<TaskID>,
     all_users: Vec<(XOnlyPublicKey, String, bool)>,
 }
 async fn get_status(

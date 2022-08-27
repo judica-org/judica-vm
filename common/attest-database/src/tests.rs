@@ -13,15 +13,16 @@ use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use test_log::test;
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_setup_db() {
     let conn = setup_db().await;
     // Tests that setup can be called more than once...
     conn.get_handle().await.setup_tables();
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_add_user() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
@@ -29,7 +30,7 @@ async fn test_add_user() {
     make_test_user(&secp, &conn.get_handle().await, test_user);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_reused_nonce() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
@@ -114,7 +115,7 @@ fn print_db(handle: &MsgDBHandle) {
         );
     }
 }
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_envelope_creation() {
     let mut all_past_tips = BTreeSet::<CanonicalEnvelopeHash>::new();
     let mut disconnected_tip = vec![];
@@ -331,7 +332,7 @@ async fn setup_db() -> MsgDB {
     conn.get_handle().await.setup_tables();
     conn
 }
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_tables() {
     let conn = setup_db().await;
     let handle = conn.get_handle().await;

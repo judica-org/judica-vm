@@ -52,5 +52,3 @@ FROM
     updatable U
 WHERE
     U.mid = messages.message_id
-LIMIT
-    -1

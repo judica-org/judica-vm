@@ -13,6 +13,7 @@ use sapio_bitcoin::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use tracing::debug;
 #[derive(Serialize, Deserialize)]
 pub struct PeerInfo {
     pub service_url: String,
@@ -50,7 +51,7 @@ where
         let mut res = vec![];
         for envelope in envelopes {
             let rs = stmt
-                .query(named_params! {":genesis": envelope.header.genesis, ":height": envelope.header.height})?;
+                .query(named_params! (":genesis": envelope.get_genesis_hash(), ":height": envelope.header.height))?;
             let mut envs = rs.map(|r| r.get::<_, Envelope>(0)).collect()?;
             res.append(&mut envs);
         }
@@ -140,7 +141,8 @@ where
             && vs.values().all(|v| {
                 v.windows(2).all(|w| {
                     w[0].header.height + 1 == w[1].header.height
-                        && w[1].header.prev_msg == w[0].clone().canonicalized_hash().unwrap()
+                        && w[1].header.ancestors.as_ref().unwrap().prev_msg
+                            == w[0].clone().canonicalized_hash().unwrap()
                 })
             })
         {
@@ -197,6 +199,7 @@ where
             .prepare(include_str!("sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        debug!(envelopes=?vs, "Tips Returned");
         Ok(vs)
     }
 
@@ -213,7 +216,7 @@ where
         let _prev = sha256::Hash::hash(&[]);
         let _prev_height = 0;
         for v in vs.windows(2) {
-            if v[0].clone().canonicalized_hash().unwrap() != v[1].header.prev_msg
+            if v[0].clone().canonicalized_hash().unwrap() != v[1].header.ancestors.as_ref().unwrap().prev_msg
                 || v[0].header.height + 1 != v[1].header.height
                 || Some(v[0].header.next_nonce) != v[1].extract_used_nonce()
             {

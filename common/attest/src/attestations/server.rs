@@ -14,12 +14,14 @@ use sapio_bitcoin::secp256k1::Secp256k1;
 use serde_json::{json, Value};
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::trace::TraceLayer;
+use tracing::debug;
 
 pub async fn get_tip_handler(
     Extension(db): Extension<MsgDB>,
     Json(query): Json<Option<Tips>>,
 ) -> Result<(Response<()>, Json<Vec<Envelope>>), (StatusCode, &'static str)> {
     let handle = db.get_handle().await;
+    let qtype = query.is_some();
     let r = match query {
         Some(Tips { mut tips }) => {
             // runs in O(N) usually since the slice should already be sorted
@@ -30,6 +32,9 @@ pub async fn get_tip_handler(
         None => handle.get_tips_for_all_users(),
     }
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+
+    debug!(tips = ?r, "HTTP GET for {} tips", if qtype{"specific"}else{"latest"} );
+
     Ok((
         Response::builder()
             .status(200)

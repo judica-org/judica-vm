@@ -25,7 +25,7 @@ where
     }
     /// Required to run periodically to make progress...
     /// TODO: Something more efficient?
-    pub fn attach_tips(&mut self) -> Result<usize, rusqlite::Error> {
+    pub fn attach_tips(&self) -> Result<usize, rusqlite::Error> {
         let mut s = self.0.prepare(include_str!("sql/update/do_connect.sql"))?;
         s.execute([])
     }

@@ -5,6 +5,7 @@ use crate::sql_serializers::SK;
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Authenticated;
+use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use rusqlite::ffi;
 
@@ -17,6 +18,7 @@ use sapio_bitcoin::{
 };
 use std::fmt::format;
 use std::os::raw::c_int;
+use tracing::debug;
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Insert,
@@ -107,14 +109,26 @@ where
         let data = data.inner();
         let mut stmt = self.0.prepare(include_str!("sql/insert/envelope.sql"))?;
         let time = attest_util::now();
-
+        let genesis = data.get_genesis_hash();
+        let prev_msg = data
+            .header
+            .ancestors
+            .as_ref()
+            .map(|m| m.prev_msg)
+            .unwrap_or(CanonicalEnvelopeHash::genesis());
+        debug!(?genesis, ?data);
         match stmt.insert(rusqlite::named_params! {
                 ":body": data,
                 ":hash": data.clone()
                     .canonicalized_hash()
                     .expect("Hashing should always succeed?"),
                 ":key": PK(data.header.key),
-                ":received_time": time
+                ":genesis": genesis,
+                ":prev_msg": prev_msg,
+                ":received_time": time,
+                ":sent_time": data.header.sent_time_ms,
+                ":height": data.header.height,
+                ":nonce": data.header.unsigned.signature.expect("Authenticated Envelope Must Have")[0..32].to_hex()
         }) {
             Ok(_rowid) => Ok(Ok(())),
             Err(e) => match e {
@@ -127,7 +141,10 @@ where
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_NOTNULL,
                     } => Ok(Err(SqliteFail::SqliteConstraintNotNull)),
-                    _ => Err(e),
+                    _ => {
+                        debug!("SQL: {}", stmt.expanded_sql().unwrap_or_default());
+                        Err(e)
+                    }
                 },
                 err => Err(err),
             },
@@ -167,5 +184,4 @@ impl std::fmt::Display for SqliteFail {
         write!(f, "{:?}", self)
     }
 }
-impl std::error::Error for SqliteFail {
-}
+impl std::error::Error for SqliteFail {}

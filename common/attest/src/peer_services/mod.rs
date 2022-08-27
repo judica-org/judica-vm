@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use futures::{TryFutureExt, FutureExt};
+use futures::{stream::FuturesUnordered, FutureExt, TryFutureExt};
 use tokio::{
     spawn,
     sync::{mpsc::Receiver, oneshot::Sender},
@@ -20,8 +20,14 @@ pub enum PeerType {
     Fetch,
 }
 
+#[derive(Hash, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, Debug)]
+pub struct Global;
+pub type TaskType = PeerType;
+
+pub type TaskID = (String, u16, TaskType, bool);
+
 pub enum PeerQuery {
-    RunningTasks(Sender<Vec<(String, u16, PeerType, bool)>>),
+    RunningTasks(Sender<Vec<TaskID>>),
 }
 pub fn startup(
     config: Arc<Config>,
@@ -52,12 +58,23 @@ pub fn startup(
         let client = AttestationClient(inner_client);
         let secp = Arc::new(Secp256k1::new());
         let mut interval = config.peer_service.timer_override.reconnect_interval();
-        type AllowsUnsolicited = bool;
-        type Host = String;
-        let mut task_set: HashMap<
-            (String, u16, PeerType, AllowsUnsolicited),
-            JoinHandle<Result<(), _>>,
-        > = HashMap::new();
+        let mut task_set: HashMap<TaskID, JoinHandle<Result<(), _>>> = HashMap::new();
+        let tip_attacher = spawn({
+            let db = db.clone();
+            let quit = quit.clone();
+            let mut interval = config
+                .peer_service
+                .timer_override
+                .attach_tip_while_busy_interval();
+            async move {
+                while !quit.load(Ordering::Relaxed) {
+                    interval.tick().await;
+                    let handle = db.get_handle().await;
+                    let n_attached = handle.attach_tips();
+                    info!(?n_attached, "Attached Tips");
+                }
+            }
+        });
         'outer: loop {
             tokio::select! {
                 query = status.recv() => {
@@ -126,18 +143,18 @@ pub fn startup(
                 },
             );
             // Open connections to all services on the list and put into our task set.
-            for url in create_services.into_iter() {
-                info!("Starting Task: {:?}", url);
+            for task_id in create_services.into_iter() {
+                info!("Starting Task: {:?}", task_id);
                 let client = client.clone();
-                match url.2 {
+                match task_id.2 {
                     PeerType::Push => {
                         task_set.insert(
-                            url.clone(),
+                            task_id.clone(),
                             tokio::spawn(push_peer::push_to_peer(
                                 config.clone(),
                                 secp.clone(),
                                 client,
-                                (url.0, url.1),
+                                (task_id.0, task_id.1),
                                 db.clone(),
                                 quit.clone(),
                             )),
@@ -145,14 +162,14 @@ pub fn startup(
                     }
                     PeerType::Fetch => {
                         task_set.insert(
-                            url.clone(),
+                            task_id.clone(),
                             tokio::spawn(fetch_peer::fetch_from_peer(
                                 config.clone(),
                                 secp.clone(),
                                 client,
-                                (url.0, url.1),
+                                (task_id.0, task_id.1),
                                 db.clone(),
-                                url.3,
+                                task_id.3,
                             )),
                         );
                     }

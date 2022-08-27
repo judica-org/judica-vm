@@ -580,7 +580,7 @@ mod test {
                         let diff = s.difference(&old_tips);
                         let diff: Vec<_> = diff.cloned().collect();
                         assert_eq!(diff, vec![]);
-                        assert!(!s.contains(&e.header.prev_msg));
+                        assert!(!s.contains(&e.header.ancestors.as_ref().unwrap().prev_msg));
                     }
                 }
             }

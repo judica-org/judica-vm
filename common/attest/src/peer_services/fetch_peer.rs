@@ -66,97 +66,68 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     let envelope_processor = {
         tokio::spawn(async move {
-            // We poll this is a biased order so we favour loading more data
-            // before attaching tips
-            let wake_if_no_work_left = Notify::new();
-            // One initial permit, to let the attach_tips method enter first,
-            // one time
-
-            let mut interval = config.peer_service.timer_override.attach_tip_while_busy_interval();
-            wake_if_no_work_left.notify_one();
-            loop {
-                tokio::select! {
-                    biased;
-                    // Try to tick once every 30 seconds with high priority if it doesn't happen naturally
-                    _ = interval.tick() => {
-                        conn.get_handle().await.attach_tips()?;
-                    }
-                    // Prefer to process envelopes
-                    resp = rx_envelope.recv() => {
-                        handle_envelope(resp, secp.as_ref(), &conn, &tx, &wake_if_no_work_left, allow_unsolicited_tips).await?;
-                    }
-                    _ = wake_if_no_work_left.notified() => {
-                        conn.get_handle().await.attach_tips()?;
-                        // Reset the tick since we just did the work.
-                        interval.reset();
-                    }
-                }
+            while let Some(resp) = rx_envelope.recv().await {
+                // Prefer to process envelopes
+                handle_envelope(resp, secp.as_ref(), &conn, &tx, allow_unsolicited_tips).await?;
             }
-            // INFER_UNIT
+            INFER_UNIT
         })
     };
     envelope_processor
 }
 async fn handle_envelope<C: Verification + 'static>(
-    resp: Option<Vec<Envelope>>,
+    resp: Vec<Envelope>,
     secp: &Secp256k1<C>,
     conn: &MsgDB,
     tx: &UnboundedSender<Vec<CanonicalEnvelopeHash>>,
-    wake_if_no_work_left: &Notify,
     allow_unsolicited_tips: bool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    if let Some(resp) = resp {
-        let mut all_tips = Vec::new();
-        for envelope in resp {
-            tracing::debug!("Response: {:?}", envelope);
-            match envelope.self_authenticate(secp) {
-                Ok(authentic) => {
-                    tracing::debug!("Authentic Tip: {:?}", authentic);
-                    let handle = conn.get_handle().await;
-                    match handle.try_insert_authenticated_envelope(authentic.clone())? {
-                        Ok(_) => {}
-                        Err(SqliteFail::SqliteConstraintNotNull) => {
-                            if allow_unsolicited_tips {
-                                info!(
-                                    "unsolicited tip received: {}",
-                                    authentic
-                                        .inner_ref()
-                                        .canonicalized_hash_ref()
-                                        .unwrap()
-                                        .to_hex()
-                                );
-                                handle.insert_user_by_genesis_envelope(
-                                    format!("user-{}", now()),
-                                    authentic,
-                                )??;
-                            }
+    let mut all_tips = Vec::new();
+    for envelope in resp {
+        tracing::debug!("Response: {:?}", envelope);
+        match envelope.self_authenticate(secp) {
+            Ok(authentic) => {
+                tracing::debug!("Authentic Tip: {:?}", authentic);
+                let handle = conn.get_handle().await;
+                match handle.try_insert_authenticated_envelope(authentic.clone())? {
+                    Ok(_) => {}
+                    Err(SqliteFail::SqliteConstraintNotNull) => {
+                        if allow_unsolicited_tips {
+                            info!(
+                                "unsolicited tip received: {}",
+                                authentic
+                                    .inner_ref()
+                                    .canonicalized_hash_ref()
+                                    .unwrap()
+                                    .to_hex()
+                            );
+                            handle.insert_user_by_genesis_envelope(
+                                format!("user-{}", now()),
+                                authentic,
+                            )??;
                         }
-                        _ => {}
                     }
-                    // safe to reuse since it is authentic still..
-                    all_tips.extend(envelope.header.tips.iter().map(|(_, _, v)| v.clone()))
+                    _ => {}
                 }
-                Err(_) => {
-                    // TODO: Ban peer?
-                    tracing::debug!("Invalid Tip: {:?}", envelope);
-                }
+                // safe to reuse since it is authentic still..
+                all_tips.extend(envelope.header.tips.iter().map(|(_, _, v)| v.clone()))
+            }
+            Err(_) => {
+                // TODO: Ban peer?
+                tracing::debug!("Invalid Tip: {:?}", envelope);
             }
         }
-        all_tips.sort_unstable();
-        all_tips.dedup();
-        let unknown_dep_tips = conn
-            .get_handle()
-            .await
-            .message_not_exists_it(all_tips.iter())?;
-        if !unknown_dep_tips.is_empty() {
-            tx.send(unknown_dep_tips)?;
-        } else {
-            wake_if_no_work_left.notify_one();
-        }
-        Ok(())
-    } else {
-        return Ok(());
     }
+    all_tips.sort_unstable();
+    all_tips.dedup();
+    let unknown_dep_tips = conn
+        .get_handle()
+        .await
+        .message_not_exists_it(all_tips.iter())?;
+    if !unknown_dep_tips.is_empty() {
+        tx.send(unknown_dep_tips)?;
+    }
+    Ok(())
 }
 
 /// tip_fetcher periodically (randomly) pings a hidden service for it's
