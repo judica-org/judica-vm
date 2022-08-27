@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS messages (
         -- only paid attention to for the genesis column
         CHECK(json_valid(body)),
         CHECK(
+            height > 0
+            OR (
+                height = 0
+                AND prev_msg = "0000000000000000000000000000000000000000000000000000000000000000"
+            )
+        ),
+        CHECK(
             IFNULL(
                 json(body) ->> '$.header.ancestors.genesis',
                 genesis

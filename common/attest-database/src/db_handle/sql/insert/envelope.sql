@@ -52,16 +52,20 @@ VALUES
                 1
         ), (
             SELECT
-                IFNULL(
-                    (
-                        SELECT
-                            connected
-                        FROM
-                            messages M
-                        WHERE
-                            M.hash = :prev_msg
-                    ),
-                    :height = 0
+                IIF(
+                    :height = 0,
+                    1,
+                    IFNULL(
+                        (
+                            SELECT
+                                connected
+                            FROM
+                                messages M
+                            WHERE
+                                M.hash = :prev_msg
+                        ),
+                        0
+                    )
                 )
         )
     )
