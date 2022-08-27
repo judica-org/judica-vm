@@ -26,6 +26,18 @@ CREATE TABLE IF NOT EXISTS messages (
     SET
         NULL,
         UNIQUE(hash),
+        CHECK(
+            (
+                connected
+                AND prev_msg_id IS NOT NULL
+                AND genesis_id IS NOT NULL
+            )
+            OR NOT connected
+            OR (
+                height = 0
+                AND connected
+            )
+        ),
         -- only paid attention to for the genesis column
         CHECK(json_valid(body)),
         CHECK(
