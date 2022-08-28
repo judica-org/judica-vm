@@ -1,10 +1,7 @@
-use std::pin::Pin;
-
-use futures::{stream::FuturesUnordered, FutureExt, TryFutureExt};
+use futures::FutureExt;
 use tokio::{
     spawn,
     sync::{mpsc::Receiver, oneshot::Sender},
-    time::MissedTickBehavior,
 };
 
 use attest_util::INFER_UNIT;
@@ -59,7 +56,7 @@ pub fn startup(
         let secp = Arc::new(Secp256k1::new());
         let mut interval = config.peer_service.timer_override.reconnect_interval();
         let mut task_set: HashMap<TaskID, JoinHandle<Result<(), _>>> = HashMap::new();
-        let tip_attacher = spawn({
+        let _tip_attacher = spawn({
             let db = db.clone();
             let quit = quit.clone();
             let mut interval = config

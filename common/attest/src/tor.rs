@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display, fs::create_dir_all, sync::Arc};
+use std::{error::Error, fmt::Display, sync::Arc};
 
 use attest_util::{ensure_dir, INFER_UNIT};
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};

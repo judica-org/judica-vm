@@ -1,17 +1,16 @@
 use super::query::Tips;
-use crate::{Config, control::query::Outcome};
+use crate::{control::query::Outcome, Config};
 use attest_database::connection::MsgDB;
 use attest_messages::Envelope;
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
-    extract::Query,
     http::Response,
     http::StatusCode,
     routing::{get, post},
     Extension, Json, Router,
 };
 use sapio_bitcoin::secp256k1::Secp256k1;
-use serde_json::{json, Value};
+
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::trace::TraceLayer;
 use tracing::debug;
@@ -75,7 +74,7 @@ pub async fn post_message(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(Outcome{success:true}),
+        Json(Outcome { success: true }),
     ))
 }
 

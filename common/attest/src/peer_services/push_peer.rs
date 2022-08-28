@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use tokio::{
@@ -106,7 +106,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                             .collect();
                         for o in genesis.iter_mut() {
                             match o {
-                                Some((h, e)) => {
+                                Some((h, _e)) => {
                                     if following_chains.contains(&h) {
                                         *o = None;
                                     }
@@ -115,7 +115,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                             }
                         }
                         debug!(unknown_chains = ?genesis);
-                        msgs.extend(genesis.into_iter().flatten().map(|(a, b)| b));
+                        msgs.extend(genesis.into_iter().flatten().map(|(_a, b)| b));
                         msgs
                     } else {
                         continue;
@@ -133,7 +133,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
         }
     });
 
-    let r = tokio::select! {
+    let _r = tokio::select! {
         a = &mut t1 => {
             info!(?service, error=?a, "New Envelope Detecting Subtask");
             a??

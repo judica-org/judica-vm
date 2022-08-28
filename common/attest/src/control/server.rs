@@ -1,5 +1,5 @@
 use crate::{
-    peer_services::{PeerQuery, PeerType, TaskID},
+    peer_services::{PeerQuery, TaskID},
     Config,
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
@@ -19,7 +19,7 @@ use sapio_bitcoin::{
 };
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::{json, Value};
+
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
@@ -45,7 +45,7 @@ async fn get_expensive_db_snapshot(
     let handle = db.get_handle().await;
     let mut map = Default::default();
     let mut newer = None;
-    let r = handle
+    let _r = handle
         .get_all_messages_collect_into_inconsistent(&mut newer, &mut map)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((

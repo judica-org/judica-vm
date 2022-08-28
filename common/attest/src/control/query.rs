@@ -1,4 +1,3 @@
-use attest_messages::Envelope;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

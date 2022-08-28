@@ -1,6 +1,6 @@
 use std::{error::Error, path::PathBuf, sync::Arc};
 
-use attest_messages::{nonce::PrecomittedNonce, CanonicalEnvelopeHash, Envelope, Header, Unsigned};
+use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
 use attest_util::ensure_dir;
 use connection::MsgDB;
 use rusqlite::Connection;
@@ -18,7 +18,11 @@ pub mod sql_serializers;
 mod tests;
 
 pub async fn setup_db_at(dir: PathBuf, name: &str) -> Result<MsgDB, Box<dyn Error>> {
-    tracing::debug!("Request to Open Message DB at {} name {}", dir.display(), name);
+    tracing::debug!(
+        "Request to Open Message DB at {} name {}",
+        dir.display(),
+        name
+    );
     let dir: PathBuf = ensure_dir(dir).await?;
     let mut db_file = dir.clone();
     db_file.push(name);

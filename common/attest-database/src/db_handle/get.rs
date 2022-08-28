@@ -1,5 +1,5 @@
 use super::sql_serializers::{self};
-use super::{handle_type, ConsistentMessages, MsgDBHandle};
+use super::{handle_type, MsgDBHandle};
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::CanonicalEnvelopeHash;
@@ -186,9 +186,7 @@ where
     }
 
     pub fn get_all_genesis(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare(include_str!("sql/get/all_genesis.sql"))?;
+        let mut stmt = self.0.prepare(include_str!("sql/get/all_genesis.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         debug!(envelopes=?vs, "Genesis Tips Returned");

@@ -10,8 +10,7 @@ use attest_util::INFER_UNIT;
 use sapio_bitcoin::hashes::hex::ToHex;
 use tokio;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::Notify;
-use tokio::time::MissedTickBehavior;
+
 use tracing::info;
 
 pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
@@ -57,7 +56,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
 /// enevelope processor verifies an envelope and then forwards any unknown tips
 /// to the tip_resolver.
 pub(crate) fn envelope_processor<C: Verification + 'static>(
-    config: Arc<Config>,
+    _config: Arc<Config>,
     conn: MsgDB,
     secp: Arc<Secp256k1<C>>,
     mut rx_envelope: tokio::sync::mpsc::UnboundedReceiver<Vec<Envelope>>,
@@ -154,7 +153,7 @@ pub(crate) fn tip_fetcher(
 /// tip_resolver ingests a Vec<Hash> and queries a service for the envelope
 /// of those hashes, then sends those envelopers for processing.
 pub(crate) fn tip_resolver(
-    config: Arc<Config>,
+    _config: Arc<Config>,
     client: AttestationClient,
     service: (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,

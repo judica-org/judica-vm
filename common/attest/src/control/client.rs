@@ -1,8 +1,7 @@
 use attest_messages::Envelope;
 use reqwest::Client;
-use serde_json::Value;
 
-use super::query::{PushMsg, Subscribe, Outcome};
+use super::query::{Outcome, PushMsg, Subscribe};
 
 #[derive(Clone)]
 pub struct ControlClient(pub Client);

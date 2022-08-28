@@ -117,7 +117,7 @@ async fn connect_and_test_nodes() {
         let control_client = ControlClient(base.clone());
         // Initial fetch should show no tips posessed
         {
-            let it = ports.iter().map(|(port, ctrl)| {
+            let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
                 async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
@@ -127,7 +127,7 @@ async fn connect_and_test_nodes() {
         }
         // Create a genesis envelope for each node
         let genesis_envelopes = {
-            let it = ports.iter().map(|(port, ctrl)| {
+            let it = ports.iter().map(|(_port, ctrl)| {
                 let control_client = control_client.clone();
                 async move {
                     control_client
@@ -145,7 +145,7 @@ async fn connect_and_test_nodes() {
         };
         // Check that each node knows about it's own genesis envelope
         {
-            let it = ports.iter().map(|(port, ctrl)| {
+            let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
                 async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
@@ -208,7 +208,7 @@ async fn connect_and_test_nodes() {
                     .collect::<Vec<_>>();
                 expected.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
                 'resync: loop {
-                    let it = ports.iter().map(|(port, ctrl)| {
+                    let it = ports.iter().map(|(port, _ctrl)| {
                         let client = client.clone();
                         async move { client.get_latest_tips(&HOME.into(), *port).await }
                     });
@@ -266,7 +266,7 @@ async fn connect_and_test_nodes() {
                             .iter()
                             // don't connect to self
                             .filter(|(p, _)| p != port)
-                            .map(|(port, ctl)| futs(*port, control_client.clone(), *ctrl)),
+                            .map(|(port, _ctl)| futs(*port, control_client.clone(), *ctrl)),
                     )
                     .await
                     .into_iter()
@@ -286,7 +286,7 @@ async fn connect_and_test_nodes() {
             info!("All Synchronized")
         }
         let get_all_tips = || async {
-            let it = ports.iter().map(|(port, ctrl)| {
+            let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
                 async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
@@ -317,7 +317,7 @@ async fn connect_and_test_nodes() {
         debug!(all_tips = ?old_tips, "Tips to Check For");
         // Attempt to check that the latest tips of all clients Envelopes are in sync
         {
-            let it = ports.iter().map(|(port, ctrl)| {
+            let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
                 async move { client.get_latest_tips(&HOME.into(), *port).await }
             });

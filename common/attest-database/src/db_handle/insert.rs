@@ -16,7 +16,7 @@ use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
-use std::fmt::format;
+
 use std::os::raw::c_int;
 use tracing::debug;
 impl<'a, T> MsgDBHandle<'a, T>

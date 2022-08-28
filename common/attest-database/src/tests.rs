@@ -160,7 +160,7 @@ async fn test_envelope_creation() {
     };
     let secp = Secp256k1::new();
     let conn = setup_db().await;
-    let mut handle = conn.get_handle().await;
+    let handle = conn.get_handle().await;
     const N_USERS: usize = 10;
     for user_id in 0..N_USERS {
         let test_user = format!("Test_User_{}", user_id);
