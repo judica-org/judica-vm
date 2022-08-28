@@ -68,15 +68,20 @@ pub struct PeerServicesTimers {
     pub entropy_range: Duration,
 }
 
+impl PeerServicesTimers {
+    fn scaled_default(scale: f64) -> Self {
+        Self {
+            reconnect_rate: Duration::from_millis((30000 as f64 * scale) as u64),
+            scan_for_unsent_tips_rate: Duration::from_millis((10000 as f64 * scale) as u64),
+            attach_tip_while_busy_rate: Duration::from_millis((30000 as f64 * scale) as u64),
+            tip_fetch_rate: Duration::from_millis((15000 as f64 * scale) as u64),
+            entropy_range: Duration::from_millis((1000 as f64 * scale) as u64),
+        }
+    }
+}
 impl Default for PeerServicesTimers {
     fn default() -> Self {
-        Self {
-            reconnect_rate: Duration::from_secs(30),
-            scan_for_unsent_tips_rate: Duration::from_secs(10),
-            attach_tip_while_busy_rate: Duration::from_secs(30),
-            tip_fetch_rate: Duration::from_secs(15),
-            entropy_range: Duration::from_millis(1000),
-        }
+        Self::scaled_default(1.0)
     }
 }
 impl PeerServicesTimers {
@@ -306,14 +311,7 @@ mod test {
             dir.push(format!("test-rust-{}", bytes.to_hex()));
             tracing::debug!("Using tmpdir: {}", dir.display());
             let dir = attest_util::ensure_dir(dir).await.unwrap();
-            let timer_override = crate::PeerServicesTimers {
-                reconnect_rate: Duration::from_secs(1),
-                scan_for_unsent_tips_rate: Duration::from_millis(500),
-                attach_tip_while_busy_rate: Duration::from_millis(1000),
-                tip_fetch_rate: Duration::from_millis(1000),
-                entropy_range: Duration::from_millis(10),
-            };
-            let timer_override = Default::default();
+            let timer_override = crate::PeerServicesTimers::scaled_default(0.1);
             let config = Config {
                 bitcoin: btc_config.clone(),
                 subname: format!("subname-{}", test_id),

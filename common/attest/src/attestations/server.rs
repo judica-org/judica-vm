@@ -1,5 +1,5 @@
 use super::query::Tips;
-use crate::Config;
+use crate::{Config, control::query::Outcome};
 use attest_database::connection::MsgDB;
 use attest_messages::Envelope;
 use attest_util::{AbstractResult, INFER_UNIT};
@@ -47,7 +47,7 @@ pub async fn get_tip_handler(
 pub async fn post_message(
     Extension(db): Extension<MsgDB>,
     Json(envelopes): Json<Vec<Envelope>>,
-) -> Result<(Response<()>, Json<Value>), (StatusCode, &'static str)> {
+) -> Result<(Response<()>, Json<Outcome>), (StatusCode, &'static str)> {
     let mut authed = Vec::with_capacity(envelopes.len());
     for envelope in envelopes {
         tracing::debug!("Envelope Received: {:?}", envelope);
@@ -75,7 +75,7 @@ pub async fn post_message(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(json!("Success")),
+        Json(Outcome{success:true}),
     ))
 }
 

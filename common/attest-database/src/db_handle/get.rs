@@ -109,47 +109,29 @@ where
     }
 
     /// finds the most recent message only for messages where we know the key
-    pub fn get_all_messages_by_key_consistent(
+    pub fn get_all_connected_messages_collect_into(
         &self,
-        newer: Option<i64>,
-    ) -> Result<
-        Result<(HashMap<XOnlyPublicKey, Vec<Envelope>>, Option<i64>), ConsistentMessages>,
-        rusqlite::Error,
-    > {
+        newer: &mut Option<i64>,
+        map: &mut HashMap<CanonicalEnvelopeHash, Envelope>,
+    ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
-            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
+            self.0
+                .prepare(include_str!("sql/get/all_messages_after_connected.sql"))?
         } else {
             self.0
-                .prepare(include_str!("sql/get/all_messages_after.sql"))?
+                .prepare(include_str!("sql/get/all_messages_connected.sql"))?
         };
         let rows = match newer {
-            Some(i) => stmt.query([i])?,
+            Some(i) => stmt.query([*i])?,
             None => stmt.query([])?,
         };
-        let (mut vs, newest) = rows
-            .map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
-            .fold((HashMap::new(), None), |(mut acc, max_id), (v, id)| {
-                acc.entry(v.header.key).or_insert(vec![]).push(v);
-                Ok((acc, max_id.max(Some(id))))
+        rows.map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
+            .for_each(|(v, id)| {
+                map.insert(v.canonicalized_hash_ref().unwrap(), v);
+                *newer = (*newer).max(Some(id));
+                Ok(())
             })?;
-
-        for v in vs.values_mut() {
-            v.sort_unstable_by_key(|k| k.header.height)
-        }
-        // TODO: Make this more consistent by being able to drop a pending suffix.
-        if vs.values().all(|v| v[0].header.height == 0)
-            && vs.values().all(|v| {
-                v.windows(2).all(|w| {
-                    w[0].header.height + 1 == w[1].header.height
-                        && w[1].header.ancestors.as_ref().unwrap().prev_msg
-                            == w[0].clone().canonicalized_hash().unwrap()
-                })
-            })
-        {
-            Ok(Ok((vs, newest)))
-        } else {
-            Ok(Err(ConsistentMessages::AllMessagesNotReady))
-        }
+        Ok(())
     }
 
     pub fn get_all_messages_collect_into_inconsistent(
@@ -200,6 +182,16 @@ where
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         debug!(envelopes=?vs, "Tips Returned");
+        Ok(vs)
+    }
+
+    pub fn get_all_genesis(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare(include_str!("sql/get/all_genesis.sql"))?;
+        let rows = stmt.query([])?;
+        let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        debug!(envelopes=?vs, "Genesis Tips Returned");
         Ok(vs)
     }
 

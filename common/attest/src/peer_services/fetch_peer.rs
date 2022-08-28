@@ -169,8 +169,11 @@ pub(crate) fn tip_resolver(
                 let resp = client.get_tips(Tips { tips }, url, *port).await?;
                 info!(?service, "got {} tips in response", resp.len());
                 tx_envelope.send(resp)?;
+            } else {
+                info!("Terminating Tip Resolver");
+                break;
             }
         }
-        // INFER_UNIT
+        INFER_UNIT
     })
 }

@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS messages (
         NULL,
         UNIQUE(hash),
         CHECK(
+            genesis_id IS NOT NULL
+            OR height = 0
+        ),
+        CHECK(
             (
                 connected
                 AND prev_msg_id IS NOT NULL

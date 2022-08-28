@@ -2,6 +2,8 @@ use attest_messages::Envelope;
 
 use reqwest::Client;
 
+use crate::control::query::Outcome;
+
 use super::query::Tips;
 
 #[derive(Clone)]
@@ -51,8 +53,8 @@ impl AttestationClient {
         envelopes: Vec<Envelope>,
         url: &String,
         port: u16,
-    ) -> Result<(), reqwest::Error> {
-        let _resp: () = self
+    ) -> Result<Outcome, reqwest::Error> {
+        let resp = self
             .as_ref()
             .post(format!("http://{}:{}/msg", url, port))
             .json(&envelopes)
@@ -60,6 +62,6 @@ impl AttestationClient {
             .await?
             .json()
             .await?;
-        Ok(())
+        Ok(resp)
     }
 }
