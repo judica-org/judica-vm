@@ -1,12 +1,22 @@
-WITH RECURSIVE updatable(mid, prev, conn, height) AS (
+WITH RECURSIVE updatable(
+    row_id,
+    message_hash,
+    prev_hash,
+    is_connected,
+    height,
+    parent_id
+) AS (
     SELECT
         M.message_id,
-        M.prev_msg_id,
+        M.hash,
+        M.prev_msg,
         M.connected,
-        M.height
-    from
+        M.height,
+        Parent.message_id
+    FROM
         messages M
-        INNER JOIN messages Parent ON Parent.message_id = M.prev_msg_id
+        INNER JOIN messages Parent ON Parent.hash = M.prev_msg
+        AND Parent.connected
     WHERE
         M.connected = 0
         /*
@@ -17,16 +27,15 @@ WITH RECURSIVE updatable(mid, prev, conn, height) AS (
      
      */
     SELECT
-        U.mid,
-        U.prev,
-        U.conn,
-        U.height
+        AsChild.message_id,
+        AsChild.hash,
+        AsChild.prev_msg,
+        AsChild.connected,
+        AsChild.height,
+        AsParent.row_id
     FROM
-        updatable U
-        INNER JOIN messages UParent ON UParent.message_id = U.prev
-    WHERE
-        U.conn = 0
-        AND UParent.connected
+        updatable AsParent
+        INNER JOIN messages AsChild ON AsParent.message_hash = AsChild.prev_msg
         /*
          
          Order By Height not strictly required because the first query already
@@ -47,8 +56,10 @@ WITH RECURSIVE updatable(mid, prev, conn, height) AS (
 UPDATE
     messages
 SET
-    connected = 1
+    connected = 1,
+    prev_msg_id = U.parent_id
 FROM
     updatable U
 WHERE
-    U.mid = messages.message_id
+    U.row_id = messages.message_id
+--    AND NOT U.is_connected

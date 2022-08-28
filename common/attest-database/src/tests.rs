@@ -12,8 +12,9 @@ use sapio_bitcoin::KeyPair;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use test_log::test;
+use tokio::sync::Mutex;
+use tracing::debug;
 
 #[test(tokio::test)]
 async fn test_setup_db() {
@@ -264,7 +265,10 @@ async fn test_envelope_creation() {
         }
     }
 
-    handle.attach_tips().unwrap();
+    let tips_attached = handle.attach_tips().unwrap();
+    debug!(tips_attached);
+    let tips_attached = handle.attach_tips().unwrap();
+    assert_eq!(tips_attached, 0);
 
     let known_tips: Vec<_> = handle
         .get_tip_for_known_keys()
