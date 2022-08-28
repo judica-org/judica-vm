@@ -1,15 +1,21 @@
 use super::handle_type;
 use super::MsgDBHandle;
+use crate::sql_serializers::PK;
+use crate::sql_serializers::SK;
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Authenticated;
 use attest_messages::Envelope;
+use rusqlite::ffi;
+
 use rusqlite::params;
+use rusqlite::ErrorCode;
 use sapio_bitcoin::{
     hashes::hex::ToHex,
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
+use std::os::raw::c_int;
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Insert,
@@ -33,17 +39,23 @@ where
     ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
         let pk_nonce = nonce.get_public(secp);
         let mut stmt = self.0.prepare(include_str!("sql/insert/nonce.sql"))?;
-        stmt.insert(rusqlite::params![key.to_hex(), pk_nonce, nonce,])?;
+        stmt.insert(rusqlite::params![PK(key), pk_nonce, nonce,])?;
         Ok(pk_nonce)
     }
 
     /// adds a hidden service to our connection list
     /// Won't fail if already exists
-    pub fn insert_hidden_service(&self, s: String, port: u16) -> Result<(), rusqlite::Error> {
+    pub fn insert_hidden_service(
+        &self,
+        s: String,
+        port: u16,
+        fetch_from: bool,
+        push_to: bool,
+    ) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("INSERT OR IGNORE INTO hidden_services (service_url, port) VALUES (?,?)")?;
-        stmt.insert(rusqlite::params![s, port])?;
+            .prepare(include_str!("sql/insert/hidden_service.sql"))?;
+        stmt.insert(rusqlite::named_params!{":service_url":s, ":port":port, ":fetch_from":fetch_from, ":push_to": push_to})?;
         Ok(())
     }
 
@@ -54,8 +66,8 @@ where
                                             INSERT INTO private_keys (public_key, private_key) VALUES (?, ?)
                                             ")?;
         stmt.insert(rusqlite::params![
-            kp.x_only_public_key().0.to_hex(),
-            kp.secret_bytes().to_hex()
+            PK(kp.x_only_public_key().0),
+            SK(kp.secret_key())
         ])?;
         Ok(())
     }
@@ -69,30 +81,62 @@ where
         let mut stmt = self
             .0
             .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
-        let hex_key = envelope.inner_ref().header.key.to_hex();
+        let hex_key = PK(envelope.inner_ref().header.key);
         stmt.insert(params![nickname, hex_key])?;
         self.try_insert_authenticated_envelope(envelope)?;
-        Ok(hex_key)
+        Ok(hex_key.0.to_hex())
     }
     /// attempts to put an authenticated envelope in the DB
     ///
     /// Will fail if the key is not registered.
+    ///
+    /// Will return false if the message already existed
     pub fn try_insert_authenticated_envelope(
         &self,
         data: Authenticated<Envelope>,
-    ) -> Result<(), rusqlite::Error> {
+    ) -> Result<bool, rusqlite::Error> {
         let data = data.inner();
         let mut stmt = self.0.prepare(include_str!("sql/insert/envelope.sql"))?;
         let time = attest_util::now();
 
-        stmt.insert(rusqlite::named_params! {
+        match stmt.insert(rusqlite::named_params! {
                 ":body": data,
                 ":hash": data.clone()
                     .canonicalized_hash()
                     .expect("Hashing should always succeed?"),
-                ":key": data.header.key.to_hex(),
+                ":key": PK(data.header.key),
                 ":received_time": time
-        })?;
-        Ok(())
+        }) {
+            Ok(_rowid) => Ok(true),
+            Err(e) => match e {
+                rusqlite::Error::SqliteFailure(err, ref _msg) => match err {
+                    ffi::Error {
+                        code: ErrorCode::ConstraintViolation,
+                        extended_code: SQLITE_CONSTRAINT_UNIQUE,
+                    } => Ok(false),
+                    _ => Err(e),
+                },
+                err => Err(err),
+            },
+        }
     }
 }
+
+/// Constant for Unique Contraint Violation
+/// Yes, pattern matching works.
+///```
+/// use std::os::raw::c_int;
+/// const X: c_int = 0;
+/// struct Y {
+///     val: c_int,
+/// }
+/// match (Y { val: 1 }) {
+///     Y { val: X } => panic!("bad"),
+///     Y { val: b } => println!("good"),
+/// }
+/// match (Y { val: 0 }) {
+///     Y { val: X } => println!("good"),
+///     Y { val: b } => panic!("bad"),
+/// }
+///```
+const SQLITE_CONSTRAINT_UNIQUE: c_int = 2067;

@@ -1,6 +1,9 @@
-use super::{MsgDBHandle, handle_type};
+use super::{handle_type, MsgDBHandle};
 
-impl<'a, T> MsgDBHandle<'a, T> where T: handle_type::Setup {
+impl<'a, T> MsgDBHandle<'a, T>
+where
+    T: handle_type::Setup,
+{
     /// Creates all the required tables for the application.
     /// Safe to call multiple times
     pub fn setup_tables(&mut self) {

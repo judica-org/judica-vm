@@ -1,5 +1,6 @@
 use self::checkpoints::BitcoinCheckPoints;
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
+
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
@@ -145,25 +146,16 @@ impl Envelope {
     ///
     /// This hashes everything, including unsigned data.
     pub fn canonicalized_hash(self) -> Option<CanonicalEnvelopeHash> {
-        let msg_str = serde_json::to_value(self)
-            .and_then(|reserialized| serde_json::from_value(reserialized))
-            .ok()?;
-        let canonical = ruma_signatures::canonical_json(&msg_str).ok()?;
-        Some(CanonicalEnvelopeHash(
-            sapio_bitcoin::hashes::sha256::Hash::hash(canonical.as_bytes()),
-        ))
+        self.canonicalized_hash_ref()
     }
 
     /// Creates the canonicalized_hash for the [`Envelope`].
     ///
     /// This hashes everything, including unsigned data.
     pub fn canonicalized_hash_ref(&self) -> Option<CanonicalEnvelopeHash> {
-        let msg_str = serde_json::to_value(self)
-            .and_then(|reserialized| serde_json::from_value(reserialized))
-            .ok()?;
-        let canonical = ruma_signatures::canonical_json(&msg_str).ok()?;
+        let canonical = ruma_serde::to_canonical_value(self).ok()?;
         Some(CanonicalEnvelopeHash(
-            sapio_bitcoin::hashes::sha256::Hash::hash(canonical.as_bytes()),
+            sapio_bitcoin::hashes::sha256::Hash::hash(canonical.to_string().as_bytes()),
         ))
     }
     /// Helper to get the [`SchnorrMessage`] from an envelope.

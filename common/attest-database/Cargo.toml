@@ -6,36 +6,21 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.19.0", features = ["full"] }
-axum = "0.5.7"
-tracing-subscriber = "0.3.11"
 tracing = "0.1.35"
-reqwest = {version="=0.11.10", features=["socks", "json"]}
 serde_json = "1.0.79"
 serde = "1.0.136"
 serde_derive = "1.0.136"
-ruma-signatures = "0.10.0"
-ruma-serde = "0.6.0"
 directories = "3.0.1"
 fallible-iterator = "0.2.0"
-futures = "0.3.21"
-bitcoincore-rpc-async = "4.0.1-alpha.1"
-
-[dependencies.libtor]
-version = "47.7.0+0.4.7.x"
-
-[dependencies.openssl-sys]
-features = ["vendored"]
 
 [dependencies.attest-util]
 path = "../attest-util"
+features = ["tokio"]
 
 [dependencies.attest-messages]
 path = "../attest-messages"
 features = ["rusqlite"]
 
-[dependencies.ed25519-dalek]
-version= "1.0.1"
-features=['serde']
 
 [dependencies.rusqlite]
 version = "0.27.0"

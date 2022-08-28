@@ -5,13 +5,21 @@ use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use fallible_iterator::FallibleIterator;
-use rusqlite::params;
+use rusqlite::{named_params, params};
 use sapio_bitcoin::{
     hashes::{hex::ToHex, sha256, Hash},
     secp256k1::SecretKey,
     XOnlyPublicKey,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+#[derive(Serialize, Deserialize)]
+pub struct PeerInfo {
+    pub service_url: String,
+    pub port: u16,
+    pub fetch_from: bool,
+    pub push_to: bool,
+}
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get,
@@ -27,6 +35,26 @@ where
         stmt.query_row([nonce], |r| r.get::<_, PrecomittedNonce>(0))
     }
 
+    /// Returns the message at a given height for a key
+    pub fn get_connected_messages_newer_than_envelopes<'v, It>(
+        &self,
+        envelopes: It,
+    ) -> Result<Vec<Envelope>, rusqlite::Error>
+    where
+        It: Iterator<Item = &'v Envelope>,
+    {
+        let mut stmt = self.0.prepare(include_str!(
+            "sql/get/connected_messages_newer_than_for_genesis.sql"
+        ))?;
+        let mut res = vec![];
+        for envelope in envelopes {
+            let rs = stmt
+                .query(named_params! {":genesis": envelope.header.genesis, ":height": envelope.header.height})?;
+            let mut envs = rs.map(|r| r.get::<_, Envelope>(0)).collect()?;
+            res.append(&mut envs);
+        }
+        Ok(res)
+    }
     /// Returns the message at a given height for a key
     pub fn get_message_at_height_for_user(
         &self,
@@ -198,7 +226,7 @@ where
     pub fn get_keymap(&self) -> Result<BTreeMap<XOnlyPublicKey, SecretKey>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT (public_key, private_key) FROM private_keys")?;
+            .prepare("SELECT public_key, private_key FROM private_keys")?;
         let rows = stmt.query([])?;
         rows.map(|r| {
             Ok((
@@ -210,11 +238,24 @@ where
     }
 
     /// get all added hidden services
-    pub fn get_all_hidden_services(&self) -> Result<Vec<(String, u16)>, rusqlite::Error> {
-        let mut stmt = self.0.prepare("SELECT service_url, port FROM hidden_services")?;
+    pub fn get_all_hidden_services(&self) -> Result<Vec<PeerInfo>, rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare("SELECT service_url, port, fetch_from, push_to FROM hidden_services")?;
         let results = stmt
             .query([])?
-            .map(|r| Ok((r.get::<_, String>(0)?, r.get(1)?)))
+            .map(|r| {
+                let service_url = r.get::<_, String>(0)?;
+                let port = r.get(1)?;
+                let fetch_from = r.get(2)?;
+                let push_to = r.get(3)?;
+                Ok(PeerInfo {
+                    service_url,
+                    port,
+                    fetch_from,
+                    push_to,
+                })
+            })
             .collect()?;
         Ok(results)
     }
@@ -266,5 +307,17 @@ where
         stmt.query_row([key.to_hex()], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })
+    }
+
+    pub fn get_all_users(&self) -> Result<Vec<(XOnlyPublicKey, String)>, rusqlite::Error> {
+        let mut stmt = self.0.prepare("SELECT key, nickname  FROM users")?;
+        let q = stmt.query([])?;
+
+        q.mapped(|row| {
+            let xonly_public_key = row.get::<_, sql_serializers::PK>(0)?.0;
+            let nickname = row.get::<_, String>(1)?;
+            Ok((xonly_public_key, nickname))
+        })
+        .collect()
     }
 }

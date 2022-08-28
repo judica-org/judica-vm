@@ -1,0 +1,17 @@
+[package]
+name = "bitcoin-header-checkpoints"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+tokio = { version = "1.19.0", features = ["full"] }
+bitcoincore-rpc-async = "4.0.1-alpha.1"
+tracing = "0.1.35"
+
+[dependencies.attest-messages]
+path = "../attest-messages"
+
+[dependencies.sapio-bitcoin]
+version = "0.28.1"
+features=['use-serde', 'rand']

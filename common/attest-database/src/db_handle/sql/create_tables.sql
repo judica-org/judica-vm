@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY(prev_msg_id) references messages(message_id) ON DELETE
     SET
         NULL,
-        UNIQUE(received_time, hash, user_id)
+        UNIQUE(hash)
 );
 
 /* When the new incoming message has a disconnected child,
@@ -57,12 +57,15 @@ SET
     prev_msg_id = NEW.message_id
 WHERE
     prev_msg = NEW.hash;
+
 END;
 
 CREATE TABLE IF NOT EXISTS hidden_services (
     service_id INTEGER PRIMARY KEY,
     service_url TEXT NOT NULL,
     port INTEGER NOT NULL,
+    fetch_from BOOLEAN NOT NULL,
+    push_to BOOLEAN NOT NULL,
     UNIQUE(service_url, port)
 );
 

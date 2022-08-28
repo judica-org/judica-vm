@@ -1,5 +1,6 @@
-use std::{error::Error, fmt::Display, sync::Arc};
+use std::{error::Error, fmt::Display, fs::create_dir_all, sync::Arc};
 
+use attest_util::ensure_dir;
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use tokio::task::JoinHandle;
 
@@ -18,8 +19,13 @@ impl Display for TorError {
 }
 impl Error for TorError {}
 
-pub fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
-    tokio::task::spawn_blocking(move || {
+pub async fn start(
+    config: Arc<Config>,
+) -> Result<JoinHandle<Result<(), Box<dyn Error + Send + Sync>>>, Box<dyn Error + Send + Sync>> {
+    ensure_dir(config.tor.directory.clone())
+        .await
+        .map_err(|e| format!("{}", e))?;
+    Ok(tokio::task::spawn_blocking(move || {
         let mut buf = config.tor.directory.clone();
         buf.push("onion");
         let mut tor = Tor::new();
@@ -42,5 +48,5 @@ pub fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error + Send 
             Err(e) => TorError::Error(e),
         };
         Err(errc)?
-    })
+    }))
 }

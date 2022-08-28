@@ -113,10 +113,10 @@ pub(crate) fn start_sequencer(
                                             return;
                                         };
                                     }
-                                    BroadcastByHost::NewPeer(Peer { tor, port }) => {
+                                    BroadcastByHost::NewPeer(Peer { service_url, port }) => {
                                         let handle = db.get_handle().await;
                                         // idempotent
-                                        handle.insert_hidden_service(tor, port);
+                                        handle.insert_hidden_service(service_url, port, true, true);
                                     }
                                 }
                                 count += 1;

@@ -1,15 +1,14 @@
 use crate::Config;
-use attest_database::connection::MsgDB;
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_database::{connection::MsgDB, db_handle::get::PeerInfo};
+use attest_messages::CanonicalEnvelopeHash;
 use axum::{
-    extract::Query,
     http::Response,
     http::StatusCode,
     routing::{get, post},
     Extension, Json, Router,
 };
 use game_host_messages::Peer;
-use sapio_bitcoin::secp256k1::Secp256k1;
+
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -27,7 +26,14 @@ pub async fn get_users(
         .get_all_hidden_services()
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
         .into_iter()
-        .map(|(tor, port)| Peer { tor, port })
+        .map(
+            |PeerInfo {
+                 service_url,
+                 port,
+                 fetch_from: _,
+                 push_to: _,
+             }| Peer { service_url, port },
+        )
         .collect();
     Ok((
         Response::builder()
@@ -46,7 +52,9 @@ pub async fn add_user(
     {
         tracing::debug!("Inserting Into Database");
         let locked = db.get_handle().await;
-        locked.insert_hidden_service(peer.tor, peer.port).ok();
+        locked
+            .upsert_hidden_service(peer.service_url, peer.port, Some(true), Some(true))
+            .ok();
     }
     Ok((
         Response::builder()

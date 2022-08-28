@@ -1,5 +1,6 @@
 use super::handle_type;
 use super::MsgDBHandle;
+use attest_messages::checkpoints::BitcoinCheckPoints;
 use attest_messages::Envelope;
 use attest_messages::Header;
 use attest_messages::SigningError;
@@ -21,6 +22,7 @@ where
         msg: Value,
         keypair: &KeyPair,
         secp: &Secp256k1<C>,
+        bitcoin_tipcache: Option<BitcoinCheckPoints>,
         dangerous_bypass_tip: Option<Envelope>,
     ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {
         let key: XOnlyPublicKey = keypair.x_only_public_key().0;
@@ -58,8 +60,7 @@ where
                 unsigned: Unsigned {
                     signature: Default::default(),
                 },
-                // TODO: Fetch from server.
-                checkpoints: Default::default(),
+                checkpoints: bitcoin_tipcache.unwrap_or_default(),
             },
             msg,
         };

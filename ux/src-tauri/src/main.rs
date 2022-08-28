@@ -106,14 +106,15 @@ async fn make_move_inner(
     let keys = handle.get_keymap().map_err(|_| ())?;
     let sk = keys.get(&user).ok_or(())?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
+    // TODO: Runa tipcache
     let msg = handle
-        .wrap_message_in_envelope_for_user_by_key(v, &keypair, secp.inner(), None)
+        .wrap_message_in_envelope_for_user_by_key(v, &keypair, secp.inner(), None, None)
         .ok()
         .ok_or(())?
         .ok()
         .ok_or(())?;
     let authenticated = msg.self_authenticate(secp.inner()).ok().ok_or(())?;
-    let () = handle
+    let  _ = handle
         .try_insert_authenticated_envelope(authenticated)
         .ok()
         .ok_or(())?;
@@ -162,7 +163,7 @@ pub struct Database(OnceCell<MsgDB>);
 impl Database {
     async fn get(&self) -> Result<MsgDB, Box<dyn Error>> {
         self.0
-            .get_or_try_init(|| setup_db("attestations.mining-game"))
+            .get_or_try_init(|| setup_db("attestations.mining-game", None))
             .await
             .map(|v| v.clone())
     }

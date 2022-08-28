@@ -1,64 +1,18 @@
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
-use tokio::{
-    sync::{
-        mpsc::{error::TryRecvError, UnboundedSender},
-        Notify,
-    },
-    time::MissedTickBehavior,
-};
-
-use attest_util::INFER_UNIT;
+use crate::attestations::client::AttestationClient;
+use crate::attestations::query::Tips;
 
 use super::*;
+use attest_messages::CanonicalEnvelopeHash;
+use attest_messages::Envelope;
+use attest_util::INFER_UNIT;
+use tokio;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::Notify;
+use tokio::time::MissedTickBehavior;
 
-pub fn client_fetching(
-    config: Arc<Config>,
-    db: MsgDB,
-) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
-    let jh = tokio::spawn(async move {
-        let proxy = reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", config.tor.socks_port))?;
-        let client = reqwest::Client::builder().proxy(proxy).build()?;
-        let secp = Arc::new(Secp256k1::new());
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
-        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        let mut task_set: HashMap<(String, u16), JoinHandle<Result<(), _>>> = HashMap::new();
-        loop {
-            interval.tick().await;
-            let mut create_services: HashSet<_> = db
-                .get_handle()
-                .await
-                .get_all_hidden_services()?
-                .into_iter()
-                .collect();
-            // Drop anything that is finished, we will re-add it later if still in create_services
-            task_set.retain(|_k, v| !v.is_finished());
-            // If it is no longer in our services DB, drop it / disconnect
-            task_set.retain(
-                |service_id, service| match create_services.take(service_id) {
-                    Some(_) => true,
-                    None => {
-                        service.abort();
-                        false
-                    }
-                },
-            );
-            // Open connections to all services on the list and put into our task set.
-            for url in create_services.into_iter() {
-                let client = client.clone();
-                task_set.insert(
-                    url.clone(),
-                    tokio::spawn(make_peer(secp.clone(), client, url, db.clone())),
-                );
-            }
-        }
-        // INFER_UNIT
-    });
-    jh
-}
-
-async fn make_peer<C: Verification + 'static>(
+pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
     secp: Arc<Secp256k1<C>>,
-    client: reqwest::Client,
+    client: AttestationClient,
     url: (String, u16),
     conn: MsgDB,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
@@ -83,7 +37,7 @@ async fn make_peer<C: Verification + 'static>(
 
 /// enevelope processor verifies an envelope and then forwards any unknown tips
 /// to the tip_resolver.
-fn envelope_processor<C: Verification + 'static>(
+pub(crate) fn envelope_processor<C: Verification + 'static>(
     conn: MsgDB,
     secp: Arc<Secp256k1<C>>,
     mut rx_envelope: tokio::sync::mpsc::UnboundedReceiver<Vec<Envelope>>,
@@ -158,8 +112,8 @@ fn envelope_processor<C: Verification + 'static>(
 
 /// tip_fetcher periodically (randomly) pings a hidden service for it's
 /// latest tips
-fn tip_fetcher(
-    client: reqwest::Client,
+pub(crate) fn tip_fetcher(
+    client: AttestationClient,
     (url, port): (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
@@ -168,12 +122,7 @@ fn tip_fetcher(
     tokio::spawn(async move {
         loop {
             tracing::debug!("Sending message...");
-            let resp: Vec<Envelope> = client
-                .get(format!("http://{}:{}/tips", url, port))
-                .send()
-                .await?
-                .json()
-                .await?;
+            let resp: Vec<Envelope> = client.get_latest_tips(&url, port).await?;
             tx_envelope.send(resp)?;
             let d = Duration::from_secs(15)
                 + Duration::from_millis(rand::thread_rng().gen_range(0, 1000));
@@ -185,8 +134,8 @@ fn tip_fetcher(
 
 /// tip_resolver ingests a Vec<Hash> and queries a service for the envelope
 /// of those hashes, then sends those envelopers for processing.
-fn tip_resolver(
-    client: reqwest::Client,
+pub(crate) fn tip_resolver(
+    client: AttestationClient,
     (url, port): (String, u16),
     tx_envelope: tokio::sync::mpsc::UnboundedSender<Vec<Envelope>>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<Vec<CanonicalEnvelopeHash>>,
@@ -194,13 +143,7 @@ fn tip_resolver(
     tokio::spawn(async move {
         loop {
             if let Some(tips) = rx.recv().await {
-                let resp: Vec<Envelope> = client
-                    .get(format!("http://{}:{}/tips", url, port))
-                    .query(&Tips { tips })
-                    .send()
-                    .await?
-                    .json()
-                    .await?;
+                let resp = client.get_tips(Tips { tips }, &url, port).await?;
                 tx_envelope.send(resp)?;
             }
         }

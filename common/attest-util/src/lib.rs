@@ -27,3 +27,15 @@ pub fn now() -> u64 {
 /// Helps with type inference
 pub const INFER_UNIT: Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> = Ok(());
 pub type AbstractResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
+
+#[cfg(feature = "tokio")]
+use std::{error::Error, path::PathBuf};
+#[cfg(feature = "tokio")]
+pub async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+    let dir = tokio::fs::create_dir_all(&data_dir).await;
+    match dir.as_ref().map_err(std::io::Error::kind) {
+        Err(std::io::ErrorKind::AlreadyExists) => (),
+        _e => dir?,
+    };
+    Ok(data_dir)
+}
