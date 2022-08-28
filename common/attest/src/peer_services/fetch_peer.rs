@@ -1,13 +1,11 @@
+use super::*;
 use crate::attestations::client::AttestationClient;
 use crate::attestations::query::Tips;
-
-use super::*;
 use attest_database::db_handle::insert::SqliteFail;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use attest_util::now;
 use attest_util::INFER_UNIT;
-use sapio_bitcoin::hashes::hex::ToHex;
 use tokio;
 use tokio::sync::mpsc::UnboundedSender;
 

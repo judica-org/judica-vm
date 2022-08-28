@@ -105,7 +105,13 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     .scan_for_unsent_tips_delay()
                     .await;
             }
-            info!(?service, "Shutting Down Push New Envelope Subtask");
+            info!(
+                ?service,
+                task = "PUSH",
+                subtask = "Detect Missing",
+                event = "SHUTDOWN",
+                "Graceful"
+            );
             INFER_UNIT
         }
     });
@@ -161,27 +167,60 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     info!(?service, task = "PUSH", n = to_broadcast.len());
                     trace!(?service, task="PUSH", msgs = ?to_broadcast);
                     let res = client.post_messages(&to_broadcast, &url, port).await?;
-                    info!(accepted=res.iter().filter(|s| s.success).count(), out_of=to_broadcast.len(), task="PUSH", ?service);
+                    info!(
+                        accepted = res.iter().filter(|s| s.success).count(),
+                        out_of = to_broadcast.len(),
+                        task = "PUSH",
+                        ?service
+                    );
                 } else {
                     info!(?service, task = "PUSH", "No Work to Do");
                 }
             }
-            info!(?service, "Shutting Down Push Envelope Sending Subtask");
+            info!(
+                ?service,
+                task = "PUSH",
+                subtask = "Broadcast",
+                event = "SHUTDOWN",
+                "Graceful"
+            );
             INFER_UNIT
         }
     });
 
     let _r = tokio::select! {
         a = &mut t1 => {
-            info!(?service, error=?a, "New Envelope Detecting Subtask");
-            a??
+            t2.abort();
+            match &a {
+                Ok(r) => match r {
+                    Ok(()) => {
+                    },
+                    Err(e) => {
+                        warn!(?service, task="PUSH", subtask="Broadcast", event="SHUTDOWN", err=?e);
+                    },
+                },
+                Err(e) => {
+                    warn!(?service, task="PUSH", subtask="Broadcast", event="SHUTDOWN", err=?e);
+                },
+            };
+            a??;
         },
         a = &mut t2 => {
-            info!(?service, error=?a, "Envelope Pushing subtask");
-            a??
+            t1.abort();
+            match &a {
+                Ok(r) => match r {
+                    Ok(()) => {
+                    },
+                    Err(e) => {
+                        warn!(?service, task="PUSH", subtask="Broadcast", event="SHUTDOWN", err=?e);
+                    },
+                },
+                Err(e) => {
+                    warn!(?service, task="PUSH", subtask="Broadcast", event="SHUTDOWN", err=?e);
+                },
+            }
+            a??;
         }
     };
-    t1.abort();
-    t2.abort();
     Ok(())
 }
