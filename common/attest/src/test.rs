@@ -86,19 +86,18 @@ where
         unord.push(task_one);
     }
 
-    let mut fail = None;
-    tokio::select! {
+    let fail = tokio::select! {
         _ = code(ports) => {
             tracing::debug!("Main Task Completed");
-            return;
+            None
         }
         r = unord.next() => {
             tracing::debug!("Some Task Completed");
-            fail = r;
+            r
         }
     };
     for quit in &quits {
-        quit.store(false, Ordering::Relaxed);
+        quit.store(true, Ordering::Relaxed);
     }
     // Wait for tasks to finish
     for _ in unord.next().await {}
