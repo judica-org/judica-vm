@@ -1,3 +1,16 @@
+use crate::{
+    attestations::client::AttestationClient,
+    control::{
+        client::ControlClient,
+        query::{Outcome, PushMsg, Subscribe},
+    },
+    init_main, BitcoinConfig, Config, ControlConfig,
+};
+use attest_messages::Envelope;
+use bitcoincore_rpc_async::Auth;
+use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
+use reqwest::Client;
+use sapio_bitcoin::XOnlyPublicKey;
 use std::{
     collections::BTreeSet,
     env::temp_dir,
@@ -7,24 +20,10 @@ use std::{
     },
     time::Duration,
 };
-
-use attest_messages::Envelope;
-use bitcoincore_rpc_async::Auth;
-use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
-use reqwest::Client;
-use sapio_bitcoin::XOnlyPublicKey;
 use test_log::test;
 use tokio::spawn;
 use tracing::{debug, info};
-
-use crate::{
-    attestations::client::AttestationClient,
-    control::{
-        client::ControlClient,
-        query::{Outcome, PushMsg, Subscribe},
-    },
-    init_main, BitcoinConfig, Config, ControlConfig,
-};
+const HOME: &'static str = "127.0.0.1";
 
 // Connect to a specific local server for testing, or assume there is an
 // open-to-world server available locally
@@ -121,7 +120,7 @@ async fn connect_and_test_nodes() {
         {
             let it = ports.iter().map(|(port, ctrl)| {
                 let client = client.clone();
-                async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
+                async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
             let resp = join_all(it).await;
             let empty = (0..NODES).map(|_|Some(vec![])).collect::<Vec<_>>();
@@ -133,7 +132,7 @@ async fn connect_and_test_nodes() {
                 let control_client = control_client.clone();
                 async move {
                     control_client
-                        .make_genesis(&format!("ch-{}", ctrl), &"127.0.0.1".into(), *ctrl)
+                        .make_genesis(&format!("ch-{}", ctrl), &HOME.into(), *ctrl)
                         .await
                 }
             });
@@ -149,7 +148,7 @@ async fn connect_and_test_nodes() {
         {
             let it = ports.iter().map(|(port, ctrl)| {
                 let client = client.clone();
-                async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
+                async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
             let resp = join_all(it).await;
             debug!("Got {:?}", resp);
@@ -178,7 +177,7 @@ async fn connect_and_test_nodes() {
                                 key,
                                 msg: nth_msg_per_port(port, n),
                             },
-                            &"127.0.0.1".into(),
+                            &HOME.into(),
                             ctrl,
                         )
                         .await
@@ -212,7 +211,7 @@ async fn connect_and_test_nodes() {
                 'resync: loop {
                     let it = ports.iter().map(|(port, ctrl)| {
                         let client = client.clone();
-                        async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
+                        async move { client.get_latest_tips(&HOME.into(), *port).await }
                     });
                     let resp = join_all(it).await;
                     for (r, (port, _)) in resp.iter().zip(ports.iter()) {
@@ -251,10 +250,10 @@ async fn connect_and_test_nodes() {
             let futs = move |to, cli: ControlClient, ctrl: u16| async move {
                 cli.add_service(
                     &Subscribe {
-                        url: "127.0.0.1".into(),
+                        url: HOME.into(),
                         port: to,
                     },
-                    &"127.0.0.1".into(),
+                    &HOME.into(),
                     ctrl,
                 )
                 .await
@@ -290,7 +289,7 @@ async fn connect_and_test_nodes() {
         let get_all_tips = || async {
             let it = ports.iter().map(|(port, ctrl)| {
                 let client = client.clone();
-                async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
+                async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
             let resp = join_all(it).await;
             resp.iter()
@@ -321,7 +320,7 @@ async fn connect_and_test_nodes() {
         {
             let it = ports.iter().map(|(port, ctrl)| {
                 let client = client.clone();
-                async move { client.get_latest_tips(&"127.0.0.1".into(), *port).await }
+                async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
             let resp = join_all(it).await;
 
