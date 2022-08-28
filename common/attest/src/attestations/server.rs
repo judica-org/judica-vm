@@ -1,6 +1,9 @@
 use super::query::Tips;
 use crate::{control::query::Outcome, Config};
-use attest_database::connection::MsgDB;
+use attest_database::{
+    connection::MsgDB,
+    db_handle::insert::{self, SqliteFail},
+};
 use attest_messages::Envelope;
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
@@ -51,7 +54,7 @@ pub async fn post_message(
     Extension(db): Extension<MsgDB>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(envelopes): Json<Vec<Envelope>>,
-) -> Result<(Response<()>, Json<Outcome>), (StatusCode, &'static str)> {
+) -> Result<(Response<()>, Json<Vec<Outcome>>), (StatusCode, &'static str)> {
     let mut authed = Vec::with_capacity(envelopes.len());
     for envelope in envelopes {
         tracing::info!(method="POST /msg", from=?addr, envelope=?envelope.canonicalized_hash_ref().unwrap(), "Envelope Received" );
@@ -66,17 +69,26 @@ pub async fn post_message(
         tracing::trace!("Verified Signatures");
         authed.push(envelope);
     }
+    let mut outcomes = Vec::with_capacity(authed.len());
     {
         let locked = db.get_handle().await;
         for envelope in authed {
             tracing::trace!("Inserting Into Database");
-            locked
-                .try_insert_authenticated_envelope(envelope)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
-                .map_err(|err| {
+            match locked.try_insert_authenticated_envelope(envelope) {
+                Ok(i) => match i {
+                    Ok(()) => {
+                        outcomes.push(Outcome { success: true });
+                    }
+                    Err(fail) => {
+                        outcomes.push(Outcome { success: false });
+                        tracing::debug!(?fail, "Inserting Into Database Failed");
+                    }
+                },
+                Err(err) => {
+                    outcomes.push(Outcome { success: false });
                     tracing::debug!(?err, "Inserting Into Database Failed");
-                    (StatusCode::INTERNAL_SERVER_ERROR, "")
-                })?;
+                }
+            }
         }
     }
     Ok((
@@ -85,7 +97,7 @@ pub async fn post_message(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(Outcome { success: true }),
+        Json(outcomes),
     ))
 }
 

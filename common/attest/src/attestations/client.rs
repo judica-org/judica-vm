@@ -50,14 +50,14 @@ impl AttestationClient {
 
     pub async fn post_messages(
         &self,
-        envelopes: Vec<Envelope>,
+        envelopes: &Vec<Envelope>,
         url: &String,
         port: u16,
-    ) -> Result<Outcome, reqwest::Error> {
+    ) -> Result<Vec<Outcome>, reqwest::Error> {
         let resp = self
             .as_ref()
             .post(format!("http://{}:{}/msg", url, port))
-            .json(&envelopes)
+            .json(envelopes)
             .send()
             .await?
             .json()

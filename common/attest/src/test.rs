@@ -250,6 +250,7 @@ async fn connect_and_test_nodes() {
             .await;
         }
         check_synched(10, true).await;
+        tokio::time::sleep(Duration::from_millis(2000)).await;
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
         ()

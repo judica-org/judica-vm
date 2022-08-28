@@ -160,7 +160,8 @@ pub async fn push_to_peer<C: Verification + 'static>(
                 if !to_broadcast.is_empty() {
                     info!(?service, task = "PUSH", n = to_broadcast.len());
                     trace!(?service, task="PUSH", msgs = ?to_broadcast);
-                    client.post_messages(to_broadcast, &url, port).await?;
+                    let res = client.post_messages(&to_broadcast, &url, port).await?;
+                    info!(accepted=res.iter().filter(|s| s.success).count(), out_of=to_broadcast.len(), task="PUSH", ?service);
                 } else {
                     info!(?service, task = "PUSH", "No Work to Do");
                 }
