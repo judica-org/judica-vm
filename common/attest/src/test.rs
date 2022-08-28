@@ -6,7 +6,7 @@ use crate::{
     },
     init_main, BitcoinConfig, Config, ControlConfig,
 };
-use attest_messages::Envelope;
+use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
@@ -285,23 +285,10 @@ async fn connect_and_test_nodes() {
             check_synched(1, true).await;
             info!("All Synchronized")
         }
-        let get_all_tips = || async {
-            let it = ports.iter().map(|(port, _ctrl)| {
-                let client = client.clone();
-                async move { client.get_latest_tips(&HOME.into(), *port).await }
-            });
-            let resp = join_all(it).await;
-            resp.iter()
-                .flatten()
-                .flatten()
-                .map(|c| c.canonicalized_hash_ref())
-                .flatten()
-                .collect()
-        };
 
         // TODO: signal that notifies after re-peering successful?
         // Get tips for all clients (doesn't depend on past bit processing yet)
-        let mut old_tips: BTreeSet<_> = get_all_tips().await;
+        let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
         debug!(current_tips = ?old_tips, "Tips before adding a new message");
         // Create a new message on all chain tips
         make_nth(2).await;
@@ -310,38 +297,68 @@ async fn connect_and_test_nodes() {
         // wait twice the time for our attach_tips to get called (TODO: have a non-race condition?)
         tokio::time::sleep(Duration::from_millis(2000)).await;
 
-        let mut new_tips = get_all_tips().await;
-        debug!(all_tips = ?new_tips, "Adding Tips");
-        old_tips.append(&mut new_tips);
+            test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
-        debug!(all_tips = ?old_tips, "Tips to Check For");
-        // Attempt to check that the latest tips of all clients Envelopes are in sync
-        {
-            let it = ports.iter().map(|(port, _ctrl)| {
-                let client = client.clone();
-                async move { client.get_latest_tips(&HOME.into(), *port).await }
-            });
-            let resp = join_all(it).await;
-
-            for r in &resp {
-                for e in r.as_ref().unwrap() {
-                    debug!(envelope=?e, "Checking Tips On");
-                    let s = e
-                        .header
-                        .tips
-                        .iter()
-                        .map(|tip| tip.2)
-                        .collect::<BTreeSet<_>>();
-                    assert_eq!(s.len(), ports.len() -1 );
-                    let diff = s.difference(&old_tips);
-                    let diff: Vec<_> = diff.cloned().collect();
-                    assert_eq!(diff, vec![]);
-                    assert!(!s.contains(&e.header.ancestors.as_ref().unwrap().prev_msg));
-                }
+            let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
+            debug!(current_tips = ?old_tips, "Tips before adding a new message");
+            for x in 3..=10 {
+                make_nth(x).await;
             }
-        }
+            check_synched(10, true).await;
+            test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
         ()
     })
     .await
+}
+
+async fn get_all_tips(
+    ports: Vec<(u16, u16)>,
+    client: AttestationClient,
+) -> BTreeSet<CanonicalEnvelopeHash> {
+    let it = ports.iter().map(|(port, _ctrl)| {
+        let client = client.clone();
+        async move { client.get_latest_tips(&HOME.into(), *port).await }
+    });
+    let resp = join_all(it).await;
+    resp.iter()
+        .flatten()
+        .flatten()
+        .map(|c| c.canonicalized_hash_ref())
+        .flatten()
+        .collect()
+}
+async fn test_envelope_inner_tips(
+    ports: Vec<(u16, u16)>,
+    client: AttestationClient,
+    mut old_tips: BTreeSet<CanonicalEnvelopeHash>,
+) {
+    let mut new_tips = get_all_tips(ports.clone(), client.clone()).await;
+    debug!(all_tips = ?new_tips, "Adding Tips");
+    old_tips.append(&mut new_tips);
+
+    debug!(all_tips = ?old_tips, "Tips to Check For");
+    // Attempt to check that the latest tips of all clients Envelopes are in sync
+    let it = ports.iter().map(|(port, _ctrl)| {
+        let client = client.clone();
+        async move { client.get_latest_tips(&HOME.into(), *port).await }
+    });
+    let resp = join_all(it).await;
+
+    for r in &resp {
+        for e in r.as_ref().unwrap() {
+            debug!(envelope=?e, "Checking Tips On");
+            let s = e
+                .header
+                .tips
+                .iter()
+                .map(|tip| tip.2)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(s.len(), ports.len() - 1);
+            let diff = s.difference(&old_tips);
+            let diff: Vec<_> = diff.cloned().collect();
+            assert_eq!(diff, vec![]);
+            assert!(!s.contains(&e.header.ancestors.as_ref().unwrap().prev_msg));
+        }
+    }
 }
