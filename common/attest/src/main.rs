@@ -351,7 +351,7 @@ mod test {
 
     #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
     async fn connect_and_test_nodes() {
-        const NODES: u8 = 2;
+        const NODES: u8 = 5;
         test_context(NODES, |ports| async move {
             tokio::time::sleep(Duration::from_secs(1)).await;
             // TODO: Guarantee all clients are started?
