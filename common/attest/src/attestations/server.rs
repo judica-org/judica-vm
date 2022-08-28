@@ -4,6 +4,7 @@ use attest_database::connection::MsgDB;
 use attest_messages::Envelope;
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
+    extract::ConnectInfo,
     http::Response,
     http::StatusCode,
     routing::{get, post},
@@ -13,14 +14,17 @@ use sapio_bitcoin::secp256k1::Secp256k1;
 
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::trace::TraceLayer;
-use tracing::debug;
+use tracing::{debug, info, info_span, trace};
 
 pub async fn get_tip_handler(
     Extension(db): Extension<MsgDB>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(query): Json<Option<Tips>>,
 ) -> Result<(Response<()>, Json<Vec<Envelope>>), (StatusCode, &'static str)> {
     let handle = db.get_handle().await;
     let qtype = query.is_some();
+    trace!(from=?addr, method="GET /tips", ?query);
+    info!(from=?addr, method="GET /tips", ?query);
     let r = match query {
         Some(Tips { mut tips }) => {
             // runs in O(N) usually since the slice should already be sorted
@@ -32,7 +36,7 @@ pub async fn get_tip_handler(
     }
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
 
-    debug!(tips = ?r, "HTTP GET for {} tips", if qtype{"specific"}else{"latest"} );
+    trace!(from=?addr, method="GET /tips", req_type = if qtype{"specific"}else{"latest"}, response=?r);
 
     Ok((
         Response::builder()
@@ -45,27 +49,34 @@ pub async fn get_tip_handler(
 }
 pub async fn post_message(
     Extension(db): Extension<MsgDB>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(envelopes): Json<Vec<Envelope>>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, &'static str)> {
     let mut authed = Vec::with_capacity(envelopes.len());
     for envelope in envelopes {
-        tracing::debug!("Envelope Received: {:?}", envelope);
+        tracing::info!(method="POST /msg", from=?addr, envelope=?envelope.canonicalized_hash_ref().unwrap(), "Envelope Received" );
+        tracing::trace!(method="POST /msg", from=?addr, envelope=?envelope, "Envelope Received" );
         let envelope = envelope.self_authenticate(&Secp256k1::new()).map_err(|_| {
+            tracing::debug!("Invalid Message From Peer");
             (
                 StatusCode::UNAUTHORIZED,
                 "Envelope not valid. Only valid data should be sent.",
             )
         })?;
-        tracing::debug!("Verified Signatures");
+        tracing::trace!("Verified Signatures");
         authed.push(envelope);
     }
     {
         let locked = db.get_handle().await;
         for envelope in authed {
-            tracing::debug!("Inserting Into Database");
+            tracing::trace!("Inserting Into Database");
             locked
                 .try_insert_authenticated_envelope(envelope)
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
+                .map_err(|err| {
+                    tracing::debug!(?err, "Inserting Into Database Failed");
+                    (StatusCode::INTERNAL_SERVER_ERROR, "")
+                })?;
         }
     }
     Ok((
@@ -94,7 +105,7 @@ pub async fn run(config: Arc<Config>, db: MsgDB) -> tokio::task::JoinHandle<Abst
         let addr = SocketAddr::from(([127, 0, 0, 1], config.attestation_port));
         tracing::debug!("Attestation Server Listening on {}", addr);
         axum::Server::bind(&addr)
-            .serve(app.into_make_service())
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await
             .unwrap();
         INFER_UNIT

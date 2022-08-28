@@ -13,7 +13,7 @@ use sapio_bitcoin::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use tracing::debug;
+use tracing::{debug, trace};
 #[derive(Serialize, Deserialize)]
 pub struct PeerInfo {
     pub service_url: String,
@@ -181,7 +181,8 @@ where
             .prepare(include_str!("sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
-        debug!(envelopes=?vs, "Tips Returned");
+        debug!(tips=?vs.iter().map(|e| (e.header.height, e.get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
+        trace!(envelopes=?vs, "Tips Returned");
         Ok(vs)
     }
 
@@ -189,7 +190,8 @@ where
         let mut stmt = self.0.prepare(include_str!("sql/get/all_genesis.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
-        debug!(envelopes=?vs, "Genesis Tips Returned");
+        debug!(tips=?vs.iter().map(|e| (e.header.height, e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
+        trace!(envelopes=?vs, "Genesis Tips Returned");
         Ok(vs)
     }
 

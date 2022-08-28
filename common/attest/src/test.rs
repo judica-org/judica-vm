@@ -11,6 +11,7 @@ use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
 use sapio_bitcoin::XOnlyPublicKey;
+use serde_json::Value;
 use std::{
     collections::BTreeSet,
     env::temp_dir,
@@ -122,7 +123,7 @@ async fn connect_and_test_nodes() {
                 async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
             let resp = join_all(it).await;
-            let empty = (0..NODES).map(|_|Some(vec![])).collect::<Vec<_>>();
+            let empty = (0..NODES).map(|_| Some(vec![])).collect::<Vec<_>>();
             assert_eq!(resp.into_iter().map(|r| r.ok()).collect::<Vec<_>>(), empty);
         }
         // Create a genesis envelope for each node
@@ -160,89 +161,21 @@ async fn connect_and_test_nodes() {
         }
 
         // Add a message to each client like test-1-for-12345
-        let nth_msg_per_port = |port, n: u64| format!("test-{}-for-{}", n, port).into();
-        let make_nth = |n| {
-            let control_client = control_client.clone();
-            let ports = ports.clone();
-            let keys = genesis_envelopes.iter().map(|g| g.header.key).collect::<Vec<_>>();
-            async move {
-            info!(n, "Making messages");
-            let make_message = |((port, ctrl), key): ((u16, u16), XOnlyPublicKey)| {
-                let control_client = control_client.clone();
-                async move {
-                    control_client
-                        .push_message_dangerous(
-                            &PushMsg {
-                                key,
-                                msg: nth_msg_per_port(port, n),
-                            },
-                            &HOME.into(),
-                            ctrl,
-                        )
-                        .await
-                }
-            };
-            let it = ports
-                .iter()
-                .cloned()
-                .zip(keys.into_iter())
-                .map(make_message);
-            let resp = join_all(it).await;
-            info!(n, "Made Messages: {:?}", resp);
-            let pushmsg_resp = resp
-                .into_iter()
-                .collect::<Result<Vec<Outcome>, _>>()
-                .unwrap();
-            assert!(pushmsg_resp.iter().all(|v| v.success));
-        }};
 
         // Check that the messages are available as tips
         let check_synched = |n: u64, require_full: bool| {
             let ports = ports.clone();
             let client = client.clone();
-            async move {
-                info!(n, "Checking for synchronization");
-                let mut expected = ports
-                    .iter()
-                    .map(|(port, _)| nth_msg_per_port(*port, n))
-                    .collect::<Vec<_>>();
-                expected.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
-                'resync: loop {
-                    let it = ports.iter().map(|(port, _ctrl)| {
-                        let client = client.clone();
-                        async move { client.get_latest_tips(&HOME.into(), *port).await }
-                    });
-                    let resp = join_all(it).await;
-                    for (r, (port, _)) in resp.iter().zip(ports.iter()) {
-                        let tips = r.as_ref().ok().unwrap();
-                        let needle = nth_msg_per_port(*port, n);
-                        info!(?port, response = ?tips.iter().map(|t| &t.msg), seeking = ?needle, "Node Got Response");
-
-                        assert!(tips
-                            .iter()
-                            .map(|t| &t.msg)
-                            .find(|f| f.as_str() == needle.as_str())
-                            .is_some())
-                    }
-                    if require_full {
-                        for r in resp {
-                            let tips = r.ok().unwrap();
-                            let mut msgs = tips.into_iter().map(|m| m.msg).collect::<Vec<_>>();
-                            msgs.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
-                            if expected != msgs {
-                                continue 'resync;
-                            }
-                        }
-                    }
-                    tokio::time::sleep(Duration::from_secs(5)).await;
-                    break 'resync;
-                }
-
-                info!(n, "Synchronization success");
-            }
+            check_synched(n, require_full, ports, client)
         };
 
-        make_nth(1).await;
+        make_nth(
+            1,
+            ports.clone(),
+            control_client.clone(),
+            genesis_envelopes.clone(),
+        )
+        .await;
         check_synched(1, false).await;
         // Connect each peer to every other peer
         {
@@ -291,21 +224,33 @@ async fn connect_and_test_nodes() {
         let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
         debug!(current_tips = ?old_tips, "Tips before adding a new message");
         // Create a new message on all chain tips
-        make_nth(2).await;
+        make_nth(
+            2,
+            ports.clone(),
+            control_client.clone(),
+            genesis_envelopes.clone(),
+        )
+        .await;
         check_synched(2, true).await;
 
         // wait twice the time for our attach_tips to get called (TODO: have a non-race condition?)
         tokio::time::sleep(Duration::from_millis(2000)).await;
 
-            test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
+        test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
-            let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
-            debug!(current_tips = ?old_tips, "Tips before adding a new message");
-            for x in 3..=10 {
-                make_nth(x).await;
-            }
-            check_synched(10, true).await;
-            test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
+        let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
+        debug!(current_tips = ?old_tips, "Tips before adding a new message");
+        for x in 3..=10 {
+            make_nth(
+                x,
+                ports.clone(),
+                control_client.clone(),
+                genesis_envelopes.clone(),
+            )
+            .await;
+        }
+        check_synched(10, true).await;
+        test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
         ()
     })
@@ -361,4 +306,97 @@ async fn test_envelope_inner_tips(
             assert!(!s.contains(&e.header.ancestors.as_ref().unwrap().prev_msg));
         }
     }
+}
+
+fn nth_msg_per_port(port: u16, n: u64) -> Value {
+    format!("test-{}-for-{}", n, port).into()
+}
+async fn make_nth(
+    n: u64,
+    ports: Vec<(u16, u16)>,
+    control_client: ControlClient,
+    genesis_envelopes: Vec<Envelope>,
+) {
+    let keys = genesis_envelopes
+        .iter()
+        .map(|g| g.header.key)
+        .collect::<Vec<_>>();
+    info!(n, "Making messages");
+    let make_message = |((port, ctrl), key): ((u16, u16), XOnlyPublicKey)| {
+        let control_client = control_client.clone();
+        async move {
+            control_client
+                .push_message_dangerous(
+                    &PushMsg {
+                        key,
+                        msg: nth_msg_per_port(port, n),
+                    },
+                    &HOME.into(),
+                    ctrl,
+                )
+                .await
+        }
+    };
+    let it = ports
+        .iter()
+        .cloned()
+        .zip(keys.into_iter())
+        .map(make_message);
+    let resp = join_all(it).await;
+    info!(n, "Made Messages: {:?}", resp);
+    let pushmsg_resp = resp
+        .into_iter()
+        .collect::<Result<Vec<Outcome>, _>>()
+        .unwrap();
+    assert!(pushmsg_resp.iter().all(|v| v.success));
+}
+
+async fn check_synched(
+    n: u64,
+    require_full: bool,
+    ports: Vec<(u16, u16)>,
+    client: AttestationClient,
+) {
+    let mut expected = ports
+        .iter()
+        .map(|(port, _)| nth_msg_per_port(*port, n))
+        .collect::<Vec<_>>();
+    expected.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
+    'resync: for attempt in 0.. {
+        info!(
+            ?expected,
+            attempt, require_full, "checking for synchronization"
+        );
+        let it = ports.iter().map(|(port, _ctrl)| {
+            let client = client.clone();
+            async move { client.get_latest_tips(&HOME.into(), *port).await }
+        });
+        let resp = join_all(it).await;
+        info!("Initial Check that all nodes know their own message");
+        for (r, (port, _)) in resp.iter().zip(ports.iter()) {
+            let tips = r.as_ref().ok().unwrap();
+            let needle = nth_msg_per_port(*port, n);
+            info!(?port, response = ?tips.iter().map(|t| &t.msg).collect::<Vec<_>>(), seeking = ?needle, "Node Got Response");
+
+            assert!(tips
+                .iter()
+                .map(|t| &t.msg)
+                .find(|f| f.as_str() == needle.as_str())
+                .is_some())
+        }
+        if require_full {
+            for r in resp {
+                let tips = r.ok().unwrap();
+                let mut msgs = tips.into_iter().map(|m| m.msg).collect::<Vec<_>>();
+                msgs.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
+                if expected != msgs {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    continue 'resync;
+                }
+            }
+        }
+        break 'resync;
+    }
+
+    info!(n, "Synchronization success");
 }

@@ -16,6 +16,7 @@ use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
+use tracing::trace;
 
 use std::os::raw::c_int;
 use tracing::debug;
@@ -116,12 +117,14 @@ where
             .as_ref()
             .map(|m| m.prev_msg)
             .unwrap_or(CanonicalEnvelopeHash::genesis());
-        debug!(?genesis, ?data);
+        trace!(?genesis, ?data, "attempt to insert envelope");
+        let hash = data
+            .clone()
+            .canonicalized_hash()
+            .expect("Hashing should always succeed?");
         match stmt.insert(rusqlite::named_params! {
                 ":body": data,
-                ":hash": data.clone()
-                    .canonicalized_hash()
-                    .expect("Hashing should always succeed?"),
+                ":hash": hash,
                 ":key": PK(data.header.key),
                 ":genesis": genesis,
                 ":prev_msg": prev_msg,
@@ -130,7 +133,12 @@ where
                 ":height": data.header.height,
                 ":nonce": data.header.unsigned.signature.expect("Authenticated Envelope Must Have")[0..32].to_hex()
         }) {
-            Ok(_rowid) => Ok(Ok(())),
+            Ok(_rowid) => {
+
+                tracing::trace!(?hash, envelope=?data, "Successfully Inserted");
+                tracing::info!(?hash, "Successfully Inserted");
+                Ok(Ok(()))
+            },
             Err(e) => match e {
                 rusqlite::Error::SqliteFailure(err, ref _msg) => match err {
                     ffi::Error {

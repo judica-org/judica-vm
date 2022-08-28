@@ -5,7 +5,7 @@ use tokio::{
     spawn,
     sync::{Mutex, Notify},
 };
-use tracing::warn;
+use tracing::{trace, warn};
 
 use super::*;
 pub async fn push_to_peer<C: Verification + 'static>(
@@ -36,7 +36,16 @@ pub async fn push_to_peer<C: Verification + 'static>(
             while !shutdown.load(Ordering::Relaxed) {
                 // Get the tips this client claims to have
                 let tips = client.get_latest_tips(&url, port).await?;
-                debug!(url, port, ?tips, "Fetching saw peer at state");
+                trace!(
+                    url,
+                    port,
+                    task = "PUSH::tip_tracker",
+                    ?tips,
+                    "Fetching saw peer at state"
+                );
+                debug!(url, port,
+                        task = "PUSH::tip_tracker",
+                    tips=?tips.iter().map(|t| (t.get_genesis_hash(), t.canonicalized_hash_ref())).collect::<Vec<_>>(), "Fetching saw peer at state");
                 {
                     let mut tip_tracker = tip_tracker.lock().await;
 
@@ -49,13 +58,41 @@ pub async fn push_to_peer<C: Verification + 'static>(
                         // TODO: detect if previous is in our chain?
                         match t.header.height.cmp(&previous.header.height) {
                             std::cmp::Ordering::Less => {
-                                warn!(url, port, ?t, ?genesis, "Got Old Message");
+                                warn!(
+                                    url,
+                                    port,
+                                    ?t,
+                                    ?genesis,
+                                    task = "PUSH::tip_tracker",
+                                    "Got Old Message"
+                                );
                             }
                             std::cmp::Ordering::Equal => {
-                                warn!(url, port, ?t, ?genesis, "No Updates");
+                                if t != *previous {
+                                    warn!(url, port, ?t, ?previous, ?genesis, "Conflict Seen");
+                                } else {
+                                    info!(url, port, hash=?t.canonicalized_hash_ref().unwrap(), ?genesis, task="PUSH::tip_tracker", "Nothing New");
+                                    trace!(url, port, ?t, task = "PUSH::tip_tracker", "No Updates");
+                                }
                             }
                             std::cmp::Ordering::Greater => {
-                                debug!(url, port, ?t, ?genesis, "Inserting New Message");
+                                trace!(
+                                    url,
+                                    port,
+                                    ?t,
+                                    ?genesis,
+                                    task = "PUSH::tip_tracker",
+                                    "Advancing Tip"
+                                );
+                                info!(
+                                    url,
+                                    port,
+                                    height = t.header.height,
+                                    old_height = previous.header.height,
+                                    task = "PUSH::tip_tracker",
+                                    ?genesis,
+                                    "Advancing Tip"
+                                );
                                 *previous = t;
                             }
                         }
@@ -82,7 +119,6 @@ pub async fn push_to_peer<C: Verification + 'static>(
         async move {
             while !shutdown.load(Ordering::Relaxed) {
                 new_tips.notified().await;
-                info!(?service, "Push: TipDB is up to date");
                 let to_broadcast = {
                     // get the DB first as it is more contended, and we're OK
                     // waiting on the other thread later
@@ -122,10 +158,11 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     }
                 };
                 if !to_broadcast.is_empty() {
-                    info!(?service, n = to_broadcast.len(), "Pushing Messages!");
+                    info!(?service, task = "PUSH", n = to_broadcast.len());
+                    trace!(?service, task="PUSH", msgs = ?to_broadcast);
                     client.post_messages(to_broadcast, &url, port).await?;
                 } else {
-                    info!(?service, "Push: No Work to Do");
+                    info!(?service, task = "PUSH", "No Work to Do");
                 }
             }
             info!(?service, "Shutting Down Push Envelope Sending Subtask");

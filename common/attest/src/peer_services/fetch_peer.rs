@@ -83,7 +83,11 @@ async fn handle_envelope<C: Verification + 'static>(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut all_tips = Vec::new();
     for envelope in resp {
-        tracing::debug!("Response: {:?}", envelope);
+        tracing::debug!(height = envelope.header.height,
+                        hash = ?envelope.canonicalized_hash_ref().unwrap(),
+                        genesis = ?envelope.get_genesis_hash(),
+                        "Processing this envelope");
+        tracing::trace!(?envelope, "Processing this envelope");
         match envelope.self_authenticate(secp) {
             Ok(authentic) => {
                 tracing::debug!("Authentic Tip: {:?}", authentic);
@@ -92,13 +96,9 @@ async fn handle_envelope<C: Verification + 'static>(
                     Ok(_) => {}
                     Err(SqliteFail::SqliteConstraintNotNull) => {
                         if allow_unsolicited_tips {
-                            info!(
-                                "unsolicited tip received: {}",
-                                authentic
-                                    .inner_ref()
-                                    .canonicalized_hash_ref()
-                                    .unwrap()
-                                    .to_hex()
+                            debug!(
+                                hash = ?authentic.inner_ref().canonicalized_hash_ref().unwrap(),
+                                "unsolicited tip received",
                             );
                             handle.insert_user_by_genesis_envelope(
                                 format!("user-{}", now()),
@@ -113,7 +113,8 @@ async fn handle_envelope<C: Verification + 'static>(
             }
             Err(_) => {
                 // TODO: Ban peer?
-                tracing::debug!("Invalid Tip: {:?}", envelope);
+                tracing::warn!(hash=?envelope.canonicalized_hash_ref(), "Message Validation Failed");
+                tracing::trace!(?envelope, "Message Validation Failed");
             }
         }
     }
