@@ -4,7 +4,8 @@ WITH RECURSIVE updatable(
     prev_hash,
     is_connected,
     height,
-    parent_id
+    parent_id,
+    genesis_id
 ) AS (
     SELECT
         M.message_id,
@@ -12,7 +13,12 @@ WITH RECURSIVE updatable(
         M.prev_msg,
         M.connected,
         M.height,
-        Parent.message_id
+        Parent.message_id,
+        IIF(
+            Parent.height = 0,
+            Parent.message_id,
+            Parent.genesis_id
+        )
     FROM
         messages M
         INNER JOIN messages Parent ON Parent.hash = M.prev_msg
@@ -32,7 +38,8 @@ WITH RECURSIVE updatable(
         AsChild.prev_msg,
         AsChild.connected,
         AsChild.height,
-        AsParent.row_id
+        AsParent.row_id,
+        AsParent.genesis_id
     FROM
         updatable AsParent
         INNER JOIN messages AsChild ON AsParent.message_hash = AsChild.prev_msg
@@ -57,9 +64,9 @@ UPDATE
     messages
 SET
     connected = 1,
-    prev_msg_id = U.parent_id
+    prev_msg_id = U.parent_id,
+    genesis_id = U.genesis_id
 FROM
     updatable U
 WHERE
-    U.row_id = messages.message_id
---    AND NOT U.is_connected
+    U.row_id = messages.message_id --    AND NOT U.is_connected
