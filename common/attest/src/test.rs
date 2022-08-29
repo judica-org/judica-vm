@@ -4,7 +4,7 @@ use crate::{
         client::ControlClient,
         query::{Outcome, PushMsg, Subscribe},
     },
-    init_main, BitcoinConfig, Config, ControlConfig,
+    init_main, AppShutdown, BitcoinConfig, Config, ControlConfig,
 };
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use bitcoincore_rpc_async::Auth;
@@ -61,7 +61,7 @@ where
     let mut ports = vec![];
     for test_id in 0..nodes {
         let btc_config = get_btc_config();
-        let quit = Arc::new(AtomicBool::new(false));
+        let quit = AppShutdown::new();
         quits.push(quit.clone());
         let mut dir = temp_dir();
         let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
@@ -71,7 +71,7 @@ where
         dir.push(format!("test-rust-{}", bytes.to_hex()));
         tracing::debug!("Using tmpdir: {}", dir.display());
         let dir = attest_util::ensure_dir(dir).await.unwrap();
-        let timer_override = crate::PeerServicesTimers::scaled_default(0.1);
+        let timer_override = crate::PeerServicesTimers::scaled_default(0.01);
         let config = Config {
             bitcoin: btc_config.clone(),
             subname: format!("subname-{}", test_id),
@@ -99,7 +99,7 @@ where
         }
     };
     for quit in &quits {
-        quit.store(true, Ordering::Relaxed);
+        quit.begin_shutdown();
     }
     // Wait for tasks to finish
     for _ in unord.next().await {}
@@ -239,8 +239,6 @@ async fn connect_and_test_nodes() {
 
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
-        let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
-        debug!(current_tips = ?old_tips, "Tips before adding a new message");
         for x in 3..=10 {
             make_nth(
                 x,
@@ -251,6 +249,16 @@ async fn connect_and_test_nodes() {
             .await;
         }
         check_synched(10, true).await;
+        let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
+        debug!(current_tips = ?old_tips, "Tips before adding a new message");
+        make_nth(
+            11,
+            ports.clone(),
+            control_client.clone(),
+            genesis_envelopes.clone(),
+        )
+        .await;
+        check_synched(11, true).await;
         tokio::time::sleep(Duration::from_millis(2000)).await;
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 

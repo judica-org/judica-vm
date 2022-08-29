@@ -29,7 +29,7 @@ pub enum PeerQuery {
 pub fn startup(
     config: Arc<Config>,
     db: MsgDB,
-    quit: Arc<AtomicBool>,
+    quit: AppShutdown,
     mut status: Receiver<PeerQuery>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     let jh = tokio::spawn(async move {

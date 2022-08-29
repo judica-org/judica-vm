@@ -7,6 +7,7 @@ use rpc::Client;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::PathBuf;
@@ -133,10 +134,37 @@ fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
     Ok(Arc::new(config))
 }
 
+#[derive(Clone)]
+pub struct AppShutdown {
+    quit: Arc<AtomicBool>,
+}
+
+impl std::ops::Deref for AppShutdown {
+    type Target = Arc<AtomicBool>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.quit
+    }
+}
+
+impl AppShutdown {
+    pub fn new() -> Self {
+        Self {
+            quit: Arc::new(AtomicBool::new(false)),
+        }
+    }
+    pub fn should_quit(&self) -> bool {
+        self.quit.load(Ordering::Relaxed)
+    }
+    pub fn begin_shutdown(&self) {
+        info!(event="SHUTDOWN", "Beginning Node Shutdown", );
+        self.quit.store(true, Ordering::Relaxed)
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
-    let quit = Arc::new(AtomicBool::new(false));
     let args: Vec<String> = std::env::args().into_iter().collect();
     let config = match get_config() {
         Ok(v) => v,
@@ -151,18 +179,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             config
         }
     };
-    init_main(config, quit).await
+    init_main(config, AppShutdown::new()).await
 }
 async fn init_main(
     config: Arc<Config>,
-    quit: Arc<AtomicBool>,
+    quit: AppShutdown,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::debug!("Config Loaded");
     let bitcoin_client =
         Arc::new(Client::new(config.bitcoin.url.clone(), config.bitcoin.auth.clone()).await?);
     tracing::debug!("Bitcoin Client Loaded");
     let bitcoin_checkpoints =
-        Arc::new(BitcoinCheckPointCache::new(bitcoin_client, None, quit.clone()).await);
+        Arc::new(BitcoinCheckPointCache::new(bitcoin_client, None, (*quit).clone()).await);
     let mut checkpoint_service = bitcoin_checkpoints
         .run_cache_service()
         .ok_or("Checkpoint service already started")?;
@@ -210,7 +238,7 @@ async fn init_main(
         skip.replace("control");
     });
     tracing::debug!("Shutting Down Subservices");
-    quit.store(true, Ordering::Relaxed);
+    quit.begin_shutdown();
     let svcs = [
         ("tor", tor_service),
         ("attest", attestation_server),
