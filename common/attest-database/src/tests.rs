@@ -59,7 +59,7 @@ async fn test_reused_nonce() {
         // Check that only this group is returned
         let nonces = handle.get_reused_nonces().unwrap();
         assert_eq!(nonces.len(), 1);
-        let v = nonces.get(&envelope_2.inner_ref().header.key).unwrap();
+        let v = nonces.get(&envelope_2.inner_ref().header().key()).unwrap();
         assert_eq!(
             &v[..],
             &[envelope_1.inner_ref().clone(), envelope_2.clone().inner()][..]

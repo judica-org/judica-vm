@@ -1,6 +1,6 @@
 use std::{error::Error, path::PathBuf, sync::Arc};
 
-use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
+use attest_messages::{nonce::PrecomittedNonce, Ancestors, Envelope, Header, Unsigned};
 use attest_util::ensure_dir;
 use connection::MsgDB;
 use ruma_serde::CanonicalJsonValue::Null;
@@ -54,21 +54,21 @@ pub fn generate_new_user<C: Signing>(
     let nonce = PrecomittedNonce::new(&secp);
     let next_nonce = PrecomittedNonce::new(&secp);
     let sent_time_ms = attest_util::now();
-    let mut msg = Envelope {
-        header: Header {
-            height: 0,
-            ancestors: None,
-            tips: Vec::new(),
-            next_nonce: next_nonce.get_public(&secp),
-            key: keypair.public_key().x_only_public_key().0,
+
+    let pub_next_nonce = next_nonce.get_public(&secp);
+    let mut msg = Envelope::new(
+        Header::new(
+            keypair.public_key().x_only_public_key().0,
+            pub_next_nonce,
+            None,
+            vec![],
+            0,
             sent_time_ms,
-            unsigned: Unsigned {
-                signature: Default::default(),
-            },
-            checkpoints: Default::default(),
-        },
-        msg: Null,
-    };
+            Unsigned::new(Default::default()),
+            Default::default()
+        ),
+        Null,
+    );
     msg.sign_with(&keypair, &secp, nonce)?;
     Ok((keypair, next_nonce, msg))
 }

@@ -90,11 +90,11 @@ where
         nickname: String,
         envelope: Authenticated<Envelope>,
     ) -> Result<Result<String, (SqliteFail, Option<String>)>, rusqlite::Error> {
-        info!(genesis=?envelope.inner_ref().get_genesis_hash(), nickname, "Creating New Genesis");
+        info!(genesis=?envelope.get_genesis_hash(), nickname, "Creating New Genesis");
         let mut stmt = self
             .0
             .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
-        let hex_key = PK(envelope.inner_ref().header.key);
+        let hex_key = PK(envelope.header().key());
         stmt.insert(params![nickname, hex_key])?;
         self.try_insert_authenticated_envelope(envelope)
             .map(|t| t.and(Ok(hex_key.0.to_hex())))
@@ -114,25 +114,22 @@ where
         let time = attest_util::now();
         let genesis = data.get_genesis_hash();
         let prev_msg = data
-            .header
-            .ancestors
-            .as_ref()
-            .map(|m| m.prev_msg)
+            .header()
+            .ancestors()
+            .map(|m| m.prev_msg())
             .unwrap_or(CanonicalEnvelopeHash::genesis());
         trace!(?genesis, ?data, "attempt to insert envelope");
-        let hash = data
-            .clone()
-            .canonicalized_hash();
+        let hash = data.clone().canonicalized_hash();
         match stmt.insert(rusqlite::named_params! {
                 ":body": data,
                 ":hash": hash,
-                ":key": PK(data.header.key),
+                ":key": PK(data.header().key()),
                 ":genesis": genesis,
                 ":prev_msg": prev_msg,
                 ":received_time": time,
-                ":sent_time": data.header.sent_time_ms,
-                ":height": data.header.height,
-                ":nonce": data.header.unsigned.signature.expect("Authenticated Envelope Must Have")[0..32].to_hex()
+                ":sent_time": data.header().sent_time_ms(),
+                ":height": data.header().height(),
+                ":nonce": data.header().unsigned().signature().expect("Authenticated Envelope Must Have")[0..32].to_hex()
         }) {
             Ok(_rowid) => {
 

@@ -4,6 +4,7 @@ use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
+use sapio_bitcoin::secp256k1::schnorrsig::Signature;
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
@@ -23,30 +24,108 @@ pub mod sql_impl;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Unsigned {
-    pub signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
+    signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
+}
+
+impl Unsigned {
+    pub fn new(signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>) -> Self { Self { signature } }
+
+    pub fn signature(&self) -> Option<Signature> {
+        self.signature
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Ancestors {
-    pub prev_msg: CanonicalEnvelopeHash,
-    pub genesis: CanonicalEnvelopeHash,
+    prev_msg: CanonicalEnvelopeHash,
+    genesis: CanonicalEnvelopeHash,
+}
+
+impl Ancestors {
+    pub fn new(prev_msg: CanonicalEnvelopeHash, genesis: CanonicalEnvelopeHash) -> Self {
+        Self { prev_msg, genesis }
+    }
+
+    pub fn prev_msg(&self) -> CanonicalEnvelopeHash {
+        self.prev_msg
+    }
+
+    pub fn genesis(&self) -> CanonicalEnvelopeHash {
+        self.genesis
+    }
 }
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct Header {
-    pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    pub next_nonce: PrecomittedPublicNonce,
+    key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
+    next_nonce: PrecomittedPublicNonce,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub ancestors: Option<Ancestors>,
+    ancestors: Option<Ancestors>,
     // tips can be out of ancestors as we may wish to still show things we came
     // after.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
-    pub tips: Vec<(XOnlyPublicKey, i64, CanonicalEnvelopeHash)>,
-    pub height: i64,
-    pub sent_time_ms: i64,
-    pub unsigned: Unsigned,
-    pub checkpoints: BitcoinCheckPoints,
+    tips: Vec<(XOnlyPublicKey, i64, CanonicalEnvelopeHash)>,
+    height: i64,
+    sent_time_ms: i64,
+    unsigned: Unsigned,
+    checkpoints: BitcoinCheckPoints,
+}
+
+impl Header {
+    pub fn new(
+        key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
+        next_nonce: PrecomittedPublicNonce,
+        ancestors: Option<Ancestors>,
+        tips: Vec<(XOnlyPublicKey, i64, CanonicalEnvelopeHash)>,
+        height: i64,
+        sent_time_ms: i64,
+        unsigned: Unsigned,
+        checkpoints: BitcoinCheckPoints,
+    ) -> Self {
+        Self {
+            key,
+            next_nonce,
+            ancestors,
+            tips,
+            height,
+            sent_time_ms,
+            unsigned,
+            checkpoints,
+        }
+    }
+
+    pub fn checkpoints(&self) -> &BitcoinCheckPoints {
+        &self.checkpoints
+    }
+
+    pub fn unsigned(&self) -> &Unsigned {
+        &self.unsigned
+    }
+
+    pub fn sent_time_ms(&self) -> i64 {
+        self.sent_time_ms
+    }
+
+    pub fn height(&self) -> i64 {
+        self.height
+    }
+
+    pub fn tips(&self) -> &[(XOnlyPublicKey, i64, CanonicalEnvelopeHash)] {
+        self.tips.as_ref()
+    }
+
+    pub fn ancestors(&self) -> Option<&Ancestors> {
+        self.ancestors.as_ref()
+    }
+
+    pub fn next_nonce(&self) -> PrecomittedPublicNonce {
+        self.next_nonce
+    }
+
+    pub fn key(&self) -> XOnlyPublicKey {
+        self.key
+    }
 }
 impl std::fmt::Debug for Header {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -55,8 +134,14 @@ impl std::fmt::Debug for Header {
 }
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct Envelope {
-    pub header: Header,
-    pub msg: CanonicalJsonValue,
+    header: Header,
+    msg: CanonicalJsonValue,
+}
+
+impl Envelope {
+    pub fn new(header: Header, msg: CanonicalJsonValue) -> Self {
+        Self { header, msg }
+    }
 }
 
 impl std::fmt::Debug for Envelope {
@@ -220,6 +305,14 @@ impl Envelope {
         let msg_hash = self.canonicalized_hash();
         let msg = SchnorrMessage::from(W(msg_hash.0));
         Some(SignatureDigest(msg))
+    }
+
+    pub fn msg(&self) -> &CanonicalJsonValue {
+        &self.msg
+    }
+
+    pub fn header(&self) -> &Header {
+        &self.header
     }
 }
 

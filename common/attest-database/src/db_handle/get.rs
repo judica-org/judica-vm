@@ -51,7 +51,7 @@ where
         let mut res = vec![];
         for envelope in envelopes {
             let rs = stmt
-                .query(named_params! (":genesis": envelope.get_genesis_hash(), ":height": envelope.header.height))?;
+                .query(named_params! (":genesis": envelope.get_genesis_hash(), ":height": envelope.header().height()))?;
             let mut envs = rs.map(|r| r.get::<_, Envelope>(0)).collect()?;
             res.append(&mut envs);
         }
@@ -167,7 +167,7 @@ where
         let vs = rows
             .map(|r| r.get::<_, Envelope>(0))
             .fold(HashMap::new(), |mut acc, v| {
-                acc.entry(v.header.key).or_insert(vec![]).push(v);
+                acc.entry(v.header().key()).or_insert(vec![]).push(v);
                 Ok(acc)
             })?;
 
@@ -181,7 +181,7 @@ where
             .prepare(include_str!("sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
-        debug!(tips=?vs.iter().map(|e| (e.header.height, e.get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
+        debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
         trace!(envelopes=?vs, "Tips Returned");
         Ok(vs)
     }
@@ -190,7 +190,7 @@ where
         let mut stmt = self.0.prepare(include_str!("sql/get/all_genesis.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
-        debug!(tips=?vs.iter().map(|e| (e.header.height, e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
+        debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
         trace!(envelopes=?vs, "Genesis Tips Returned");
         Ok(vs)
     }
@@ -208,9 +208,9 @@ where
         let _prev = sha256::Hash::hash(&[]);
         let _prev_height = 0;
         for v in vs.windows(2) {
-            if v[0].clone().canonicalized_hash() != v[1].header.ancestors.as_ref().unwrap().prev_msg
-                || v[0].header.height + 1 != v[1].header.height
-                || Some(v[0].header.next_nonce) != v[1].extract_used_nonce()
+            if v[0].clone().canonicalized_hash() != v[1].header().ancestors().unwrap().prev_msg()
+                || v[0].header().height() + 1 != v[1].header().height()
+                || Some(v[0].header().next_nonce()) != v[1].extract_used_nonce()
             {
                 return Ok(Err((v[0].clone(), v[1].clone())));
             }

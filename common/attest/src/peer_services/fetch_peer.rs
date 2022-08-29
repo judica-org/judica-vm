@@ -126,7 +126,7 @@ async fn handle_envelope<C: Verification + 'static>(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut all_tips = Vec::new();
     for envelope in resp {
-        tracing::debug!(height = envelope.header.height,
+        tracing::debug!(height = envelope.header().height(),
                         hash = ?envelope.canonicalized_hash_ref(),
                         genesis = ?envelope.get_genesis_hash(),
                         "Processing this envelope");
@@ -135,8 +135,8 @@ async fn handle_envelope<C: Verification + 'static>(
             Ok(authentic) => {
                 tracing::debug!("Authentic Tip: {:?}", authentic);
                 let handle = conn.get_handle().await;
-                if authentic.inner_ref().header.ancestors.is_none()
-                    && authentic.inner_ref().header.height == 0
+                if authentic.inner_ref().header().ancestors().is_none()
+                    && authentic.inner_ref().header().height() == 0
                 {
                     let new_name = format!("user-{}", now());
                     match handle.insert_user_by_genesis_envelope(new_name, authentic)? {
@@ -180,8 +180,8 @@ async fn handle_envelope<C: Verification + 'static>(
                     }
                 }
                 // safe to reuse since it is authentic still..
-                all_tips.extend(envelope.header.tips.iter().map(|(_, _, v)| v.clone()));
-                all_tips.extend(envelope.header.ancestors.iter().map(|a| a.prev_msg));
+                all_tips.extend(envelope.header().tips().iter().map(|(_, _, v)| v.clone()));
+                all_tips.extend(envelope.header().ancestors().iter().map(|a| a.prev_msg()));
             }
             Err(_) => {
                 // TODO: Ban peer?

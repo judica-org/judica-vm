@@ -32,7 +32,7 @@ where
         debug!(key=%key, "Creating new Envelope");
         // Side effect free...
         let mut tips = self.get_tips_for_all_users()?;
-        if let Some(p) = tips.iter().position(|x| x.header.key == key) {
+        if let Some(p) = tips.iter().position(|x| x.header().key() == key) {
             tips.swap_remove(p);
         }
         debug!(?tips, "Tip Envelopes");
@@ -41,7 +41,7 @@ where
             .iter()
             .map(|tip| {
                 let h = tip.clone().canonicalized_hash();
-                Some((tip.header.key, tip.header.height, h))
+                Some((tip.header().key(), tip.header().height(), h))
             })
             .flatten()
             .collect();
@@ -52,27 +52,25 @@ where
             self.get_tip_for_user_by_key(key)?
         };
         let sent_time_ms = attest_util::now();
-        let secret = self.get_secret_for_public_nonce(my_tip.header.next_nonce)?;
+        let secret = self.get_secret_for_public_nonce(my_tip.header().next_nonce())?;
         // Has side effects!
         let next_nonce = self.generate_fresh_nonce_for_user_by_key(secp, key)?;
-        let mut msg = Envelope {
-            header: Header {
-                height: my_tip.header.height + 1,
-                ancestors: Some(Ancestors {
-                    genesis: my_tip.get_genesis_hash(),
-                    prev_msg: my_tip.canonicalized_hash_ref(),
-                }),
-                tips,
-                next_nonce,
+        let mut msg = Envelope::new(
+            Header::new(
                 key,
+                next_nonce,
+                Some(Ancestors::new(
+                    my_tip.canonicalized_hash_ref(),
+                    my_tip.get_genesis_hash(),
+                )),
+                tips,
+                my_tip.header().height() + 1,
                 sent_time_ms,
-                unsigned: Unsigned {
-                    signature: Default::default(),
-                },
-                checkpoints: bitcoin_tipcache.unwrap_or_default(),
-            },
+                Unsigned::new(Default::default()),
+                bitcoin_tipcache.unwrap_or_default(),
+            ),
             msg,
-        };
+        );
         Ok(msg.sign_with(keypair, secp, secret).map(move |_| msg))
     }
 }

@@ -295,8 +295,8 @@ async fn test_envelope_inner_tips(
         for e in r.as_ref().unwrap() {
             debug!(envelope=?e, "Checking Tips On");
             let s = e
-                .header
-                .tips
+                .header()
+                .tips()
                 .iter()
                 .map(|tip| tip.2)
                 .collect::<BTreeSet<_>>();
@@ -304,7 +304,7 @@ async fn test_envelope_inner_tips(
             let diff = s.difference(&old_tips);
             let diff: Vec<_> = diff.cloned().collect();
             assert_eq!(diff, vec![]);
-            assert!(!s.contains(&e.header.ancestors.as_ref().unwrap().prev_msg));
+            assert!(!s.contains(&e.header().ancestors().unwrap().prev_msg()));
         }
     }
 }
@@ -320,7 +320,7 @@ async fn make_nth(
 ) {
     let keys = genesis_envelopes
         .iter()
-        .map(|g| g.header.key)
+        .map(|g| g.header().key())
         .collect::<Vec<_>>();
     info!(n, "Making messages");
     let make_message = |((port, ctrl), key): ((u16, u16), XOnlyPublicKey)| {
@@ -363,7 +363,7 @@ async fn check_synched(
         .map(|(port, _)| nth_msg_per_port(*port, n))
         .collect::<Vec<_>>();
     expected.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
-    'resync: for attempt in 0.. {
+    'resync: for attempt in 0u32.. {
         info!(
             ?expected,
             attempt, require_full, "checking for synchronization"
@@ -377,18 +377,21 @@ async fn check_synched(
         for (r, (port, _)) in resp.iter().zip(ports.iter()) {
             let tips = r.as_ref().ok().unwrap();
             let needle = nth_msg_per_port(*port, n);
-            info!(?port, response = ?tips.iter().map(|t| &t.msg).collect::<Vec<_>>(), seeking = ?needle, "Node Got Response");
+            info!(?port, response = ?tips.iter().map(|t| t.msg()).collect::<Vec<_>>(), seeking = ?needle, "Node Got Response");
 
             assert!(tips
                 .iter()
-                .map(|t| &t.msg)
+                .map(|t| t.msg())
                 .find(|f| f.as_str() == needle.as_str())
                 .is_some())
         }
         if require_full {
             for r in resp {
                 let tips = r.ok().unwrap();
-                let mut msgs = tips.into_iter().map(|m| m.msg).collect::<Vec<_>>();
+                let mut msgs = tips
+                    .into_iter()
+                    .map(|m| m.msg().clone())
+                    .collect::<Vec<_>>();
                 msgs.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
                 if expected != msgs {
                     tokio::time::sleep(Duration::from_millis(50)).await;

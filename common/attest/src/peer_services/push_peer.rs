@@ -56,7 +56,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                             t.clone()
                         });
                         // TODO: detect if previous is in our chain?
-                        match t.header.height.cmp(&previous.header.height) {
+                        match t.header().height().cmp(&previous.header().height()) {
                             std::cmp::Ordering::Less => {
                                 warn!(
                                     url,
@@ -87,8 +87,8 @@ pub async fn push_to_peer<C: Verification + 'static>(
                                 info!(
                                     url,
                                     port,
-                                    height = t.header.height,
-                                    old_height = previous.header.height,
+                                    height = t.header().height(),
+                                    old_height = previous.header().height(),
                                     task = "PUSH::tip_tracker",
                                     ?genesis,
                                     "Advancing Tip"
