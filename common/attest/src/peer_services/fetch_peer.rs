@@ -148,6 +148,13 @@ async fn handle_envelope<C: Verification + 'static>(
                 }
                 // safe to reuse since it is authentic still..
                 all_tips.extend(envelope.header.tips.iter().map(|(_, _, v)| v.clone()));
+                all_tips.extend(
+                    envelope
+                        .header
+                        .ancestors
+                        .iter()
+                        .flat_map(|a| [a.prev_msg, a.genesis]),
+                );
             }
             Err(_) => {
                 // TODO: Ban peer?
