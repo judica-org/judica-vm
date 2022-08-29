@@ -310,7 +310,7 @@ async fn test_envelope_inner_tips(
 }
 
 fn nth_msg_per_port(port: u16, n: u64) -> CanonicalJsonValue {
-    format!("test-{}-for-{}", n, port).into()
+    CanonicalJsonValue::String(format!("test-{}-for-{}", n, port))
 }
 async fn make_nth(
     n: u64,

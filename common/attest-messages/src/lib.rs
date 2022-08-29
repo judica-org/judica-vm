@@ -28,7 +28,9 @@ pub struct Unsigned {
 }
 
 impl Unsigned {
-    pub fn new(signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>) -> Self { Self { signature } }
+    pub fn new(signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>) -> Self {
+        Self { signature }
+    }
 
     pub fn signature(&self) -> Option<Signature> {
         self.signature
@@ -133,14 +135,38 @@ impl std::fmt::Debug for Header {
     }
 }
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[serde(from = "from_wrap::Envelope")]
 pub struct Envelope {
     header: Header,
     msg: CanonicalJsonValue,
+    #[serde(skip)]
+    cache: Option<CanonicalEnvelopeHash>,
+}
+
+mod from_wrap {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    pub struct Envelope {
+        header: super::Header,
+        msg: super::CanonicalJsonValue,
+    }
+    impl From<Envelope> for super::Envelope {
+        fn from(e: Envelope) -> Self {
+            super::Envelope::new(e.header, e.msg)
+        }
+    }
 }
 
 impl Envelope {
     pub fn new(header: Header, msg: CanonicalJsonValue) -> Self {
-        Self { header, msg }
+        let mut s = Self {
+            header,
+            msg,
+            cache: None,
+        };
+        s.cache = Some(s.canonicalized_hash_ref());
+        s
     }
 }
 
@@ -242,6 +268,7 @@ impl Envelope {
             .signature
             .take()
             .ok_or(AuthenticationError::NoSignature)?;
+        redacted.cache = None;
         let msg = redacted
             .signature_digest()
             .ok_or(AuthenticationError::HashingError)?;
@@ -267,6 +294,7 @@ impl Envelope {
         nonce: PrecomittedNonce,
     ) -> Result<(), SigningError> {
         self.header.unsigned.signature = None;
+        self.cache = None;
 
         let msg = self
             .clone()
@@ -274,10 +302,18 @@ impl Envelope {
             .ok_or(SigningError::HashingError)?;
         self.header.unsigned.signature =
             Some(nonce.sign_with_precomitted_nonce(secp, &msg.0, keypair));
+        self.cache = Some(self.compute_hash());
 
         Ok(())
     }
 
+    fn compute_hash(&self) -> CanonicalEnvelopeHash {
+        let canonical =
+            ruma_serde::to_canonical_value(self).expect("Canonicalization Must Succeed");
+        CanonicalEnvelopeHash(sapio_bitcoin::hashes::sha256::Hash::hash(
+            canonical.to_string().as_bytes(),
+        ))
+    }
     /// Creates the canonicalized_hash for the [`Envelope`].
     ///
     /// This hashes everything, including unsigned data.
@@ -289,11 +325,11 @@ impl Envelope {
     ///
     /// This hashes everything, including unsigned data.
     pub fn canonicalized_hash_ref(&self) -> CanonicalEnvelopeHash {
-        let canonical =
-            ruma_serde::to_canonical_value(self).expect("Canonicalization Must Succeed");
-        CanonicalEnvelopeHash(sapio_bitcoin::hashes::sha256::Hash::hash(
-            canonical.to_string().as_bytes(),
-        ))
+        if let Some(h) = self.cache {
+            h
+        } else {
+            self.compute_hash()
+        }
     }
     /// Helper to get the [`SchnorrMessage`] from an envelope.
     ///
