@@ -16,6 +16,7 @@ use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
+use tracing::info;
 use tracing::trace;
 
 use std::os::raw::c_int;
@@ -88,7 +89,8 @@ where
         &self,
         nickname: String,
         envelope: Authenticated<Envelope>,
-    ) -> Result<Result<String, SqliteFail>, rusqlite::Error> {
+    ) -> Result<Result<String, (SqliteFail, Option<String>)>, rusqlite::Error> {
+        info!(genesis=?envelope.inner_ref().get_genesis_hash(), nickname, "Creating New Genesis");
         let mut stmt = self
             .0
             .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
@@ -106,7 +108,7 @@ where
     pub fn try_insert_authenticated_envelope(
         &self,
         data: Authenticated<Envelope>,
-    ) -> Result<Result<(), SqliteFail>, rusqlite::Error> {
+    ) -> Result<Result<(), (SqliteFail, Option<String>)>, rusqlite::Error> {
         let data = data.inner();
         let mut stmt = self.0.prepare(include_str!("sql/insert/envelope.sql"))?;
         let time = attest_util::now();
@@ -140,18 +142,22 @@ where
                 Ok(Ok(()))
             },
             Err(e) => match e {
-                rusqlite::Error::SqliteFailure(err, ref _msg) => match err {
+                rusqlite::Error::SqliteFailure(err, msg) => match err {
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_UNIQUE,
-                    } => Ok(Err(SqliteFail::SqliteConstraintUnique)),
+                    } => Ok(Err((SqliteFail::SqliteConstraintUnique, msg))),
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_NOTNULL,
-                    } => Ok(Err(SqliteFail::SqliteConstraintNotNull)),
+                    } => Ok(Err((SqliteFail::SqliteConstraintNotNull, msg))),
+                    ffi::Error {
+                        code: ErrorCode::ConstraintViolation,
+                        extended_code: SQLITE_CONSTRAINT_CHECK,
+                    } => Ok(Err((SqliteFail::SqliteConstraintCheck, msg))),
                     _ => {
                         debug!("SQL: {}", stmt.expanded_sql().unwrap_or_default());
-                        Err(e)
+                        Err(rusqlite::Error::SqliteFailure(err, msg))
                     }
                 },
                 err => Err(err),
@@ -179,12 +185,14 @@ where
 ///```
 const SQLITE_CONSTRAINT_UNIQUE: c_int = SqliteFail::SqliteConstraintUnique as c_int;
 const SQLITE_CONSTRAINT_NOTNULL: c_int = SqliteFail::SqliteConstraintNotNull as c_int;
+const SQLITE_CONSTRAINT_CHECK: c_int = SqliteFail::SqliteConstraintCheck as c_int;
 #[must_use]
 #[derive(Debug)]
 #[repr(C)]
 pub enum SqliteFail {
     SqliteConstraintUnique = 2067,
     SqliteConstraintNotNull = 1299,
+    SqliteConstraintCheck = 275,
 }
 
 impl std::fmt::Display for SqliteFail {

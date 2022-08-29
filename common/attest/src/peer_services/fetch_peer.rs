@@ -15,6 +15,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Notify;
 
 use tracing::info;
+use tracing::trace;
 use tracing::warn;
 
 pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
@@ -40,6 +41,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
     // Reads from next_envelope, processes results, and then requests to resolve unknown tips
     let mut envelope_processor = envelope_processor(
         config.clone(),
+        service.clone(),
         conn,
         secp,
         next_envelope,
@@ -86,6 +88,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
 /// to the missing_envelope_fetcher.
 pub(crate) fn envelope_processor<C: Verification + 'static>(
     _config: Arc<Config>,
+    service: (String, u16),
     conn: MsgDB,
     secp: Arc<Secp256k1<C>>,
     mut next_envelope: tokio::sync::mpsc::UnboundedReceiver<(Vec<Envelope>, NotifyOnDrop)>,
@@ -97,6 +100,7 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
             while let Some((resp, cancel_inflight)) = next_envelope.recv().await {
                 // Prefer to process envelopes
                 handle_envelope(
+                    service.clone(),
                     resp,
                     secp.as_ref(),
                     &conn,
@@ -112,6 +116,7 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
     envelope_processor
 }
 async fn handle_envelope<C: Verification + 'static>(
+    service: (String, u16),
     resp: Vec<Envelope>,
     secp: &Secp256k1<C>,
     conn: &MsgDB,
@@ -130,31 +135,53 @@ async fn handle_envelope<C: Verification + 'static>(
             Ok(authentic) => {
                 tracing::debug!("Authentic Tip: {:?}", authentic);
                 let handle = conn.get_handle().await;
-                match handle.try_insert_authenticated_envelope(authentic.clone())? {
-                    Ok(_) => {}
-                    Err(SqliteFail::SqliteConstraintNotNull) => {
-                        if allow_unsolicited_tips {
-                            debug!(
-                                hash = ?authentic.inner_ref().canonicalized_hash_ref().unwrap(),
-                                "unsolicited tip received",
-                            );
-                            handle.insert_user_by_genesis_envelope(
-                                format!("user-{}", now()),
-                                authentic,
-                            )??;
+                if authentic.inner_ref().header.ancestors.is_none()
+                    && authentic.inner_ref().header.height == 0
+                {
+                    let new_name = format!("user-{}", now());
+                    match handle.insert_user_by_genesis_envelope(new_name, authentic)? {
+                        Ok(key) => {
+                            trace!(key, ?service, "Created New Genesis From Peer");
+                        }
+                        Err((SqliteFail::SqliteConstraintUnique, msg)) => {
+                            trace!("Already Have this Chain");
+                        }
+                        Err(e) => {
+                            warn!(err=?e, "Other SQL Error");
+                            Err(format!("{:?}", e))?;
                         }
                     }
-                    _ => {}
+                } else {
+                    match handle.try_insert_authenticated_envelope(authentic.clone())? {
+                        Ok(_) => {}
+                        // This means that a conststraint, most likely that the
+                        // genesis header must be known, was not allowed
+                        Err((SqliteFail::SqliteConstraintCheck, msg)) => {
+                            // try fetching the missing tip
+                            if allow_unsolicited_tips {
+                                all_tips.push(envelope.get_genesis_hash());
+                            }
+                        }
+                        // This means that the constraint that the user ID was known
+                        // was hit, so we need to attempt inserting as a genesis
+                        // envelope
+                        Err((SqliteFail::SqliteConstraintNotNull, msg)) => {
+                            if allow_unsolicited_tips {
+                                debug!(
+                                    hash = ?authentic.inner_ref().canonicalized_hash_ref().unwrap(),
+                                    ?msg,
+                                    "unsolicited tip received",
+                                );
+                                trace!(envelope=?authentic);
+                                all_tips.push(envelope.get_genesis_hash());
+                            }
+                        }
+                        _ => {}
+                    }
                 }
                 // safe to reuse since it is authentic still..
                 all_tips.extend(envelope.header.tips.iter().map(|(_, _, v)| v.clone()));
-                all_tips.extend(
-                    envelope
-                        .header
-                        .ancestors
-                        .iter()
-                        .flat_map(|a| [a.prev_msg, a.genesis]),
-                );
+                all_tips.extend(envelope.header.ancestors.iter().map(|a| a.prev_msg));
             }
             Err(_) => {
                 // TODO: Ban peer?
@@ -169,6 +196,7 @@ async fn handle_envelope<C: Verification + 'static>(
         .get_handle()
         .await
         .message_not_exists_it(all_tips.iter())?;
+    trace!(?all_tips, ?unknown_dep_tips);
     if !unknown_dep_tips.is_empty() {
         request_tips.send(unknown_dep_tips)?;
     }
@@ -180,15 +208,20 @@ async fn handle_envelope<C: Verification + 'static>(
 pub(crate) fn latest_tip_fetcher(
     config: Arc<Config>,
     client: AttestationClient,
-    (url, port): (String, u16),
+    service: (String, u16),
     envelopes_to_process: tokio::sync::mpsc::UnboundedSender<(Vec<Envelope>, NotifyOnDrop)>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
-    let client = client.clone();
-    let url = url.clone();
     tokio::spawn(async move {
         loop {
-            tracing::debug!("Sending message...");
-            let resp: Vec<Envelope> = client.get_latest_tips(&url, port).await?;
+            let sp = tracing::debug_span!(
+                "Fetching Latest Tips",
+                ?service,
+                task = "FETCH",
+                subtask = "latest_tip_fetcher",
+            );
+            let _ = sp.enter();
+            let (url, port) = &service;
+            let resp: Vec<Envelope> = client.get_latest_tips(url, *port).await?;
             envelopes_to_process.send((resp, NotifyOnDrop::empty()))?;
             config.peer_service.timer_override.tip_fetch_delay().await;
         }

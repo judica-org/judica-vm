@@ -189,7 +189,7 @@ async fn push_message_dangerous(
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Inserting Message failed, No Corresponding Key: {}", e),
+                format!("Inserting Message failed, No Corresponding Key: {:?}", e),
             )
         })?;
     Ok((
