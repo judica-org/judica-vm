@@ -71,7 +71,7 @@ where
         dir.push(format!("test-rust-{}", bytes.to_hex()));
         tracing::debug!("Using tmpdir: {}", dir.display());
         let dir = attest_util::ensure_dir(dir).await.unwrap();
-        let timer_override = crate::PeerServicesTimers::scaled_default(0.01);
+        let timer_override = crate::PeerServicesTimers::scaled_default(0.001);
         let config = Config {
             bitcoin: btc_config.clone(),
             subname: format!("subname-{}", test_id),
