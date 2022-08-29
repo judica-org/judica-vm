@@ -116,6 +116,7 @@ pub struct UXPlantData {
     pub owner: EntityID,
     pub plant_type: PlantType,
     pub watts: Watts,
+    pub hashrate: u128
 }
 #[derive(Serialize, Clone)]
 pub struct UXNFTRegistry {

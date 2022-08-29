@@ -80,7 +80,7 @@ async fn game_synchronizer(
 
         let power_plants = {
             let game = s.inner().lock().await;
-            let p = game.as_ref().map(|g| g.board.get_power_plants()).unwrap().unwrap_or(UXNFTRegistry { power_plant_data: BTreeMap::new()});
+            let p = game.as_ref().map(|g| g.board.get_all_power_plants()).unwrap().unwrap_or(UXNFTRegistry { power_plant_data: BTreeMap::new()});
             p
         };
         println!("Emitting!");

@@ -378,32 +378,54 @@ impl GameBoard {
     }
 
     // where does miner status come from
-    pub fn get_power_plants(&self) -> Result<UXNFTRegistry, ()> {
+    fn get_ux_power_plant_data(&mut self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
+        let mut power_plant_data = Vec::new();
+        let plants = &self.nfts.power_plants.clone();
+        plants.iter().for_each(|(pointer, power_plant)| {
+            let mut for_sale = false;
+            if let Some(_nft_sale) = &self.nft_sales.nfts.get(&pointer) {
+                for_sale = true;
+            }
+            // unwrap should be safe here - we have problems if we have a pointer and cant find the NFT.
+            let owner = &self.nfts.nfts.get(pointer).unwrap().owner();
+
+
+            power_plant_data.push((
+                *pointer,
+                UXPlantData {
+                    coordinates: power_plant.coordinates,
+                    for_sale,
+                    has_miners: false,
+                    owner: owner.clone(),
+                    plant_type: power_plant.plant_type.clone(),
+                    watts: power_plant.watts,
+                    hashrate: power_plant.compute_hashrate(self),
+                },
+            ));
+        });
+        power_plant_data
+    }
+    // how do we tell whether hashbox is colocated?
+    pub fn get_all_power_plants(&mut self) -> Result<UXNFTRegistry, ()> {
         let mut power_plant_data = BTreeMap::new();
-        self.nfts
-            .power_plants
-            .iter()
-            .for_each(|(pointer, power_plant)| {
-                let mut for_sale = false;
-                if let Some(_nft_sale) = &self.nft_sales.nfts.get(&pointer) {
-                    for_sale = true;
-                }
-                // unwrap should be safe here - we have problems if we cant find the NFT.
-                let owner = *&self.nfts.nfts.get(pointer).unwrap().owner();
 
-                power_plant_data.insert(
-                    *pointer,
-                    UXPlantData {
-                        coordinates: power_plant.coordinates,
-                        for_sale,
-                        has_miners: false,
-                        owner,
-                        plant_type: power_plant.plant_type.clone(),
-                        watts: power_plant.watts,
-                    },
-                );
-            });
+        let power_plant_vec = self.get_ux_power_plant_data();
+        power_plant_vec.iter().for_each(|(ptr, plant)| {
+            power_plant_data.insert(*ptr, plant.clone());
+        });
 
+        return Ok(UXNFTRegistry { power_plant_data });
+    }
+
+    pub fn get_user_power_plants(&mut self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
+        let mut power_plant_data = BTreeMap::new();
+        let mut power_plant_vec = self.get_ux_power_plant_data();
+        // should use something other than drain_filter?
+        power_plant_vec.retain(|(_ptr, plant)| plant.owner.eq(&user_id));
+        power_plant_vec.iter().for_each(|(ptr, plant)| {
+            power_plant_data.insert(*ptr, plant.clone());
+        });
+        // return shape?
         return Ok(UXNFTRegistry { power_plant_data });
     }
 

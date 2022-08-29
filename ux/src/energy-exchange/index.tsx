@@ -1,16 +1,17 @@
 import FactoryIcon from '@mui/icons-material/Factory';
 import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
+import { PlantType } from '../App';
 import FormModal from '../form-modal';
+import { plant_type_color_map } from '../util';
 
 export type NFTSale = {
   price: number,
   currency: any,
   seller: number,
   transfer_count: number,
-  // add plant type
+  plant_type: PlantType
 }
 
-// const EnergyExchange = React.memo(function EnergyExchangeWithHeader({ listings }: { listings: NFTSale[] }) {
 export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
 
   // const classes = useStyles();
@@ -41,7 +42,7 @@ export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
                   <TableRow key={index}>
                     <TableCell>
                       {/* color code these in the future */}
-                      <FactoryIcon className='sale-factory-icon' />
+                      <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[listing.plant_type]}}/>
                     </TableCell>
                     <TableCell component="th" scope="row">
                       {listing.seller}
@@ -59,6 +60,5 @@ export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
       </div>
     </div>
   )
-  // });
 };
 export default EnergyExchange;
