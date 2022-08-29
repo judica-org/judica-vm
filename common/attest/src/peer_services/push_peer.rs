@@ -14,7 +14,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
     client: AttestationClient,
     service: (String, u16),
     conn: MsgDB,
-    shutdown: Arc<AtomicBool>,
+    shutdown: AppShutdown,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     #[derive(Hash, PartialEq, PartialOrd, Ord, Eq, Debug, Copy, Clone)]
     struct GenesisHash(CanonicalEnvelopeHash);
@@ -33,7 +33,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
         let (url, port) = service.clone();
         let new_tips = new_tips.clone();
         async move {
-            while !shutdown.load(Ordering::Relaxed) {
+            while !shutdown.should_quit() {
                 // Get the tips this client claims to have
                 let tips = client.get_latest_tips(&url, port).await?;
                 trace!(
@@ -56,7 +56,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                             t.clone()
                         });
                         // TODO: detect if previous is in our chain?
-                        match t.header.height.cmp(&previous.header.height) {
+                        match t.header().height().cmp(&previous.header().height()) {
                             std::cmp::Ordering::Less => {
                                 warn!(
                                     url,
@@ -71,7 +71,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                                 if t != *previous {
                                     warn!(url, port, ?t, ?previous, ?genesis, "Conflict Seen");
                                 } else {
-                                    info!(url, port, hash=?t.canonicalized_hash_ref().unwrap(), ?genesis, task="PUSH::tip_tracker", "Nothing New");
+                                    info!(url, port, hash=?t.canonicalized_hash_ref(), ?genesis, task="PUSH::tip_tracker", "Nothing New");
                                     trace!(url, port, ?t, task = "PUSH::tip_tracker", "No Updates");
                                 }
                             }
@@ -87,8 +87,8 @@ pub async fn push_to_peer<C: Verification + 'static>(
                                 info!(
                                     url,
                                     port,
-                                    height = t.header.height,
-                                    old_height = previous.header.height,
+                                    height = t.header().height(),
+                                    old_height = previous.header().height(),
                                     task = "PUSH::tip_tracker",
                                     ?genesis,
                                     "Advancing Tip"
@@ -105,8 +105,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     .scan_for_unsent_tips_delay()
                     .await;
             }
-            info!(?service, "Shutting Down Push New Envelope Subtask");
-            INFER_UNIT
+            INFER_UNIT.map(|_| format!("Shutdown Graceful: {}", shutdown.load(Ordering::Relaxed)))
         }
     });
     let mut t2 = spawn({
@@ -117,7 +116,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
         let (url, port) = service.clone();
         let new_tips = new_tips.clone();
         async move {
-            while !shutdown.load(Ordering::Relaxed) {
+            while !shutdown.should_quit() {
                 new_tips.notified().await;
                 let to_broadcast = {
                     // get the DB first as it is more contended, and we're OK
@@ -158,29 +157,60 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     }
                 };
                 if !to_broadcast.is_empty() {
-                    info!(?service, task = "PUSH", n = to_broadcast.len());
-                    trace!(?service, task="PUSH", msgs = ?to_broadcast);
-                    client.post_messages(to_broadcast, &url, port).await?;
+                    info!(?service, task = "PUSH::broadcast", n = to_broadcast.len());
+                    trace!(?service, task="PUSH::broadcast", msgs = ?to_broadcast);
+
+                    let res = client.post_messages(&to_broadcast, &url, port).await?;
+
+                    info!(
+                        accepted = res.iter().filter(|s| s.success).count(),
+                        out_of = to_broadcast.len(),
+                        task = "PUSH",
+                        ?service
+                    );
                 } else {
                     info!(?service, task = "PUSH", "No Work to Do");
                 }
             }
-            info!(?service, "Shutting Down Push Envelope Sending Subtask");
-            INFER_UNIT
+            INFER_UNIT.map(|_| format!("Shutdown Graceful: {}", shutdown.should_quit()))
         }
     });
 
     let _r = tokio::select! {
         a = &mut t1 => {
-            info!(?service, error=?a, "New Envelope Detecting Subtask");
-            a??
+            t2.abort();
+            match &a {
+                Ok(r) => match r {
+                    Ok(msg) => {
+                        info!(?service, task = "PUSH::tip_tracker", event = "SHUTDOWN", msg);
+                    },
+                    Err(e) => {
+                        warn!(?service, task="PUSH::tip_tracker", event="SHUTDOWN", err=?e, "Fail");
+                    },
+                },
+                Err(e) => {
+                    warn!(?service, task="PUSH::tip_tracker", event="SHUTDOWN", err=?e, "Fail");
+                },
+            };
+            a??;
         },
         a = &mut t2 => {
-            info!(?service, error=?a, "Envelope Pushing subtask");
-            a??
+            t1.abort();
+            match &a {
+                Ok(r) => match r {
+                    Ok(msg) => {
+                        info!(?service, task = "PUSH::broadcast", event = "SHUTDOWN", msg);
+                    },
+                    Err(e) => {
+                        warn!(?service, task="PUSH::broadcast", event="SHUTDOWN", err=?e, "Fail");
+                    },
+                },
+                Err(e) => {
+                    warn!(?service, task="PUSH::broadcast", event="SHUTDOWN", err=?e, "Fail");
+                },
+            }
+            a??;
         }
     };
-    t1.abort();
-    t2.abort();
     Ok(())
 }

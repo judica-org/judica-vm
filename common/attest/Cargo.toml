@@ -17,6 +17,7 @@ directories = "3.0.1"
 futures = "0.3.21"
 bitcoincore-rpc-async = "4.0.1-alpha.1"
 tower-layer = "0.3.1"
+ruma-serde = "0.6.0"
 [dependencies.tower-http]
 version = "0.3.4"
 features = [ "cors", "trace" ]

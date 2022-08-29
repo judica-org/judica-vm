@@ -2,6 +2,7 @@ use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
+
 use sapio_bitcoin::{
     secp256k1::{
         rand::{self},
@@ -81,7 +82,8 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
         let handle = db.get_handle().await;
         if let Ok(v) = handle.load_all_messages_for_user_by_key(&oracle_publickey)? {
             for x in v {
-                let d = serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg)?;
+                let d =
+                    serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg().clone().into())?;
                 match d.data {
                     BroadcastByHost::Sequence(l) => already_sequenced.extend(l.iter()),
                     BroadcastByHost::NewPeer(_) => {}
@@ -92,8 +94,8 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
         }
     }
     let mut all_unprocessed_messages = HashMap::new();
-    let mut messages_by_user = HashMap::<XOnlyPublicKey, BTreeMap<u64, Envelope>>::new();
-    let mut last_height_sequenced_for_user: HashMap<XOnlyPublicKey, Option<u64>> =
+    let mut messages_by_user = HashMap::<XOnlyPublicKey, BTreeMap<i64, Envelope>>::new();
+    let mut last_height_sequenced_for_user: HashMap<XOnlyPublicKey, Option<i64>> =
         Default::default();
     loop {
         // Get All the messages that we've not yet seen, but incosistently
@@ -114,9 +116,9 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
             for m in &already_sequenced {
                 if let Some(msg) = all_unprocessed_messages.remove(m) {
                     let r = last_height_sequenced_for_user
-                        .entry(msg.header.key)
+                        .entry(msg.header().key())
                         .or_default();
-                    *r = std::cmp::max(Some(msg.header.height), *r);
+                    *r = std::cmp::max(Some(msg.header().height()), *r);
                 }
             }
             already_sequenced.clear();
@@ -128,11 +130,11 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
             for value in &unprocessed_message_keys {
                 // we can remove it now because the only reason we will drop it is if it is not to be sequenced
                 if let Some((_k, e)) = all_unprocessed_messages.remove_entry(value) {
-                    if e.header.key != oracle_publickey {
+                    if e.header().key() != oracle_publickey {
                         if messages_by_user
-                            .entry(e.header.key)
+                            .entry(e.header().key())
                             .or_default()
-                            .insert(e.header.height, e)
+                            .insert(e.header().height(), e)
                             .is_some()
                         {
                             // TODO: Panic?
@@ -163,8 +165,7 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
                 to_sequence.push_back(
                     ms.remove(&k)
                         .expect("Must be present")
-                        .canonicalized_hash_ref()
-                        .unwrap(),
+                        .canonicalized_hash_ref(),
                 );
             }
             // Set the next height
@@ -172,7 +173,7 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
         }
 
         {
-            let msg = serde_json::to_value(Channelized {
+            let msg = ruma_serde::to_canonical_value(Channelized {
                 data: BroadcastByHost::Sequence(to_sequence),
                 channel: "default".into(),
             })?;

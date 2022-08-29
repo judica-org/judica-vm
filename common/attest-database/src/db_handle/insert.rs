@@ -16,6 +16,7 @@ use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
+use tracing::info;
 use tracing::trace;
 
 use std::os::raw::c_int;
@@ -88,11 +89,12 @@ where
         &self,
         nickname: String,
         envelope: Authenticated<Envelope>,
-    ) -> Result<Result<String, SqliteFail>, rusqlite::Error> {
+    ) -> Result<Result<String, (SqliteFail, Option<String>)>, rusqlite::Error> {
+        info!(genesis=?envelope.get_genesis_hash(), nickname, "Creating New Genesis");
         let mut stmt = self
             .0
             .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
-        let hex_key = PK(envelope.inner_ref().header.key);
+        let hex_key = PK(envelope.header().key());
         stmt.insert(params![nickname, hex_key])?;
         self.try_insert_authenticated_envelope(envelope)
             .map(|t| t.and(Ok(hex_key.0.to_hex())))
@@ -106,32 +108,28 @@ where
     pub fn try_insert_authenticated_envelope(
         &self,
         data: Authenticated<Envelope>,
-    ) -> Result<Result<(), SqliteFail>, rusqlite::Error> {
+    ) -> Result<Result<(), (SqliteFail, Option<String>)>, rusqlite::Error> {
         let data = data.inner();
         let mut stmt = self.0.prepare(include_str!("sql/insert/envelope.sql"))?;
         let time = attest_util::now();
         let genesis = data.get_genesis_hash();
         let prev_msg = data
-            .header
-            .ancestors
-            .as_ref()
-            .map(|m| m.prev_msg)
+            .header()
+            .ancestors()
+            .map(|m| m.prev_msg())
             .unwrap_or(CanonicalEnvelopeHash::genesis());
         trace!(?genesis, ?data, "attempt to insert envelope");
-        let hash = data
-            .clone()
-            .canonicalized_hash()
-            .expect("Hashing should always succeed?");
+        let hash = data.clone().canonicalized_hash();
         match stmt.insert(rusqlite::named_params! {
                 ":body": data,
                 ":hash": hash,
-                ":key": PK(data.header.key),
+                ":key": PK(data.header().key()),
                 ":genesis": genesis,
                 ":prev_msg": prev_msg,
                 ":received_time": time,
-                ":sent_time": data.header.sent_time_ms,
-                ":height": data.header.height,
-                ":nonce": data.header.unsigned.signature.expect("Authenticated Envelope Must Have")[0..32].to_hex()
+                ":sent_time": data.header().sent_time_ms(),
+                ":height": data.header().height(),
+                ":nonce": data.header().unsigned().signature().expect("Authenticated Envelope Must Have")[0..32].to_hex()
         }) {
             Ok(_rowid) => {
 
@@ -140,18 +138,22 @@ where
                 Ok(Ok(()))
             },
             Err(e) => match e {
-                rusqlite::Error::SqliteFailure(err, ref _msg) => match err {
+                rusqlite::Error::SqliteFailure(err, msg) => match err {
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_UNIQUE,
-                    } => Ok(Err(SqliteFail::SqliteConstraintUnique)),
+                    } => Ok(Err((SqliteFail::SqliteConstraintUnique, msg))),
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_NOTNULL,
-                    } => Ok(Err(SqliteFail::SqliteConstraintNotNull)),
+                    } => Ok(Err((SqliteFail::SqliteConstraintNotNull, msg))),
+                    ffi::Error {
+                        code: ErrorCode::ConstraintViolation,
+                        extended_code: SQLITE_CONSTRAINT_CHECK,
+                    } => Ok(Err((SqliteFail::SqliteConstraintCheck, msg))),
                     _ => {
                         debug!("SQL: {}", stmt.expanded_sql().unwrap_or_default());
-                        Err(e)
+                        Err(rusqlite::Error::SqliteFailure(err, msg))
                     }
                 },
                 err => Err(err),
@@ -179,12 +181,14 @@ where
 ///```
 const SQLITE_CONSTRAINT_UNIQUE: c_int = SqliteFail::SqliteConstraintUnique as c_int;
 const SQLITE_CONSTRAINT_NOTNULL: c_int = SqliteFail::SqliteConstraintNotNull as c_int;
+const SQLITE_CONSTRAINT_CHECK: c_int = SqliteFail::SqliteConstraintCheck as c_int;
 #[must_use]
 #[derive(Debug)]
 #[repr(C)]
 pub enum SqliteFail {
     SqliteConstraintUnique = 2067,
     SqliteConstraintNotNull = 1299,
+    SqliteConstraintCheck = 275,
 }
 
 impl std::fmt::Display for SqliteFail {

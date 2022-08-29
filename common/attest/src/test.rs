@@ -4,23 +4,16 @@ use crate::{
         client::ControlClient,
         query::{Outcome, PushMsg, Subscribe},
     },
-    init_main, BitcoinConfig, Config, ControlConfig,
+    init_main, AppShutdown, BitcoinConfig, Config, ControlConfig,
 };
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
+use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::XOnlyPublicKey;
-use serde_json::Value;
-use std::{
-    collections::BTreeSet,
-    env::temp_dir,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+
+use std::{collections::BTreeSet, env::temp_dir, sync::Arc, time::Duration};
 use test_log::test;
 use tokio::spawn;
 use tracing::{debug, info};
@@ -60,7 +53,7 @@ where
     let mut ports = vec![];
     for test_id in 0..nodes {
         let btc_config = get_btc_config();
-        let quit = Arc::new(AtomicBool::new(false));
+        let quit = AppShutdown::new();
         quits.push(quit.clone());
         let mut dir = temp_dir();
         let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
@@ -70,7 +63,7 @@ where
         dir.push(format!("test-rust-{}", bytes.to_hex()));
         tracing::debug!("Using tmpdir: {}", dir.display());
         let dir = attest_util::ensure_dir(dir).await.unwrap();
-        let timer_override = crate::PeerServicesTimers::scaled_default(0.1);
+        let timer_override = crate::PeerServicesTimers::scaled_default(0.001);
         let config = Config {
             bitcoin: btc_config.clone(),
             subname: format!("subname-{}", test_id),
@@ -98,7 +91,7 @@ where
         }
     };
     for quit in &quits {
-        quit.store(true, Ordering::Relaxed);
+        quit.begin_shutdown();
     }
     // Wait for tasks to finish
     for _ in unord.next().await {}
@@ -114,7 +107,7 @@ async fn connect_and_test_nodes() {
         tokio::time::sleep(Duration::from_secs(1)).await;
         // TODO: Guarantee all clients are started?
         let base = Client::new();
-        let client = AttestationClient(base.clone());
+        let client = AttestationClient::new(base.clone());
         let control_client = ControlClient(base.clone());
         // Initial fetch should show no tips posessed
         {
@@ -221,7 +214,7 @@ async fn connect_and_test_nodes() {
 
         // TODO: signal that notifies after re-peering successful?
         // Get tips for all clients (doesn't depend on past bit processing yet)
-        let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
+        let old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
         debug!(current_tips = ?old_tips, "Tips before adding a new message");
         // Create a new message on all chain tips
         make_nth(
@@ -238,8 +231,6 @@ async fn connect_and_test_nodes() {
 
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
-        let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
-        debug!(current_tips = ?old_tips, "Tips before adding a new message");
         for x in 3..=10 {
             make_nth(
                 x,
@@ -250,6 +241,17 @@ async fn connect_and_test_nodes() {
             .await;
         }
         check_synched(10, true).await;
+        let old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
+        debug!(current_tips = ?old_tips, "Tips before adding a new message");
+        make_nth(
+            11,
+            ports.clone(),
+            control_client.clone(),
+            genesis_envelopes.clone(),
+        )
+        .await;
+        check_synched(11, true).await;
+        tokio::time::sleep(Duration::from_millis(2000)).await;
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
         ()
@@ -270,7 +272,6 @@ async fn get_all_tips(
         .flatten()
         .flatten()
         .map(|c| c.canonicalized_hash_ref())
-        .flatten()
         .collect()
 }
 async fn test_envelope_inner_tips(
@@ -294,8 +295,8 @@ async fn test_envelope_inner_tips(
         for e in r.as_ref().unwrap() {
             debug!(envelope=?e, "Checking Tips On");
             let s = e
-                .header
-                .tips
+                .header()
+                .tips()
                 .iter()
                 .map(|tip| tip.2)
                 .collect::<BTreeSet<_>>();
@@ -303,13 +304,13 @@ async fn test_envelope_inner_tips(
             let diff = s.difference(&old_tips);
             let diff: Vec<_> = diff.cloned().collect();
             assert_eq!(diff, vec![]);
-            assert!(!s.contains(&e.header.ancestors.as_ref().unwrap().prev_msg));
+            assert!(!s.contains(&e.header().ancestors().unwrap().prev_msg()));
         }
     }
 }
 
-fn nth_msg_per_port(port: u16, n: u64) -> Value {
-    format!("test-{}-for-{}", n, port).into()
+fn nth_msg_per_port(port: u16, n: u64) -> CanonicalJsonValue {
+    CanonicalJsonValue::String(format!("test-{}-for-{}", n, port))
 }
 async fn make_nth(
     n: u64,
@@ -319,7 +320,7 @@ async fn make_nth(
 ) {
     let keys = genesis_envelopes
         .iter()
-        .map(|g| g.header.key)
+        .map(|g| g.header().key())
         .collect::<Vec<_>>();
     info!(n, "Making messages");
     let make_message = |((port, ctrl), key): ((u16, u16), XOnlyPublicKey)| {
@@ -362,7 +363,7 @@ async fn check_synched(
         .map(|(port, _)| nth_msg_per_port(*port, n))
         .collect::<Vec<_>>();
     expected.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
-    'resync: for attempt in 0.. {
+    'resync: for attempt in 0u32.. {
         info!(
             ?expected,
             attempt, require_full, "checking for synchronization"
@@ -376,18 +377,21 @@ async fn check_synched(
         for (r, (port, _)) in resp.iter().zip(ports.iter()) {
             let tips = r.as_ref().ok().unwrap();
             let needle = nth_msg_per_port(*port, n);
-            info!(?port, response = ?tips.iter().map(|t| &t.msg).collect::<Vec<_>>(), seeking = ?needle, "Node Got Response");
+            info!(?port, response = ?tips.iter().map(|t| t.msg()).collect::<Vec<_>>(), seeking = ?needle, "Node Got Response");
 
             assert!(tips
                 .iter()
-                .map(|t| &t.msg)
+                .map(|t| t.msg())
                 .find(|f| f.as_str() == needle.as_str())
                 .is_some())
         }
         if require_full {
             for r in resp {
                 let tips = r.ok().unwrap();
-                let mut msgs = tips.into_iter().map(|m| m.msg).collect::<Vec<_>>();
+                let mut msgs = tips
+                    .into_iter()
+                    .map(|m| m.msg().clone())
+                    .collect::<Vec<_>>();
                 msgs.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
                 if expected != msgs {
                     tokio::time::sleep(Duration::from_millis(50)).await;

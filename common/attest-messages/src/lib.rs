@@ -1,15 +1,17 @@
 use self::checkpoints::BitcoinCheckPoints;
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 
+use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
+use sapio_bitcoin::secp256k1::schnorrsig::Signature;
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
 use std::error::Error;
 use std::fmt::Display;
 pub mod authenticated;
@@ -22,30 +24,110 @@ pub mod sql_impl;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Unsigned {
-    pub signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
+    signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
+}
+
+impl Unsigned {
+    pub fn new(signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>) -> Self {
+        Self { signature }
+    }
+
+    pub fn signature(&self) -> Option<Signature> {
+        self.signature
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Ancestors {
-    pub prev_msg: CanonicalEnvelopeHash,
-    pub genesis: CanonicalEnvelopeHash,
+    prev_msg: CanonicalEnvelopeHash,
+    genesis: CanonicalEnvelopeHash,
+}
+
+impl Ancestors {
+    pub fn new(prev_msg: CanonicalEnvelopeHash, genesis: CanonicalEnvelopeHash) -> Self {
+        Self { prev_msg, genesis }
+    }
+
+    pub fn prev_msg(&self) -> CanonicalEnvelopeHash {
+        self.prev_msg
+    }
+
+    pub fn genesis(&self) -> CanonicalEnvelopeHash {
+        self.genesis
+    }
 }
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct Header {
-    pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    pub next_nonce: PrecomittedPublicNonce,
+    key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
+    next_nonce: PrecomittedPublicNonce,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub ancestors: Option<Ancestors>,
+    ancestors: Option<Ancestors>,
     // tips can be out of ancestors as we may wish to still show things we came
     // after.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
-    pub tips: Vec<(XOnlyPublicKey, u64, CanonicalEnvelopeHash)>,
-    pub height: u64,
-    pub sent_time_ms: u64,
-    pub unsigned: Unsigned,
-    pub checkpoints: BitcoinCheckPoints,
+    tips: Vec<(XOnlyPublicKey, i64, CanonicalEnvelopeHash)>,
+    height: i64,
+    sent_time_ms: i64,
+    unsigned: Unsigned,
+    checkpoints: BitcoinCheckPoints,
+}
+
+impl Header {
+    pub fn new(
+        key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
+        next_nonce: PrecomittedPublicNonce,
+        ancestors: Option<Ancestors>,
+        tips: Vec<(XOnlyPublicKey, i64, CanonicalEnvelopeHash)>,
+        height: i64,
+        sent_time_ms: i64,
+        unsigned: Unsigned,
+        checkpoints: BitcoinCheckPoints,
+    ) -> Self {
+        Self {
+            key,
+            next_nonce,
+            ancestors,
+            tips,
+            height,
+            sent_time_ms,
+            unsigned,
+            checkpoints,
+        }
+    }
+
+    pub fn checkpoints(&self) -> &BitcoinCheckPoints {
+        &self.checkpoints
+    }
+
+    pub fn unsigned(&self) -> &Unsigned {
+        &self.unsigned
+    }
+
+    pub fn sent_time_ms(&self) -> i64 {
+        self.sent_time_ms
+    }
+
+    pub fn height(&self) -> i64 {
+        self.height
+    }
+
+    pub fn tips(&self) -> &[(XOnlyPublicKey, i64, CanonicalEnvelopeHash)] {
+        self.tips.as_ref()
+    }
+
+    pub fn ancestors(&self) -> Option<&Ancestors> {
+        self.ancestors.as_ref()
+    }
+
+    pub fn next_nonce(&self) -> PrecomittedPublicNonce {
+        self.next_nonce
+    }
+
+    pub fn key(&self) -> XOnlyPublicKey {
+        self.key
+    }
 }
 impl std::fmt::Debug for Header {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -53,9 +135,39 @@ impl std::fmt::Debug for Header {
     }
 }
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[serde(from = "from_wrap::Envelope")]
 pub struct Envelope {
-    pub header: Header,
-    pub msg: Value,
+    header: Header,
+    msg: CanonicalJsonValue,
+    #[serde(skip)]
+    cache: Option<CanonicalEnvelopeHash>,
+}
+
+mod from_wrap {
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    pub struct Envelope {
+        header: super::Header,
+        msg: super::CanonicalJsonValue,
+    }
+    impl From<Envelope> for super::Envelope {
+        fn from(e: Envelope) -> Self {
+            super::Envelope::new(e.header, e.msg)
+        }
+    }
+}
+
+impl Envelope {
+    pub fn new(header: Header, msg: CanonicalJsonValue) -> Self {
+        let mut s = Self {
+            header,
+            msg,
+            cache: None,
+        };
+        s.cache = Some(s.canonicalized_hash_ref());
+        s
+    }
 }
 
 impl std::fmt::Debug for Envelope {
@@ -119,7 +231,7 @@ impl Envelope {
     pub fn get_genesis_hash(&self) -> CanonicalEnvelopeHash {
         match self.header.ancestors {
             Some(ref a) => a.genesis,
-            None => self.canonicalized_hash_ref().unwrap(),
+            None => self.canonicalized_hash_ref(),
         }
     }
     /// Returns the nonce used in this [`Envelope`].
@@ -156,6 +268,7 @@ impl Envelope {
             .signature
             .take()
             .ok_or(AuthenticationError::NoSignature)?;
+        redacted.cache = None;
         let msg = redacted
             .signature_digest()
             .ok_or(AuthenticationError::HashingError)?;
@@ -181,6 +294,7 @@ impl Envelope {
         nonce: PrecomittedNonce,
     ) -> Result<(), SigningError> {
         self.header.unsigned.signature = None;
+        self.cache = None;
 
         let msg = self
             .clone()
@@ -188,25 +302,34 @@ impl Envelope {
             .ok_or(SigningError::HashingError)?;
         self.header.unsigned.signature =
             Some(nonce.sign_with_precomitted_nonce(secp, &msg.0, keypair));
+        self.cache = Some(self.compute_hash());
 
         Ok(())
     }
 
+    fn compute_hash(&self) -> CanonicalEnvelopeHash {
+        let canonical =
+            ruma_serde::to_canonical_value(self).expect("Canonicalization Must Succeed");
+        CanonicalEnvelopeHash(sapio_bitcoin::hashes::sha256::Hash::hash(
+            canonical.to_string().as_bytes(),
+        ))
+    }
     /// Creates the canonicalized_hash for the [`Envelope`].
     ///
     /// This hashes everything, including unsigned data.
-    pub fn canonicalized_hash(self) -> Option<CanonicalEnvelopeHash> {
+    pub fn canonicalized_hash(self) -> CanonicalEnvelopeHash {
         self.canonicalized_hash_ref()
     }
 
     /// Creates the canonicalized_hash for the [`Envelope`].
     ///
     /// This hashes everything, including unsigned data.
-    pub fn canonicalized_hash_ref(&self) -> Option<CanonicalEnvelopeHash> {
-        let canonical = ruma_serde::to_canonical_value(self).ok()?;
-        Some(CanonicalEnvelopeHash(
-            sapio_bitcoin::hashes::sha256::Hash::hash(canonical.to_string().as_bytes()),
-        ))
+    pub fn canonicalized_hash_ref(&self) -> CanonicalEnvelopeHash {
+        if let Some(h) = self.cache {
+            h
+        } else {
+            self.compute_hash()
+        }
     }
     /// Helper to get the [`SchnorrMessage`] from an envelope.
     ///
@@ -215,9 +338,17 @@ impl Envelope {
         if self.header.unsigned.signature.is_some() {
             return None;
         }
-        let msg_hash = self.canonicalized_hash()?;
+        let msg_hash = self.canonicalized_hash();
         let msg = SchnorrMessage::from(W(msg_hash.0));
         Some(SignatureDigest(msg))
+    }
+
+    pub fn msg(&self) -> &CanonicalJsonValue {
+        &self.msg
+    }
+
+    pub fn header(&self) -> &Header {
+        &self.header
     }
 }
 

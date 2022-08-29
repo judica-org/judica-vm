@@ -5,11 +5,12 @@ use super::*;
 
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use fallible_iterator::FallibleIterator;
+use ruma_serde::CanonicalJsonValue;
 use rusqlite::{params, Connection};
 
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use sapio_bitcoin::KeyPair;
-use serde_json::{json, Value};
+
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use test_log::test;
@@ -39,12 +40,18 @@ async fn test_reused_nonce() {
     let handle = conn.get_handle().await;
     let kp = make_test_user(&secp, &handle, test_user);
     let envelope_1 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None, None)
+        .wrap_message_in_envelope_for_user_by_key(CanonicalJsonValue::Null, &kp, &secp, None, None)
         .unwrap()
         .unwrap();
     let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
     let envelope_2 = handle
-        .wrap_message_in_envelope_for_user_by_key(json!("distinct"), &kp, &secp, None, None)
+        .wrap_message_in_envelope_for_user_by_key(
+            CanonicalJsonValue::String("distinct".into()),
+            &kp,
+            &secp,
+            None,
+            None,
+        )
         .unwrap()
         .unwrap();
     let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
@@ -58,7 +65,7 @@ async fn test_reused_nonce() {
         // Check that only this group is returned
         let nonces = handle.get_reused_nonces().unwrap();
         assert_eq!(nonces.len(), 1);
-        let v = nonces.get(&envelope_2.inner_ref().header.key).unwrap();
+        let v = nonces.get(&envelope_2.inner_ref().header().key()).unwrap();
         assert_eq!(
             &v[..],
             &[envelope_1.inner_ref().clone(), envelope_2.clone().inner()][..]
@@ -66,7 +73,7 @@ async fn test_reused_nonce() {
         // Inserting more messages shouldn't change anything
         let envelope_i = handle
             .wrap_message_in_envelope_for_user_by_key(
-                json!({ "distinct": i }),
+                CanonicalJsonValue::String(format!("distinct-{}", i)),
                 &kp,
                 &secp,
                 None,
@@ -134,7 +141,7 @@ async fn test_envelope_creation() {
             assert!(tips.contains(envelope.inner_ref()));
             assert_eq!(
                 tips.iter()
-                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
+                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref()))
                     .count(),
                 1
             );
@@ -152,7 +159,7 @@ async fn test_envelope_creation() {
             assert_eq!(
                 known_tips
                     .iter()
-                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
+                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref()))
                     .count(),
                 1
             );
@@ -167,7 +174,13 @@ async fn test_envelope_creation() {
         let kp = make_test_user(&secp, &handle, test_user);
 
         let envelope_1 = handle
-            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None, None)
+            .wrap_message_in_envelope_for_user_by_key(
+                CanonicalJsonValue::Null,
+                &kp,
+                &secp,
+                None,
+                None,
+            )
             .unwrap()
             .unwrap();
         let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
@@ -177,7 +190,13 @@ async fn test_envelope_creation() {
         verify_tip(&handle, &envelope_1, user_id, kp, &all_past_tips);
 
         let envelope_2 = handle
-            .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp, &secp, None, None)
+            .wrap_message_in_envelope_for_user_by_key(
+                CanonicalJsonValue::Null,
+                &kp,
+                &secp,
+                None,
+                None,
+            )
             .unwrap()
             .unwrap();
         let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
@@ -191,7 +210,7 @@ async fn test_envelope_creation() {
         for i in 0..10isize {
             let envelope_disconnected = handle
                 .wrap_message_in_envelope_for_user_by_key(
-                    Value::Null,
+                    CanonicalJsonValue::Null,
                     &kp,
                     &secp,
                     None,
@@ -204,10 +223,7 @@ async fn test_envelope_creation() {
                 .self_authenticate(&secp)
                 .unwrap();
             envs.push((
-                envelope_disconnected
-                    .inner_ref()
-                    .canonicalized_hash_ref()
-                    .unwrap(),
+                envelope_disconnected.inner_ref().canonicalized_hash_ref(),
                 envelope_disconnected.clone(),
             ));
             if i != special_idx {
@@ -251,11 +267,8 @@ async fn test_envelope_creation() {
                 .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
                 .unwrap();
             assert_eq!(
-                my_tip.canonicalized_hash_ref().unwrap(),
-                disconnected[user_id]
-                    .inner_ref()
-                    .canonicalized_hash_ref()
-                    .unwrap()
+                my_tip.canonicalized_hash_ref(),
+                disconnected[user_id].inner_ref().canonicalized_hash_ref()
             );
         }
         {
@@ -274,14 +287,14 @@ async fn test_envelope_creation() {
         .get_tip_for_known_keys()
         .unwrap()
         .iter()
-        .map(|t| t.canonicalized_hash_ref().unwrap())
+        .map(|t| t.canonicalized_hash_ref())
         .collect();
     for user_id in 0..N_USERS {
         {
             let my_tip = handle
                 .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
                 .unwrap();
-            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), final_msg[user_id]);
+            assert_eq!(my_tip.canonicalized_hash_ref(), final_msg[user_id]);
         }
         {
             assert_eq!(known_tips.len(), N_USERS);
@@ -292,7 +305,13 @@ async fn test_envelope_creation() {
     let kp_2 = make_test_user(&secp, &handle, "TestUser2".into());
 
     let envelope_3 = handle
-        .wrap_message_in_envelope_for_user_by_key(Value::Null, &kp_2, &secp, None, None)
+        .wrap_message_in_envelope_for_user_by_key(
+            CanonicalJsonValue::Null,
+            &kp_2,
+            &secp,
+            None,
+            None,
+        )
         .unwrap()
         .unwrap();
     let envelope_3 = envelope_3.clone().self_authenticate(&secp).unwrap();
@@ -305,10 +324,10 @@ async fn test_envelope_creation() {
         assert_eq!(known_tips.len(), kps.len() + 1);
         let mut tip_hashes: Vec<_> = known_tips
             .iter()
-            .map(|t| t.canonicalized_hash_ref().unwrap())
+            .map(|t| t.canonicalized_hash_ref())
             .collect();
         tip_hashes.sort();
-        final_msg.push(envelope_3.inner_ref().canonicalized_hash_ref().unwrap());
+        final_msg.push(envelope_3.inner_ref().canonicalized_hash_ref());
         final_msg.sort();
         assert_eq!(&tip_hashes[..], &final_msg[..]);
     }

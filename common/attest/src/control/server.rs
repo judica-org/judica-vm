@@ -72,7 +72,7 @@ async fn get_status(
         let tips = tips
             .into_iter()
             .map(|t| TipData {
-                hash: t.canonicalized_hash_ref().unwrap(),
+                hash: t.canonicalized_hash_ref(),
                 envelope: t,
             })
             .collect();
@@ -189,7 +189,7 @@ async fn push_message_dangerous(
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Inserting Message failed, No Corresponding Key: {}", e),
+                format!("Inserting Message failed, No Corresponding Key: {:?}", e),
             )
         })?;
     Ok((
