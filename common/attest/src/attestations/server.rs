@@ -19,27 +19,42 @@ use std::{net::SocketAddr, sync::Arc};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info, info_span, trace};
 
+pub async fn get_newest_tip_handler(
+    Extension(db): Extension<MsgDB>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<(Response<()>, Json<Vec<Envelope>>), (StatusCode, &'static str)> {
+    let handle = db.get_handle().await;
+    trace!(from=?addr, method="GET /newest_tips");
+    info!(from=?addr, method="GET /newest_tips");
+    let r = handle
+        .get_tips_for_all_users()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+
+    trace!(from=?addr, method="GET /newest_tips", response=?r);
+    Ok((
+        Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(())
+            .expect("Response<()> should always be valid"),
+        Json(r),
+    ))
+}
 pub async fn get_tip_handler(
     Extension(db): Extension<MsgDB>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Json(query): Json<Option<Tips>>,
+    Json(mut tips): Json<Tips>,
 ) -> Result<(Response<()>, Json<Vec<Envelope>>), (StatusCode, &'static str)> {
     let handle = db.get_handle().await;
-    let qtype = query.is_some();
-    trace!(from=?addr, method="GET /tips", ?query);
-    info!(from=?addr, method="GET /tips", ?query);
-    let r = match query {
-        Some(Tips { mut tips }) => {
-            // runs in O(N) usually since the slice should already be sorted
-            tips.sort_unstable();
-            tips.dedup();
-            handle.messages_by_hash(tips.iter())
-        }
-        None => handle.get_tips_for_all_users(),
-    }
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+    trace!(from=?addr, method="GET /tips",?tips);
+    // runs in O(N) usually since the slice should already be sorted
+    tips.tips.sort_unstable();
+    tips.tips.dedup();
+    let r = handle
+        .messages_by_hash(tips.tips.iter())
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
 
-    trace!(from=?addr, method="GET /tips", req_type = if qtype{"specific"}else{"latest"}, response=?r);
+    trace!(from=?addr, method="GET /tips", response=?r);
 
     Ok((
         Response::builder()
@@ -109,6 +124,7 @@ pub async fn run(config: Arc<Config>, db: MsgDB) -> tokio::task::JoinHandle<Abst
             // `POST /msg` goes to `msg`
             .route("/msg", post(post_message))
             .route("/tips", get(get_tip_handler))
+            .route("/newest_tips", get(get_newest_tip_handler))
             .layer(Extension(db))
             .layer(TraceLayer::new_for_http());
 

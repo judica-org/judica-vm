@@ -7,7 +7,7 @@ use tokio::{
     spawn,
     sync::{Mutex, Notify},
 };
-use tracing::trace;
+use tracing::{debug, trace};
 
 #[derive(Clone)]
 pub struct AttestationClient {
@@ -41,12 +41,12 @@ impl AttestationClient {
     ) -> Result<Vec<Envelope>, reqwest::Error> {
         let resp: Vec<Envelope> = self
             .client
-            .get(format!("http://{}:{}/tips", url, port))
-            .json(&None::<Tips>)
+            .get(format!("http://{}:{}/newest_tips", url, port))
             .send()
             .await?
             .json()
             .await?;
+        debug!(v=?resp.iter().map(|v|(v.header.height, v.get_genesis_hash(), v.canonicalized_hash_ref().unwrap())).collect::<Vec<_>>());
         Ok(resp)
     }
     pub async fn get_tips(
