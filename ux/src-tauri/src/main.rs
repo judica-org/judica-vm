@@ -80,8 +80,9 @@ async fn game_synchronizer(
 
         let power_plants = {
             let game = s.inner().lock().await;
-            let p = game.as_ref().map(|g| g.board.get_all_power_plants()).unwrap().unwrap_or(UXNFTRegistry { power_plant_data: BTreeMap::new()});
-            p
+            let plants = game.as_ref().map(|g| g.board.get_all_power_plants())
+            .unwrap_or(Ok(UXNFTRegistry{ power_plant_data: BTreeMap::new()})).unwrap();
+            plants
         };
         println!("Emitting!");
         window.emit("available-sequencers", list_of_chains);
