@@ -52,7 +52,7 @@ pub fn startup(
             bld = bld.proxy(proxy);
         }
         let inner_client = bld.build()?;
-        let client = AttestationClient(inner_client);
+        let client = AttestationClient::new(inner_client);
         let secp = Arc::new(Secp256k1::new());
         let mut interval = config.peer_service.timer_override.reconnect_interval();
         let mut task_set: HashMap<TaskID, JoinHandle<Result<(), _>>> = HashMap::new();

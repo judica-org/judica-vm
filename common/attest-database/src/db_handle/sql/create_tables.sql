@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS messages (
         NULL,
         UNIQUE(hash),
         CHECK(
-            genesis_id IS NOT NULL
-            OR height = 0
+            height = 0
+            OR (genesis_id IS NOT NULL)
         ),
         CHECK(
             (

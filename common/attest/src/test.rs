@@ -114,7 +114,7 @@ async fn connect_and_test_nodes() {
         tokio::time::sleep(Duration::from_secs(1)).await;
         // TODO: Guarantee all clients are started?
         let base = Client::new();
-        let client = AttestationClient(base.clone());
+        let client = AttestationClient::new(base.clone());
         let control_client = ControlClient(base.clone());
         // Initial fetch should show no tips posessed
         {
