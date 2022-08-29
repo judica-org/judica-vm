@@ -1,5 +1,5 @@
 use crate::{
-    peer_services::{PeerQuery, PeerType},
+    peer_services::{PeerQuery, TaskID},
     Config,
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
@@ -19,10 +19,12 @@ use sapio_bitcoin::{
 };
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::{json, Value};
-use std::{net::SocketAddr, sync::Arc};
+
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
+
+use super::query::{Outcome, PushMsg, Subscribe};
 
 #[derive(Serialize, Deserialize)]
 pub struct TipData {
@@ -33,8 +35,27 @@ pub struct TipData {
 pub struct Status {
     peers: Vec<PeerInfo>,
     tips: Vec<TipData>,
-    peer_connections: Vec<(String, u16, PeerType)>,
+    peer_connections: Vec<TaskID>,
     all_users: Vec<(XOnlyPublicKey, String, bool)>,
+}
+
+async fn get_expensive_db_snapshot(
+    db: Extension<MsgDB>,
+) -> Result<(Response<()>, Json<HashMap<CanonicalEnvelopeHash, Envelope>>), (StatusCode, String)> {
+    let handle = db.get_handle().await;
+    let mut map = Default::default();
+    let mut newer = None;
+    let _r = handle
+        .get_all_messages_collect_into_inconsistent(&mut newer, &mut map)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok((
+        Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(())
+            .expect("Response<()> should always be valid"),
+        Json(map),
+    ))
 }
 async fn get_status(
     db: Extension<MsgDB>,
@@ -100,19 +121,20 @@ async fn get_status(
     ))
 }
 
-#[derive(Serialize, Deserialize)]
-struct Subscribe {
-    url: String,
-    port: u16,
-}
 async fn listen_to_service(
     db: Extension<MsgDB>,
     Json(subscribe): Json<Subscribe>,
-) -> Result<(Response<()>, Json<Value>), (StatusCode, String)> {
+) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
     let _r =
         db.0.get_handle()
             .await
-            .upsert_hidden_service(subscribe.url, subscribe.port, Some(true), Some(true))
+            .upsert_hidden_service(
+                subscribe.url,
+                subscribe.port,
+                Some(true),
+                Some(true),
+                Some(true),
+            )
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()
@@ -120,21 +142,16 @@ async fn listen_to_service(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(json!({"success":true})),
+        Json(Outcome { success: true }),
     ))
 }
 
-#[derive(Serialize, Deserialize)]
-struct PushMsg {
-    msg: Value,
-    key: XOnlyPublicKey,
-}
 async fn push_message_dangerous(
     db: Extension<MsgDB>,
     secp: Extension<Secp256k1<All>>,
     bitcoin_tipcache: Extension<Arc<BitcoinCheckPointCache>>,
     Json(PushMsg { msg, key }): Json<PushMsg>,
-) -> Result<(Response<()>, Json<Value>), (StatusCode, String)> {
+) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
     let handle = db.0.get_handle().await;
     let keys = handle.get_keymap().map_err(|e| {
         (
@@ -168,6 +185,12 @@ async fn push_message_dangerous(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Inserting Message failed: {}", e),
             )
+        })?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Inserting Message failed, No Corresponding Key: {}", e),
+            )
         })?;
     Ok((
         Response::builder()
@@ -175,14 +198,14 @@ async fn push_message_dangerous(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(json!({"success":true})),
+        Json(Outcome { success: true }),
     ))
 }
 async fn make_genesis(
     db: Extension<MsgDB>,
     secp: Extension<Secp256k1<All>>,
     Json(nickname): Json<String>,
-) -> Result<(Response<()>, Json<Value>), (StatusCode, String)> {
+) -> Result<(Response<()>, Json<Envelope>), (StatusCode, String)> {
     let (kp, pre, genesis) = generate_new_user(&secp.0).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -204,7 +227,8 @@ async fn make_genesis(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Creating Genesis Message failed: {}", e),
             )
-        })?;
+        })?
+        .expect("Should always succeed at inserting a fresh Genesis");
 
     Ok((
         Response::builder()
@@ -212,7 +236,7 @@ async fn make_genesis(
             .header("Access-Control-Allow-Origin", "*")
             .body(())
             .expect("Response<()> should always be valid"),
-        Json(json!({"success":true})),
+        Json(genesis),
     ))
 }
 pub async fn run(
@@ -228,6 +252,18 @@ pub async fn run(
             .route(
                 "/status",
                 get(get_status).layer(
+                    CorsLayer::new()
+                        .allow_methods([Method::GET, Method::OPTIONS])
+                        .allow_headers([
+                            reqwest::header::ACCESS_CONTROL_ALLOW_HEADERS,
+                            reqwest::header::CONTENT_TYPE,
+                        ])
+                        .allow_origin(Any),
+                ),
+            )
+            .route(
+                "/expensive_db_snapshot",
+                get(get_expensive_db_snapshot).layer(
                     CorsLayer::new()
                         .allow_methods([Method::GET, Method::OPTIONS])
                         .allow_headers([

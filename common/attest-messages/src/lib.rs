@@ -1,6 +1,7 @@
 use self::checkpoints::BitcoinCheckPoints;
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 
+use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
@@ -25,21 +26,42 @@ pub struct Unsigned {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Ancestors {
+    pub prev_msg: CanonicalEnvelopeHash,
+    pub genesis: CanonicalEnvelopeHash,
+}
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct Header {
     pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
     pub next_nonce: PrecomittedPublicNonce,
-    pub prev_msg: CanonicalEnvelopeHash,
-    pub genesis: CanonicalEnvelopeHash,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub ancestors: Option<Ancestors>,
+    // tips can be out of ancestors as we may wish to still show things we came
+    // after.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub tips: Vec<(XOnlyPublicKey, u64, CanonicalEnvelopeHash)>,
     pub height: u64,
     pub sent_time_ms: u64,
     pub unsigned: Unsigned,
     pub checkpoints: BitcoinCheckPoints,
 }
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+impl std::fmt::Debug for Header {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&serde_json::to_string(self).unwrap())
+    }
+}
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct Envelope {
     pub header: Header,
     pub msg: Value,
+}
+
+impl std::fmt::Debug for Envelope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&serde_json::to_string(self).unwrap())
+    }
 }
 
 #[derive(Debug)]
@@ -48,6 +70,8 @@ pub enum AuthenticationError {
     NoSignature,
     ValidationError(sapio_bitcoin::secp256k1::Error),
     HashingError,
+    MissingAncestors,
+    NoAncestorsForGenesis,
 }
 #[derive(Debug)]
 pub enum SigningError {
@@ -68,7 +92,7 @@ impl Display for AuthenticationError {
 impl Error for SigningError {}
 impl Error for AuthenticationError {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Copy, Hash)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, PartialOrd, Ord, Copy, Hash)]
 pub struct CanonicalEnvelopeHash(sha256::Hash);
 impl CanonicalEnvelopeHash {
     pub fn genesis() -> CanonicalEnvelopeHash {
@@ -78,10 +102,26 @@ impl CanonicalEnvelopeHash {
         *self == Self::genesis()
     }
 }
+impl std::fmt::Debug for CanonicalEnvelopeHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&serde_json::to_string(self).unwrap())
+    }
+}
+impl ToHex for CanonicalEnvelopeHash {
+    fn to_hex(&self) -> String {
+        self.0.to_hex()
+    }
+}
 
 pub struct SignatureDigest(SchnorrMessage);
 
 impl Envelope {
+    pub fn get_genesis_hash(&self) -> CanonicalEnvelopeHash {
+        match self.header.ancestors {
+            Some(ref a) => a.genesis,
+            None => self.canonicalized_hash_ref().unwrap(),
+        }
+    }
     /// Returns the nonce used in this [`Envelope`].
     pub fn extract_used_nonce(&self) -> Option<PrecomittedPublicNonce> {
         XOnlyPublicKey::from_slice(&self.header.unsigned.signature?.as_ref()[..32])
@@ -93,12 +133,22 @@ impl Envelope {
     ///
     /// # Errors
     ///
-    /// This function will return an error if the signature could not be
+    /// This function will return an error if:
+    ///
+    /// - the signature could not be
     /// validated or if one is not present.
+    /// - The height is 0 and there are ancestors
+    /// - The height is > 0 and there are not ancestors
     pub fn self_authenticate<C: Verification>(
         &self,
         secp: &Secp256k1<C>,
     ) -> Result<Authenticated<Self>, AuthenticationError> {
+        if self.header.height == 0 && self.header.ancestors.is_some() {
+            return Err(AuthenticationError::NoAncestorsForGenesis);
+        }
+        if self.header.height > 0 && self.header.ancestors.is_none() {
+            return Err(AuthenticationError::MissingAncestors);
+        }
         let mut redacted = self.clone();
         let sig = redacted
             .header

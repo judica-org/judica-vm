@@ -32,6 +32,7 @@ pub async fn get_users(
                  port,
                  fetch_from: _,
                  push_to: _,
+                 allow_unsolicited_tips: _,
              }| Peer { service_url, port },
         )
         .collect();
@@ -53,7 +54,13 @@ pub async fn add_user(
         tracing::debug!("Inserting Into Database");
         let locked = db.get_handle().await;
         locked
-            .upsert_hidden_service(peer.service_url, peer.port, Some(true), Some(true))
+            .upsert_hidden_service(
+                peer.service_url,
+                peer.port,
+                Some(true),
+                Some(true),
+                Some(true),
+            )
             .ok();
     }
     Ok((

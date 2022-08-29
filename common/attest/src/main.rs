@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
 use tokio::task::JoinHandle;
+use tokio::time::{Interval, MissedTickBehavior};
 mod attestations;
 mod control;
 mod peer_services;
@@ -42,11 +43,9 @@ pub struct BitcoinConfig {
 fn default_socks_port() -> u16 {
     19050
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct TorConfig {
     directory: PathBuf,
-    #[serde(default = "default_port")]
-    pub attestation_port: u16,
     #[serde(default = "default_socks_port")]
     socks_port: u16,
 }
@@ -59,14 +58,74 @@ pub struct ControlConfig {
     #[serde(default = "default_control_port")]
     port: u16,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct PeerServicesTimers {
+    pub reconnect_rate: Duration,
+    pub scan_for_unsent_tips_rate: Duration,
+    pub attach_tip_while_busy_rate: Duration,
+    pub tip_fetch_rate: Duration,
+    pub entropy_range: Duration,
+}
+
+impl PeerServicesTimers {
+    fn scaled_default(scale: f64) -> Self {
+        Self {
+            reconnect_rate: Duration::from_millis((30000 as f64 * scale) as u64),
+            scan_for_unsent_tips_rate: Duration::from_millis((10000 as f64 * scale) as u64),
+            attach_tip_while_busy_rate: Duration::from_millis((30000 as f64 * scale) as u64),
+            tip_fetch_rate: Duration::from_millis((15000 as f64 * scale) as u64),
+            entropy_range: Duration::from_millis((1000 as f64 * scale) as u64),
+        }
+    }
+}
+impl Default for PeerServicesTimers {
+    fn default() -> Self {
+        Self::scaled_default(1.0)
+    }
+}
+impl PeerServicesTimers {
+    fn rand(&self) -> Duration {
+        rand::thread_rng().gen_range(Duration::ZERO, self.entropy_range)
+    }
+    fn reconnect_interval(&self) -> Interval {
+        let mut interval = tokio::time::interval(self.reconnect_rate);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        interval
+    }
+    async fn scan_for_unsent_tips_delay(&self) {
+        let d = self.scan_for_unsent_tips_rate + self.rand();
+        tokio::time::sleep(d).await
+    }
+    async fn tip_fetch_delay(&self) {
+        let d = self.tip_fetch_rate + self.rand();
+        tokio::time::sleep(d).await
+    }
+    // todo: add randomization
+    fn attach_tip_while_busy_interval(&self) -> Interval {
+        let mut interval = tokio::time::interval(self.attach_tip_while_busy_rate);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        interval
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PeerServiceConfig {
+    #[serde(default)]
+    pub timer_override: PeerServicesTimers,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     bitcoin: BitcoinConfig,
     pub subname: String,
-    pub tor: TorConfig,
+    pub tor: Option<TorConfig>,
+    #[serde(default = "default_port")]
+    pub attestation_port: u16,
     pub control: ControlConfig,
     #[serde(default)]
     pub prefix: Option<PathBuf>,
+    pub peer_service: PeerServiceConfig,
 }
 
 fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
@@ -119,7 +178,7 @@ async fn init_main(
     let (tx_peer_status, rx_peer_status) = channel(1);
     let mut fetching_client =
         peer_services::startup(config.clone(), mdb.clone(), quit.clone(), rx_peer_status);
-    let mut control_server = control::run(
+    let mut control_server = control::server::run(
         config.clone(),
         mdb.clone(),
         tx_peer_status,
@@ -179,124 +238,4 @@ async fn init_main(
 }
 
 #[cfg(test)]
-mod test {
-    use std::{
-        env::temp_dir,
-        sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc,
-        },
-        time::Duration,
-    };
-
-    use attest_util::INFER_UNIT;
-    use bitcoincore_rpc_async::Auth;
-    use futures::future::join_all;
-    use reqwest::Client;
-    use test_log::test;
-    use tokio::spawn;
-
-    use crate::{
-        attestations::client::AttestationClient, init_main, BitcoinConfig, Config, ControlConfig,
-        TorConfig,
-    };
-
-    // Connect to a specific local server for testing, or assume there is an
-    // open-to-world server available locally
-    fn get_btc_config() -> BitcoinConfig {
-        match std::env::var("TEST_BTC_CONF") {
-            Ok(s) => serde_json::from_str(&s).unwrap(),
-            Err(_) => BitcoinConfig {
-                url: "http://127.0.0.1".into(),
-                auth: Auth::None,
-            },
-        }
-    }
-    fn get_test_id() -> Option<u16> {
-        let test_one = std::env::var("ATTEST_TEST_ONE").is_ok();
-        let test_two = std::env::var("ATTEST_TEST_TWO").is_ok();
-        if !test_one && !test_two {
-            tracing::debug!("Skipping Test, not enabled");
-            return None;
-        } else {
-            tracing::debug!("One XOR Two? {}", test_one ^ test_two);
-            assert!(test_one ^ test_two);
-        }
-        Some(if test_one { 0 } else { 1 })
-    }
-    macro_rules! test_setup {
-        {$name:ident, $code:tt} => {
-    #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
-    async fn $name() {
-        let test_id = if let Some(tid) = get_test_id() {
-            tid
-        } else {
-            return
-        };
-        let btc_config = get_btc_config();
-        let quit = Arc::new(AtomicBool::new(false));
-        let mut dir = temp_dir();
-        let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
-        use sapio_bitcoin::secp256k1::rand::Rng;
-        let bytes : [u8; 16] = rng.gen();
-        use sapio_bitcoin::hashes::hex::ToHex;
-        dir.push(format!("test-rust-{}",bytes.to_hex()));
-        tracing::debug!("Using tmpdir: {}", dir.display());
-        let tor_dir = dir.join("tor");
-        let config = Config {
-            bitcoin: btc_config.clone(),
-            subname: format!("subname-{}", test_id),
-            tor: TorConfig {
-                directory: tor_dir,
-                attestation_port: 12556 + test_id,
-                socks_port: 13556 + test_id,
-            },
-            control: ControlConfig { port: 14556 +test_id },
-            prefix: Some(dir),
-        };
-
-        let main_task = {
-            let quit = quit.clone();
-            spawn(async move {
-                $code
-                quit.store(true, Ordering::Relaxed);
-                ()
-            })
-        };
-        let quit = quit.clone();
-        let task_one = spawn(async  move{
-            init_main(Arc::new(config), quit).await
-        });
-        tokio::select!{
-            _ = main_task => {
-                tracing::debug!("Main Task Completed");
-                return;
-            }
-            r = task_one => {
-                tracing::debug!("Task One Completed");
-                r.unwrap().unwrap();
-            }
-        };
-    }
-
-        };
-    }
-
-    test_setup!(sleep_for_five, {
-        let test_id = if let Some(tid) = get_test_id() {
-            tid
-        } else {
-            return
-        };
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        let base = Client::new();
-        let client = AttestationClient(base.clone());
-        for _ in 0..10 {
-            let resp = client
-                .get_latest_tips(&"127.0.0.1".into(), 12556 + test_id)
-                .await;
-            tracing::debug!("Got:{:?}", resp);
-            tokio::time::sleep(Duration::from_secs(5)).await;
-        }
-    });
-}
+mod test;

@@ -1,5 +1,5 @@
 use super::sql_serializers::{self};
-use super::{handle_type, ConsistentMessages, MsgDBHandle};
+use super::{handle_type, MsgDBHandle};
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::CanonicalEnvelopeHash;
@@ -13,12 +13,14 @@ use sapio_bitcoin::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use tracing::{debug, trace};
 #[derive(Serialize, Deserialize)]
 pub struct PeerInfo {
     pub service_url: String,
     pub port: u16,
     pub fetch_from: bool,
     pub push_to: bool,
+    pub allow_unsolicited_tips: bool,
 }
 impl<'a, T> MsgDBHandle<'a, T>
 where
@@ -49,7 +51,7 @@ where
         let mut res = vec![];
         for envelope in envelopes {
             let rs = stmt
-                .query(named_params! {":genesis": envelope.header.genesis, ":height": envelope.header.height})?;
+                .query(named_params! (":genesis": envelope.get_genesis_hash(), ":height": envelope.header.height))?;
             let mut envs = rs.map(|r| r.get::<_, Envelope>(0)).collect()?;
             res.append(&mut envs);
         }
@@ -107,46 +109,29 @@ where
     }
 
     /// finds the most recent message only for messages where we know the key
-    pub fn get_all_messages_by_key_consistent(
+    pub fn get_all_connected_messages_collect_into(
         &self,
-        newer: Option<i64>,
-    ) -> Result<
-        Result<(HashMap<XOnlyPublicKey, Vec<Envelope>>, Option<i64>), ConsistentMessages>,
-        rusqlite::Error,
-    > {
+        newer: &mut Option<i64>,
+        map: &mut HashMap<CanonicalEnvelopeHash, Envelope>,
+    ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
-            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
+            self.0
+                .prepare(include_str!("sql/get/all_messages_after_connected.sql"))?
         } else {
             self.0
-                .prepare(include_str!("sql/get/all_messages_after.sql"))?
+                .prepare(include_str!("sql/get/all_messages_connected.sql"))?
         };
         let rows = match newer {
-            Some(i) => stmt.query([i])?,
+            Some(i) => stmt.query([*i])?,
             None => stmt.query([])?,
         };
-        let (mut vs, newest) = rows
-            .map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
-            .fold((HashMap::new(), None), |(mut acc, max_id), (v, id)| {
-                acc.entry(v.header.key).or_insert(vec![]).push(v);
-                Ok((acc, max_id.max(Some(id))))
+        rows.map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
+            .for_each(|(v, id)| {
+                map.insert(v.canonicalized_hash_ref().unwrap(), v);
+                *newer = (*newer).max(Some(id));
+                Ok(())
             })?;
-
-        for v in vs.values_mut() {
-            v.sort_unstable_by_key(|k| k.header.height)
-        }
-        // TODO: Make this more consistent by being able to drop a pending suffix.
-        if vs.values().all(|v| v[0].header.height == 0)
-            && vs.values().all(|v| {
-                v.windows(2).all(|w| {
-                    w[0].header.height + 1 == w[1].header.height
-                        && w[1].header.prev_msg == w[0].clone().canonicalized_hash().unwrap()
-                })
-            })
-        {
-            Ok(Ok((vs, newest)))
-        } else {
-            Ok(Err(ConsistentMessages::AllMessagesNotReady))
-        }
+        Ok(())
     }
 
     pub fn get_all_messages_collect_into_inconsistent(
@@ -155,10 +140,10 @@ where
         map: &mut HashMap<CanonicalEnvelopeHash, Envelope>,
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
-            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
-        } else {
             self.0
                 .prepare(include_str!("sql/get/all_messages_after.sql"))?
+        } else {
+            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -196,6 +181,17 @@ where
             .prepare(include_str!("sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        debug!(tips=?vs.iter().map(|e| (e.header.height, e.get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
+        trace!(envelopes=?vs, "Tips Returned");
+        Ok(vs)
+    }
+
+    pub fn get_all_genesis(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+        let mut stmt = self.0.prepare(include_str!("sql/get/all_genesis.sql"))?;
+        let rows = stmt.query([])?;
+        let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        debug!(tips=?vs.iter().map(|e| (e.header.height, e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
+        trace!(envelopes=?vs, "Genesis Tips Returned");
         Ok(vs)
     }
 
@@ -212,7 +208,8 @@ where
         let _prev = sha256::Hash::hash(&[]);
         let _prev_height = 0;
         for v in vs.windows(2) {
-            if v[0].clone().canonicalized_hash().unwrap() != v[1].header.prev_msg
+            if v[0].clone().canonicalized_hash().unwrap()
+                != v[1].header.ancestors.as_ref().unwrap().prev_msg
                 || v[0].header.height + 1 != v[1].header.height
                 || Some(v[0].header.next_nonce) != v[1].extract_used_nonce()
             {
@@ -241,7 +238,7 @@ where
     pub fn get_all_hidden_services(&self) -> Result<Vec<PeerInfo>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT service_url, port, fetch_from, push_to FROM hidden_services")?;
+            .prepare("SELECT service_url, port, fetch_from, push_to, allow_unsolicited_tips FROM hidden_services")?;
         let results = stmt
             .query([])?
             .map(|r| {
@@ -249,11 +246,13 @@ where
                 let port = r.get(1)?;
                 let fetch_from = r.get(2)?;
                 let push_to = r.get(3)?;
+                let allow_unsolicited_tips = r.get(4)?;
                 Ok(PeerInfo {
                     service_url,
                     port,
                     fetch_from,
                     push_to,
+                    allow_unsolicited_tips,
                 })
             })
             .collect()?;

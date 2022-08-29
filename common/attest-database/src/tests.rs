@@ -12,16 +12,18 @@ use sapio_bitcoin::KeyPair;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::sync::Arc;
+use test_log::test;
 use tokio::sync::Mutex;
+use tracing::debug;
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_setup_db() {
     let conn = setup_db().await;
     // Tests that setup can be called more than once...
     conn.get_handle().await.setup_tables();
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_add_user() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
@@ -29,7 +31,7 @@ async fn test_add_user() {
     make_test_user(&secp, &conn.get_handle().await, test_user);
 }
 
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_reused_nonce() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
@@ -114,7 +116,7 @@ fn print_db(handle: &MsgDBHandle) {
         );
     }
 }
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_envelope_creation() {
     let mut all_past_tips = BTreeSet::<CanonicalEnvelopeHash>::new();
     let mut disconnected_tip = vec![];
@@ -158,7 +160,7 @@ async fn test_envelope_creation() {
     };
     let secp = Secp256k1::new();
     let conn = setup_db().await;
-    let mut handle = conn.get_handle().await;
+    let handle = conn.get_handle().await;
     const N_USERS: usize = 10;
     for user_id in 0..N_USERS {
         let test_user = format!("Test_User_{}", user_id);
@@ -263,7 +265,10 @@ async fn test_envelope_creation() {
         }
     }
 
-    handle.attach_tips().unwrap();
+    let tips_attached = handle.attach_tips().unwrap();
+    debug!(tips_attached);
+    let tips_attached = handle.attach_tips().unwrap();
+    assert_eq!(tips_attached, 0);
 
     let known_tips: Vec<_> = handle
         .get_tip_for_known_keys()
@@ -331,7 +336,7 @@ async fn setup_db() -> MsgDB {
     conn.get_handle().await.setup_tables();
     conn
 }
-#[tokio::test]
+#[test(tokio::test)]
 async fn test_tables() {
     let conn = setup_db().await;
     let handle = conn.get_handle().await;
