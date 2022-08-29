@@ -1,6 +1,6 @@
 use std::{error::Error, path::PathBuf, sync::Arc};
 
-use attest_messages::{nonce::PrecomittedNonce, Ancestors, Envelope, Header, Unsigned};
+use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
 use attest_util::ensure_dir;
 use connection::MsgDB;
 use ruma_serde::CanonicalJsonValue::Null;
@@ -9,7 +9,6 @@ use sapio_bitcoin::{
     secp256k1::{rand, Secp256k1, Signing},
     KeyPair,
 };
-use serde_json::Value;
 
 pub mod connection;
 pub mod db_handle;
@@ -65,7 +64,7 @@ pub fn generate_new_user<C: Signing>(
             0,
             sent_time_ms,
             Unsigned::new(Default::default()),
-            Default::default()
+            Default::default(),
         ),
         Null,
     );

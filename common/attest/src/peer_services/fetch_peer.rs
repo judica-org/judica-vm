@@ -1,5 +1,3 @@
-use std::pin::Pin;
-
 use super::*;
 use crate::attestations::client::AttestationClient;
 use crate::attestations::client::NotifyOnDrop;
@@ -9,10 +7,9 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use attest_util::now;
 use attest_util::INFER_UNIT;
-use futures::Future;
+
 use tokio;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::Notify;
 
 use tracing::info;
 use tracing::trace;
@@ -132,7 +129,7 @@ async fn handle_envelope<C: Verification + 'static>(
     conn: &MsgDB,
     request_tips: &UnboundedSender<Vec<CanonicalEnvelopeHash>>,
     allow_unsolicited_tips: bool,
-    cancel_inflight: NotifyOnDrop,
+    _cancel_inflight: NotifyOnDrop,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut all_tips = Vec::new();
     for envelope in resp {
@@ -156,7 +153,7 @@ async fn handle_envelope<C: Verification + 'static>(
                         Ok(key) => {
                             trace!(key, ?service, "Created New Genesis From Peer");
                         }
-                        Err((SqliteFail::SqliteConstraintUnique, msg)) => {
+                        Err((SqliteFail::SqliteConstraintUnique, _msg)) => {
                             trace!("Already Have this Chain");
                         }
                         Err(e) => {
@@ -169,7 +166,7 @@ async fn handle_envelope<C: Verification + 'static>(
                         Ok(_) => {}
                         // This means that a conststraint, most likely that the
                         // genesis header must be known, was not allowed
-                        Err((SqliteFail::SqliteConstraintCheck, msg)) => {
+                        Err((SqliteFail::SqliteConstraintCheck, _msg)) => {
                             // try fetching the missing tip
                             if allow_unsolicited_tips {
                                 all_tips.push(envelope.get_genesis_hash());

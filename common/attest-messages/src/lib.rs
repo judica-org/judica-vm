@@ -11,7 +11,7 @@ use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
 use std::error::Error;
 use std::fmt::Display;
 pub mod authenticated;

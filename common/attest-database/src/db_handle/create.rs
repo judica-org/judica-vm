@@ -11,7 +11,7 @@ use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
-use serde_json::Value;
+
 use tracing::debug;
 impl<'a, T> MsgDBHandle<'a, T>
 where

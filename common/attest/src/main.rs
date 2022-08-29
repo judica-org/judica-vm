@@ -7,7 +7,6 @@ use rpc::Client;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
 use serde::{Deserialize, Serialize};
-use tracing::info;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::PathBuf;
@@ -17,6 +16,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::channel;
 use tokio::task::JoinHandle;
 use tokio::time::{Interval, MissedTickBehavior};
+use tracing::info;
 mod attestations;
 mod control;
 mod peer_services;
@@ -157,7 +157,7 @@ impl AppShutdown {
         self.quit.load(Ordering::Relaxed)
     }
     pub fn begin_shutdown(&self) {
-        info!(event="SHUTDOWN", "Beginning Node Shutdown", );
+        info!(event = "SHUTDOWN", "Beginning Node Shutdown",);
         self.quit.store(true, Ordering::Relaxed)
     }
 }

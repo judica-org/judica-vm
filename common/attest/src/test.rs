@@ -12,16 +12,8 @@ use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::XOnlyPublicKey;
-use serde_json::Value;
-use std::{
-    collections::BTreeSet,
-    env::temp_dir,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+
+use std::{collections::BTreeSet, env::temp_dir, sync::Arc, time::Duration};
 use test_log::test;
 use tokio::spawn;
 use tracing::{debug, info};
@@ -222,7 +214,7 @@ async fn connect_and_test_nodes() {
 
         // TODO: signal that notifies after re-peering successful?
         // Get tips for all clients (doesn't depend on past bit processing yet)
-        let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
+        let old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
         debug!(current_tips = ?old_tips, "Tips before adding a new message");
         // Create a new message on all chain tips
         make_nth(
@@ -249,7 +241,7 @@ async fn connect_and_test_nodes() {
             .await;
         }
         check_synched(10, true).await;
-        let mut old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
+        let old_tips: BTreeSet<_> = get_all_tips(ports.clone(), client.clone()).await;
         debug!(current_tips = ?old_tips, "Tips before adding a new message");
         make_nth(
             11,
