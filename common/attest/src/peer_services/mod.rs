@@ -64,7 +64,7 @@ pub fn startup(
                 .timer_override
                 .attach_tip_while_busy_interval();
             async move {
-                while !quit.load(Ordering::Relaxed) {
+                while !quit.should_quit() {
                     interval.tick().await;
                     let handle = db.get_handle().await;
                     let n_attached = handle.attach_tips();
@@ -72,7 +72,7 @@ pub fn startup(
                 }
             }
         });
-        'outer: loop {
+        'outer: while !quit.should_quit() {
             tokio::select! {
                 query = status.recv() => {
                     match query {
@@ -87,6 +87,9 @@ pub fn startup(
                     }
                 }
                 _ = interval.tick() => { // do main loop
+                    if quit.should_quit() {
+                        break 'outer;
+                    }
                 }
             };
             let mut create_services: HashSet<_> = db
@@ -162,6 +165,7 @@ pub fn startup(
                             task_id.clone(),
                             tokio::spawn(fetch_peer::fetch_from_peer(
                                 config.clone(),
+                                quit.clone(),
                                 secp.clone(),
                                 client,
                                 (task_id.0, task_id.1),
@@ -173,7 +177,7 @@ pub fn startup(
                 }
             }
         }
-        // INFER_UNIT
+        INFER_UNIT
     });
     jh
 }

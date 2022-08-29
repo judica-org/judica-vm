@@ -20,6 +20,7 @@ use tracing::warn;
 
 pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
     config: Arc<Config>,
+    shutdown: AppShutdown,
     secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
@@ -34,6 +35,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
     // envelopes_to_process
     let mut latest_tip_fetcher = latest_tip_fetcher(
         config.clone(),
+        shutdown.clone(),
         client.clone(),
         service.clone(),
         envelopes_to_process.clone(),
@@ -41,6 +43,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
     // Reads from next_envelope, processes results, and then requests to resolve unknown tips
     let mut envelope_processor = envelope_processor(
         config.clone(),
+        shutdown.clone(),
         service.clone(),
         conn,
         secp,
@@ -51,6 +54,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
     // fetches unknown envelopes
     let mut missing_envelope_fetcher = missing_envelope_fetcher(
         config.clone(),
+        shutdown.clone(),
         client.clone(),
         service.clone(),
         envelopes_to_process.clone(),
@@ -88,6 +92,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
 /// to the missing_envelope_fetcher.
 pub(crate) fn envelope_processor<C: Verification + 'static>(
     _config: Arc<Config>,
+    shutdown: AppShutdown,
     service: (String, u16),
     conn: MsgDB,
     secp: Arc<Secp256k1<C>>,
@@ -101,6 +106,7 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
                 // Prefer to process envelopes
                 handle_envelope(
                     service.clone(),
+                    shutdown.clone(),
                     resp,
                     secp.as_ref(),
                     &conn,
@@ -109,6 +115,9 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
                     cancel_inflight,
                 )
                 .await?;
+                if shutdown.should_quit() {
+                    break;
+                }
             }
             INFER_UNIT
         })
@@ -117,6 +126,7 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
 }
 async fn handle_envelope<C: Verification + 'static>(
     service: (String, u16),
+    shutdown: AppShutdown,
     resp: Vec<Envelope>,
     secp: &Secp256k1<C>,
     conn: &MsgDB,
@@ -126,6 +136,9 @@ async fn handle_envelope<C: Verification + 'static>(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut all_tips = Vec::new();
     for envelope in resp {
+        if shutdown.should_quit() {
+            break;
+        }
         tracing::debug!(height = envelope.header().height(),
                         hash = ?envelope.canonicalized_hash_ref(),
                         genesis = ?envelope.get_genesis_hash(),
@@ -207,12 +220,14 @@ async fn handle_envelope<C: Verification + 'static>(
 /// latest tips
 pub(crate) fn latest_tip_fetcher(
     config: Arc<Config>,
+
+    shutdown: AppShutdown,
     client: AttestationClient,
     service: (String, u16),
     envelopes_to_process: tokio::sync::mpsc::UnboundedSender<(Vec<Envelope>, NotifyOnDrop)>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     tokio::spawn(async move {
-        loop {
+        while !shutdown.should_quit() {
             let sp = tracing::debug_span!(
                 "Fetching Latest Tips",
                 ?service,
@@ -225,7 +240,7 @@ pub(crate) fn latest_tip_fetcher(
             envelopes_to_process.send((resp, NotifyOnDrop::empty()))?;
             config.peer_service.timer_override.tip_fetch_delay().await;
         }
-        // INFER_UNIT
+        INFER_UNIT
     })
 }
 
@@ -233,6 +248,7 @@ pub(crate) fn latest_tip_fetcher(
 /// of those hashes, then sends those envelopers for processing.
 pub(crate) fn missing_envelope_fetcher(
     _config: Arc<Config>,
+    shutdown: AppShutdown,
     client: AttestationClient,
     service: (String, u16),
     envelopes_to_process: tokio::sync::mpsc::UnboundedSender<(Vec<Envelope>, NotifyOnDrop)>,
@@ -240,7 +256,7 @@ pub(crate) fn missing_envelope_fetcher(
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
     tokio::spawn(async move {
         let (url, port) = &service;
-        loop {
+        while !shutdown.should_quit() {
             info!(?service, "waiting for tips to fetch");
             if let Some(tips) = tips_to_resolve.recv().await {
                 info!(?service, n = tips.len(), "got tips to fetch");
