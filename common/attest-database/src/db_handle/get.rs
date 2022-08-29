@@ -285,7 +285,7 @@ where
     {
         let mut stmt = self
             .0
-            .prepare("SELECT EXISTS(SELECT 1 FROM messages WHERE hash = ?)")?;
+            .prepare("SELECT 1 FROM messages WHERE hash = ? LIMIT 1")?;
         hashes
             .filter_map(|hash| match stmt.exists([hash]) {
                 Ok(true) => None,
