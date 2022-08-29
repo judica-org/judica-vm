@@ -2,6 +2,7 @@ use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
+use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::{
     secp256k1::{
         rand::{self},
@@ -81,7 +82,7 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
         let handle = db.get_handle().await;
         if let Ok(v) = handle.load_all_messages_for_user_by_key(&oracle_publickey)? {
             for x in v {
-                let d = serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg)?;
+                let d = serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg.into())?;
                 match d.data {
                     BroadcastByHost::Sequence(l) => already_sequenced.extend(l.iter()),
                     BroadcastByHost::NewPeer(_) => {}
@@ -171,7 +172,7 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
         }
 
         {
-            let msg = serde_json::to_value(Channelized {
+            let msg = ruma_serde::to_canonical_value(Channelized {
                 data: BroadcastByHost::Sequence(to_sequence),
                 channel: "default".into(),
             })?;

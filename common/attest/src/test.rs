@@ -10,6 +10,7 @@ use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
+use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde_json::Value;
 use std::{
@@ -308,7 +309,7 @@ async fn test_envelope_inner_tips(
     }
 }
 
-fn nth_msg_per_port(port: u16, n: u64) -> Value {
+fn nth_msg_per_port(port: u16, n: u64) -> CanonicalJsonValue {
     format!("test-{}-for-{}", n, port).into()
 }
 async fn make_nth(

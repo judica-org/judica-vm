@@ -1,6 +1,7 @@
 use self::checkpoints::BitcoinCheckPoints;
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 
+use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
@@ -55,7 +56,7 @@ impl std::fmt::Debug for Header {
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct Envelope {
     pub header: Header,
-    pub msg: Value,
+    pub msg: CanonicalJsonValue,
 }
 
 impl std::fmt::Debug for Envelope {

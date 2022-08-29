@@ -1,10 +1,11 @@
+use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Serialize, Deserialize)]
 pub struct PushMsg {
-    pub msg: Value,
+    pub msg: CanonicalJsonValue,
     pub key: XOnlyPublicKey,
 }
 

@@ -3,6 +3,7 @@ use std::{error::Error, path::PathBuf, sync::Arc};
 use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
 use attest_util::ensure_dir;
 use connection::MsgDB;
+use ruma_serde::CanonicalJsonValue::Null;
 use rusqlite::Connection;
 use sapio_bitcoin::{
     secp256k1::{rand, Secp256k1, Signing},
@@ -66,7 +67,7 @@ pub fn generate_new_user<C: Signing>(
             },
             checkpoints: Default::default(),
         },
-        msg: Value::Null,
+        msg: Null,
     };
     msg.sign_with(&keypair, &secp, nonce)?;
     Ok((keypair, next_nonce, msg))

@@ -12,6 +12,7 @@ serde = "1.0.136"
 serde_derive = "1.0.136"
 directories = "3.0.1"
 fallible-iterator = "0.2.0"
+ruma-serde = "0.6.0"
 
 [dependencies.attest-util]
 path = "../attest-util"

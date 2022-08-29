@@ -6,6 +6,7 @@ use attest_messages::Envelope;
 use attest_messages::Header;
 use attest_messages::SigningError;
 use attest_messages::Unsigned;
+use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
@@ -21,7 +22,7 @@ where
     /// Calling multiple times with a given nonce would result in nonce reuse.
     pub fn wrap_message_in_envelope_for_user_by_key<C: Signing>(
         &self,
-        msg: Value,
+        msg: CanonicalJsonValue,
         keypair: &KeyPair,
         secp: &Secp256k1<C>,
         bitcoin_tipcache: Option<BitcoinCheckPoints>,
