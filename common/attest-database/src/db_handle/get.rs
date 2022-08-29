@@ -127,7 +127,7 @@ where
         };
         rows.map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
             .for_each(|(v, id)| {
-                map.insert(v.canonicalized_hash_ref().unwrap(), v);
+                map.insert(v.canonicalized_hash_ref(), v);
                 *newer = (*newer).max(Some(id));
                 Ok(())
             })?;
@@ -151,7 +151,7 @@ where
         };
         rows.map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
             .for_each(|(v, id)| {
-                map.insert(v.canonicalized_hash_ref().unwrap(), v);
+                map.insert(v.canonicalized_hash_ref(), v);
                 *newer = (*newer).max(Some(id));
                 Ok(())
             })?;
@@ -208,8 +208,7 @@ where
         let _prev = sha256::Hash::hash(&[]);
         let _prev_height = 0;
         for v in vs.windows(2) {
-            if v[0].clone().canonicalized_hash().unwrap()
-                != v[1].header.ancestors.as_ref().unwrap().prev_msg
+            if v[0].clone().canonicalized_hash() != v[1].header.ancestors.as_ref().unwrap().prev_msg
                 || v[0].header.height + 1 != v[1].header.height
                 || Some(v[0].header.next_nonce) != v[1].extract_used_nonce()
             {

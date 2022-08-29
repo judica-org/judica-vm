@@ -122,8 +122,7 @@ where
         trace!(?genesis, ?data, "attempt to insert envelope");
         let hash = data
             .clone()
-            .canonicalized_hash()
-            .expect("Hashing should always succeed?");
+            .canonicalized_hash();
         match stmt.insert(rusqlite::named_params! {
                 ":body": data,
                 ":hash": hash,

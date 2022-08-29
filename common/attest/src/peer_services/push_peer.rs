@@ -71,7 +71,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                                 if t != *previous {
                                     warn!(url, port, ?t, ?previous, ?genesis, "Conflict Seen");
                                 } else {
-                                    info!(url, port, hash=?t.canonicalized_hash_ref().unwrap(), ?genesis, task="PUSH::tip_tracker", "Nothing New");
+                                    info!(url, port, hash=?t.canonicalized_hash_ref(), ?genesis, task="PUSH::tip_tracker", "Nothing New");
                                     trace!(url, port, ?t, task = "PUSH::tip_tracker", "No Updates");
                                 }
                             }

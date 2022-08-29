@@ -72,7 +72,7 @@ pub async fn post_message(
 ) -> Result<(Response<()>, Json<Vec<Outcome>>), (StatusCode, &'static str)> {
     let mut authed = Vec::with_capacity(envelopes.len());
     for envelope in envelopes {
-        tracing::info!(method="POST /msg", from=?addr, envelope=?envelope.canonicalized_hash_ref().unwrap(), "Envelope Received" );
+        tracing::info!(method="POST /msg", from=?addr, envelope=?envelope.canonicalized_hash_ref(), "Envelope Received" );
         tracing::trace!(method="POST /msg", from=?addr, envelope=?envelope, "Envelope Received" );
         let envelope = envelope.self_authenticate(&Secp256k1::new()).map_err(|_| {
             tracing::debug!("Invalid Message From Peer");

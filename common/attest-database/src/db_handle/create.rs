@@ -39,7 +39,7 @@ where
         let tips = tips
             .iter()
             .map(|tip| {
-                let h = tip.clone().canonicalized_hash()?;
+                let h = tip.clone().canonicalized_hash();
                 Some((tip.header.key, tip.header.height, h))
             })
             .flatten()
@@ -59,7 +59,7 @@ where
                 height: my_tip.header.height + 1,
                 ancestors: Some(Ancestors {
                     genesis: my_tip.get_genesis_hash(),
-                    prev_msg: my_tip.canonicalized_hash_ref().unwrap(),
+                    prev_msg: my_tip.canonicalized_hash_ref(),
                 }),
                 tips,
                 next_nonce,

@@ -271,7 +271,6 @@ async fn get_all_tips(
         .flatten()
         .flatten()
         .map(|c| c.canonicalized_hash_ref())
-        .flatten()
         .collect()
 }
 async fn test_envelope_inner_tips(

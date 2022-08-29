@@ -134,7 +134,7 @@ async fn test_envelope_creation() {
             assert!(tips.contains(envelope.inner_ref()));
             assert_eq!(
                 tips.iter()
-                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
+                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref()))
                     .count(),
                 1
             );
@@ -152,7 +152,7 @@ async fn test_envelope_creation() {
             assert_eq!(
                 known_tips
                     .iter()
-                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref().unwrap()))
+                    .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref()))
                     .count(),
                 1
             );
@@ -204,10 +204,7 @@ async fn test_envelope_creation() {
                 .self_authenticate(&secp)
                 .unwrap();
             envs.push((
-                envelope_disconnected
-                    .inner_ref()
-                    .canonicalized_hash_ref()
-                    .unwrap(),
+                envelope_disconnected.inner_ref().canonicalized_hash_ref(),
                 envelope_disconnected.clone(),
             ));
             if i != special_idx {
@@ -251,11 +248,8 @@ async fn test_envelope_creation() {
                 .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
                 .unwrap();
             assert_eq!(
-                my_tip.canonicalized_hash_ref().unwrap(),
-                disconnected[user_id]
-                    .inner_ref()
-                    .canonicalized_hash_ref()
-                    .unwrap()
+                my_tip.canonicalized_hash_ref(),
+                disconnected[user_id].inner_ref().canonicalized_hash_ref()
             );
         }
         {
@@ -274,14 +268,14 @@ async fn test_envelope_creation() {
         .get_tip_for_known_keys()
         .unwrap()
         .iter()
-        .map(|t| t.canonicalized_hash_ref().unwrap())
+        .map(|t| t.canonicalized_hash_ref())
         .collect();
     for user_id in 0..N_USERS {
         {
             let my_tip = handle
                 .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
                 .unwrap();
-            assert_eq!(my_tip.canonicalized_hash_ref().unwrap(), final_msg[user_id]);
+            assert_eq!(my_tip.canonicalized_hash_ref(), final_msg[user_id]);
         }
         {
             assert_eq!(known_tips.len(), N_USERS);
@@ -305,10 +299,10 @@ async fn test_envelope_creation() {
         assert_eq!(known_tips.len(), kps.len() + 1);
         let mut tip_hashes: Vec<_> = known_tips
             .iter()
-            .map(|t| t.canonicalized_hash_ref().unwrap())
+            .map(|t| t.canonicalized_hash_ref())
             .collect();
         tip_hashes.sort();
-        final_msg.push(envelope_3.inner_ref().canonicalized_hash_ref().unwrap());
+        final_msg.push(envelope_3.inner_ref().canonicalized_hash_ref());
         final_msg.sort();
         assert_eq!(&tip_hashes[..], &final_msg[..]);
     }

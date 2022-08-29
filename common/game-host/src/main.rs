@@ -92,8 +92,8 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
         }
     }
     let mut all_unprocessed_messages = HashMap::new();
-    let mut messages_by_user = HashMap::<XOnlyPublicKey, BTreeMap<u64, Envelope>>::new();
-    let mut last_height_sequenced_for_user: HashMap<XOnlyPublicKey, Option<u64>> =
+    let mut messages_by_user = HashMap::<XOnlyPublicKey, BTreeMap<i64, Envelope>>::new();
+    let mut last_height_sequenced_for_user: HashMap<XOnlyPublicKey, Option<i64>> =
         Default::default();
     loop {
         // Get All the messages that we've not yet seen, but incosistently
@@ -163,8 +163,7 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
                 to_sequence.push_back(
                     ms.remove(&k)
                         .expect("Must be present")
-                        .canonicalized_hash_ref()
-                        .unwrap(),
+                        .canonicalized_hash_ref(),
                 );
             }
             // Set the next height

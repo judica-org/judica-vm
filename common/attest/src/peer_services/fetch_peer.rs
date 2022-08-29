@@ -127,7 +127,7 @@ async fn handle_envelope<C: Verification + 'static>(
     let mut all_tips = Vec::new();
     for envelope in resp {
         tracing::debug!(height = envelope.header.height,
-                        hash = ?envelope.canonicalized_hash_ref().unwrap(),
+                        hash = ?envelope.canonicalized_hash_ref(),
                         genesis = ?envelope.get_genesis_hash(),
                         "Processing this envelope");
         tracing::trace!(?envelope, "Processing this envelope");
@@ -168,7 +168,7 @@ async fn handle_envelope<C: Verification + 'static>(
                         Err((SqliteFail::SqliteConstraintNotNull, msg)) => {
                             if allow_unsolicited_tips {
                                 debug!(
-                                    hash = ?authentic.inner_ref().canonicalized_hash_ref().unwrap(),
+                                    hash = ?authentic.inner_ref().canonicalized_hash_ref(),
                                     ?msg,
                                     "unsolicited tip received",
                                 );

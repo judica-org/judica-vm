@@ -46,7 +46,7 @@ impl AttestationClient {
             .await?
             .json()
             .await?;
-        debug!(v=?resp.iter().map(|v|(v.header.height, v.get_genesis_hash(), v.canonicalized_hash_ref().unwrap())).collect::<Vec<_>>());
+        debug!(v=?resp.iter().map(|v|(v.header.height, v.get_genesis_hash(), v.canonicalized_hash_ref())).collect::<Vec<_>>());
         Ok(resp)
     }
     pub async fn get_tips(

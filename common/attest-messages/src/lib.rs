@@ -41,9 +41,9 @@ pub struct Header {
     // after.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
-    pub tips: Vec<(XOnlyPublicKey, u64, CanonicalEnvelopeHash)>,
-    pub height: u64,
-    pub sent_time_ms: u64,
+    pub tips: Vec<(XOnlyPublicKey, i64, CanonicalEnvelopeHash)>,
+    pub height: i64,
+    pub sent_time_ms: i64,
     pub unsigned: Unsigned,
     pub checkpoints: BitcoinCheckPoints,
 }
@@ -119,7 +119,7 @@ impl Envelope {
     pub fn get_genesis_hash(&self) -> CanonicalEnvelopeHash {
         match self.header.ancestors {
             Some(ref a) => a.genesis,
-            None => self.canonicalized_hash_ref().unwrap(),
+            None => self.canonicalized_hash_ref(),
         }
     }
     /// Returns the nonce used in this [`Envelope`].
@@ -195,17 +195,18 @@ impl Envelope {
     /// Creates the canonicalized_hash for the [`Envelope`].
     ///
     /// This hashes everything, including unsigned data.
-    pub fn canonicalized_hash(self) -> Option<CanonicalEnvelopeHash> {
+    pub fn canonicalized_hash(self) -> CanonicalEnvelopeHash {
         self.canonicalized_hash_ref()
     }
 
     /// Creates the canonicalized_hash for the [`Envelope`].
     ///
     /// This hashes everything, including unsigned data.
-    pub fn canonicalized_hash_ref(&self) -> Option<CanonicalEnvelopeHash> {
-        let canonical = ruma_serde::to_canonical_value(self).ok()?;
-        Some(CanonicalEnvelopeHash(
-            sapio_bitcoin::hashes::sha256::Hash::hash(canonical.to_string().as_bytes()),
+    pub fn canonicalized_hash_ref(&self) -> CanonicalEnvelopeHash {
+        let canonical =
+            ruma_serde::to_canonical_value(self).expect("Canonicalization Must Succeed");
+        CanonicalEnvelopeHash(sapio_bitcoin::hashes::sha256::Hash::hash(
+            canonical.to_string().as_bytes(),
         ))
     }
     /// Helper to get the [`SchnorrMessage`] from an envelope.
@@ -215,7 +216,7 @@ impl Envelope {
         if self.header.unsigned.signature.is_some() {
             return None;
         }
-        let msg_hash = self.canonicalized_hash()?;
+        let msg_hash = self.canonicalized_hash();
         let msg = SchnorrMessage::from(W(msg_hash.0));
         Some(SignatureDigest(msg))
     }

@@ -72,7 +72,7 @@ async fn get_status(
         let tips = tips
             .into_iter()
             .map(|t| TipData {
-                hash: t.canonicalized_hash_ref().unwrap(),
+                hash: t.canonicalized_hash_ref(),
                 envelope: t,
             })
             .collect();
