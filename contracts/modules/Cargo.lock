@@ -535,7 +535,6 @@ dependencies = [
 name = "sapio-wasm-payment-pool"
 version = "0.1.0"
 dependencies = [
- "batching-trait",
  "sapio",
  "sapio-base",
  "sapio-bitcoin",
