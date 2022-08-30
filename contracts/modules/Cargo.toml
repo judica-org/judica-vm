@@ -1,0 +1,2 @@
+[workspace]
+members = ["batching-trait", "mining_game"]
