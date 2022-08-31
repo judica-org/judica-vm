@@ -2,50 +2,21 @@ use attest_database::connection::MsgDB;
 use attest_util::INFER_UNIT;
 use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use bitcoincore_rpc_async as rpc;
+use globals::{AppShutdown, Globals};
 use rpc::Client;
 use sapio_bitcoin::secp256k1::{Secp256k1, Verification};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc::channel;
 use tokio::task::JoinHandle;
-use tracing::info;
-
 mod attestations;
 mod configuration;
 mod control;
+mod globals;
 mod peer_services;
 mod tor;
-
-#[derive(Clone)]
-pub struct AppShutdown {
-    quit: Arc<AtomicBool>,
-}
-
-impl std::ops::Deref for AppShutdown {
-    type Target = Arc<AtomicBool>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.quit
-    }
-}
-
-impl AppShutdown {
-    pub fn new() -> Self {
-        Self {
-            quit: Arc::new(AtomicBool::new(false)),
-        }
-    }
-    pub fn should_quit(&self) -> bool {
-        self.quit.load(Ordering::Relaxed)
-    }
-    pub fn begin_shutdown(&self) {
-        info!(event = "SHUTDOWN", "Beginning Node Shutdown",);
-        self.quit.store(true, Ordering::Relaxed)
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -64,37 +35,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             config
         }
     };
-    init_main(config, AppShutdown::new()).await
+    let g = Arc::new(Globals {
+        config,
+        shutdown: AppShutdown::new(),
+    });
+    init_main(g).await
 }
-async fn init_main(
-    config: Arc<configuration::Config>,
-    quit: AppShutdown,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn init_main(g: Arc<Globals>) -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::debug!("Config Loaded");
     let bitcoin_client =
-        Arc::new(Client::new(config.bitcoin.url.clone(), config.bitcoin.auth.clone()).await?);
+        Arc::new(Client::new(g.config.bitcoin.url.clone(), g.config.bitcoin.auth.clone()).await?);
     tracing::debug!("Bitcoin Client Loaded");
-    let bitcoin_checkpoints =
-        Arc::new(BitcoinCheckPointCache::new(bitcoin_client, None, (*quit).clone()).await);
+    let bitcoin_checkpoints = Arc::new(
+        BitcoinCheckPointCache::new(bitcoin_client, None, (*g.shutdown.clone()).clone()).await,
+    );
     let mut checkpoint_service = bitcoin_checkpoints
         .run_cache_service()
         .ok_or("Checkpoint service already started")?;
     tracing::debug!("Checkpoint Service Started");
     tracing::debug!("Opening DB");
-    let mdb = config.setup_db().await?;
+    let mdb = g.config.setup_db().await?;
     tracing::debug!("Database Connection Setup");
-    let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
-    let mut tor_service = tor::start(config.clone()).await?;
+    let mut attestation_server = attestations::server::run(g.clone(), mdb.clone()).await;
+    let mut tor_service = tor::start(g.clone()).await?;
     let (tx_peer_status, rx_peer_status) = channel(1);
-    let mut fetching_client =
-        peer_services::startup(config.clone(), mdb.clone(), quit.clone(), rx_peer_status);
-    let mut control_server = control::server::run(
-        config.clone(),
-        mdb.clone(),
-        tx_peer_status,
-        bitcoin_checkpoints,
-    )
-    .await;
+    let mut fetching_client = peer_services::startup(g.clone(), mdb.clone(), rx_peer_status);
+    let mut control_server =
+        control::server::run(g.clone(), mdb.clone(), tx_peer_status, bitcoin_checkpoints).await;
 
     tracing::debug!("Starting Subservices");
     let mut skip = None;
@@ -120,7 +87,7 @@ async fn init_main(
         skip.replace("control");
     });
     tracing::debug!("Shutting Down Subservices");
-    quit.begin_shutdown();
+    g.shutdown.begin_shutdown();
     let svcs = [
         ("tor", tor_service),
         ("attest", attestation_server),

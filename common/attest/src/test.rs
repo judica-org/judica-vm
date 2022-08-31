@@ -1,12 +1,13 @@
 use crate::{
     attestations::client::AttestationClient,
     configuration::BitcoinConfig,
-    configuration::{ControlConfig, PeerServiceConfig},
     configuration::{Config, PeerServicesTimers},
+    configuration::{ControlConfig, PeerServiceConfig},
     control::{
         client::ControlClient,
         query::{Outcome, PushMsg, Subscribe},
     },
+    globals::Globals,
     init_main, AppShutdown,
 };
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
@@ -55,8 +56,8 @@ where
     let mut ports = vec![];
     for test_id in 0..nodes {
         let btc_config = get_btc_config();
-        let quit = AppShutdown::new();
-        quits.push(quit.clone());
+        let shutdown = AppShutdown::new();
+        quits.push(shutdown.clone());
         let mut dir = temp_dir();
         let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
         use sapio_bitcoin::secp256k1::rand::Rng;
@@ -79,7 +80,13 @@ where
             test_db: true,
         };
         ports.push((config.attestation_port, config.control.port));
-        let task_one = spawn(async move { init_main(Arc::new(config), quit).await });
+        let task_one = spawn(async move {
+            init_main(Arc::new(Globals {
+                config: Arc::new(config),
+                shutdown,
+            }))
+            .await
+        });
         unord.push(task_one);
     }
 

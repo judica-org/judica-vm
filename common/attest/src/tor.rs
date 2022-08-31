@@ -1,10 +1,8 @@
-use std::{error::Error, fmt::Display, sync::Arc};
-
+use crate::globals::Globals;
 use attest_util::{ensure_dir, INFER_UNIT};
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
+use std::{error::Error, fmt::Display, sync::Arc};
 use tokio::{spawn, sync::Notify, task::JoinHandle};
-
-use crate::configuration::{Config, self};
 
 #[derive(Debug)]
 pub enum TorError {
@@ -20,9 +18,9 @@ impl Display for TorError {
 impl Error for TorError {}
 
 pub async fn start(
-    config: Arc<configuration::Config>,
+    g: Arc<Globals>,
 ) -> Result<JoinHandle<Result<(), Box<dyn Error + Send + Sync>>>, Box<dyn Error + Send + Sync>> {
-    if let Some(tor_config) = config.tor.clone() {
+    if let Some(tor_config) = g.config.tor.clone() {
         ensure_dir(tor_config.directory.clone())
             .await
             .map_err(|e| format!("{}", e))?;
@@ -38,7 +36,7 @@ pub async fn start(
                 .flag(TorFlag::HiddenServiceDir(buf.to_str().unwrap().into()))
                 .flag(TorFlag::HiddenServiceVersion(HiddenServiceVersion::V3))
                 .flag(TorFlag::HiddenServicePort(
-                    TorAddress::Port(config.attestation_port),
+                    TorAddress::Port(g.config.attestation_port),
                     None.into(),
                 ))
                 .start_background()
