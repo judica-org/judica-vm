@@ -4,6 +4,7 @@ use attest_util::INFER_UNIT;
 use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use bitcoincore_rpc_async as rpc;
 use rpc::Client;
+use rusqlite::Connection;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio::time::{Interval, MissedTickBehavior};
 use tracing::info;
@@ -127,6 +129,8 @@ pub struct Config {
     #[serde(default)]
     pub prefix: Option<PathBuf>,
     pub peer_service: PeerServiceConfig,
+    #[serde(skip, default)]
+    pub test_db: bool,
 }
 
 fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
@@ -196,10 +200,7 @@ async fn init_main(
         .ok_or("Checkpoint service already started")?;
     tracing::debug!("Checkpoint Service Started");
     tracing::debug!("Opening DB");
-    let application = format!("attestations.{}", config.subname);
-    let mdb = setup_db(&application, config.prefix.clone())
-        .await
-        .map_err(|e| format!("{}", e))?;
+    let mdb = config.setup_db().await?;
     tracing::debug!("Database Connection Setup");
     let mut attestation_server = attestations::server::run(config.clone(), mdb.clone()).await;
     let mut tor_service = tor::start(config.clone()).await?;
@@ -263,6 +264,22 @@ async fn init_main(
 
     tracing::debug!("Exiting");
     INFER_UNIT
+}
+
+impl Config {
+    async fn setup_db(&self) -> Result<MsgDB, Box<dyn Error + Send + Sync>> {
+        if self.test_db {
+            let db = MsgDB::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())));
+            db.get_handle().await.setup_tables();
+            Ok(db)
+        } else {
+            let application = format!("attestations.{}", self.subname);
+            let mdb = setup_db(&application, self.prefix.clone())
+                .await
+                .map_err(|e| format!("{}", e))?;
+            Ok(mdb)
+        }
+    }
 }
 
 #[cfg(test)]

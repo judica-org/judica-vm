@@ -74,6 +74,7 @@ where
             },
             prefix: Some(dir),
             peer_service: crate::PeerServiceConfig { timer_override },
+            test_db: true,
         };
         ports.push((config.attestation_port, config.control.port));
         let task_one = spawn(async move { init_main(Arc::new(config), quit).await });
