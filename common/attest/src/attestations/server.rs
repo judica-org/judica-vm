@@ -1,5 +1,5 @@
 use super::query::Tips;
-use crate::{control::query::Outcome, Config};
+use crate::{control::query::Outcome, configuration::{Config, self}};
 use attest_database::connection::MsgDB;
 use attest_messages::Envelope;
 use attest_util::{AbstractResult, INFER_UNIT};

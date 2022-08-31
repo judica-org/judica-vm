@@ -9,7 +9,7 @@ use tracing::{trace, warn};
 
 use super::*;
 pub async fn push_to_peer<C: Verification + 'static>(
-    config: Arc<Config>,
+    config: Arc<configuration::Config>,
     _secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
@@ -105,7 +105,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     .scan_for_unsent_tips_delay()
                     .await;
             }
-            INFER_UNIT.map(|_| format!("Shutdown Graceful: {}", shutdown.load(Ordering::Relaxed)))
+            INFER_UNIT.map(|_| format!("Shutdown Graceful: {}", shutdown.should_quit()))
         }
     });
     let mut t2 = spawn({

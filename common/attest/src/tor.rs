@@ -4,7 +4,7 @@ use attest_util::{ensure_dir, INFER_UNIT};
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use tokio::{spawn, sync::Notify, task::JoinHandle};
 
-use crate::Config;
+use crate::configuration::{Config, self};
 
 #[derive(Debug)]
 pub enum TorError {
@@ -20,7 +20,7 @@ impl Display for TorError {
 impl Error for TorError {}
 
 pub async fn start(
-    config: Arc<Config>,
+    config: Arc<configuration::Config>,
 ) -> Result<JoinHandle<Result<(), Box<dyn Error + Send + Sync>>>, Box<dyn Error + Send + Sync>> {
     if let Some(tor_config) = config.tor.clone() {
         ensure_dir(tor_config.directory.clone())

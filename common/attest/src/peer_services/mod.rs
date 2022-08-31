@@ -27,7 +27,7 @@ pub enum PeerQuery {
     RunningTasks(Sender<Vec<TaskID>>),
 }
 pub fn startup(
-    config: Arc<Config>,
+    config: Arc<configuration::Config>,
     db: MsgDB,
     quit: AppShutdown,
     mut status: Receiver<PeerQuery>,

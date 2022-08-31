@@ -1,142 +1,23 @@
 use attest_database::connection::MsgDB;
-use attest_database::setup_db;
 use attest_util::INFER_UNIT;
 use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use bitcoincore_rpc_async as rpc;
 use rpc::Client;
-use rusqlite::Connection;
-use sapio_bitcoin::secp256k1::rand::Rng;
-use sapio_bitcoin::secp256k1::{rand, Secp256k1, Verification};
+use sapio_bitcoin::secp256k1::{Secp256k1, Verification};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::mpsc::channel;
-use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tokio::time::{Interval, MissedTickBehavior};
 use tracing::info;
+
 mod attestations;
+mod configuration;
 mod control;
 mod peer_services;
 mod tor;
-
-const fn default_port() -> u16 {
-    46789
-}
-/// The different authentication methods for the client.
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "rpc::Auth")]
-pub enum Auth {
-    None,
-    UserPass(String, String),
-    CookieFile(PathBuf),
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct BitcoinConfig {
-    pub url: String,
-    #[serde(with = "Auth")]
-    pub auth: rpc::Auth,
-}
-
-fn default_socks_port() -> u16 {
-    19050
-}
-#[derive(Serialize, Deserialize, Clone)]
-pub struct TorConfig {
-    directory: PathBuf,
-    #[serde(default = "default_socks_port")]
-    socks_port: u16,
-}
-
-fn default_control_port() -> u16 {
-    14322
-}
-#[derive(Serialize, Deserialize)]
-pub struct ControlConfig {
-    #[serde(default = "default_control_port")]
-    port: u16,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PeerServicesTimers {
-    pub reconnect_rate: Duration,
-    pub scan_for_unsent_tips_rate: Duration,
-    pub attach_tip_while_busy_rate: Duration,
-    pub tip_fetch_rate: Duration,
-    pub entropy_range: Duration,
-}
-
-impl PeerServicesTimers {
-    fn scaled_default(scale: f64) -> Self {
-        Self {
-            reconnect_rate: Duration::from_millis((30000 as f64 * scale) as u64),
-            scan_for_unsent_tips_rate: Duration::from_millis((10000 as f64 * scale) as u64),
-            attach_tip_while_busy_rate: Duration::from_millis((30000 as f64 * scale) as u64),
-            tip_fetch_rate: Duration::from_millis((15000 as f64 * scale) as u64),
-            entropy_range: Duration::from_millis((1000 as f64 * scale) as u64),
-        }
-    }
-}
-impl Default for PeerServicesTimers {
-    fn default() -> Self {
-        Self::scaled_default(1.0)
-    }
-}
-impl PeerServicesTimers {
-    fn rand(&self) -> Duration {
-        rand::thread_rng().gen_range(Duration::ZERO, self.entropy_range)
-    }
-    fn reconnect_interval(&self) -> Interval {
-        let mut interval = tokio::time::interval(self.reconnect_rate);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        interval
-    }
-    async fn scan_for_unsent_tips_delay(&self) {
-        let d = self.scan_for_unsent_tips_rate + self.rand();
-        tokio::time::sleep(d).await
-    }
-    async fn tip_fetch_delay(&self) {
-        let d = self.tip_fetch_rate + self.rand();
-        tokio::time::sleep(d).await
-    }
-    // todo: add randomization
-    fn attach_tip_while_busy_interval(&self) -> Interval {
-        let mut interval = tokio::time::interval(self.attach_tip_while_busy_rate);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        interval
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PeerServiceConfig {
-    #[serde(default)]
-    pub timer_override: PeerServicesTimers,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Config {
-    bitcoin: BitcoinConfig,
-    pub subname: String,
-    pub tor: Option<TorConfig>,
-    #[serde(default = "default_port")]
-    pub attestation_port: u16,
-    pub control: ControlConfig,
-    #[serde(default)]
-    pub prefix: Option<PathBuf>,
-    pub peer_service: PeerServiceConfig,
-    #[serde(skip, default)]
-    pub test_db: bool,
-}
-
-fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
-    let config = std::env::var("ATTEST_CONFIG_JSON").map(|s| serde_json::from_str(&s))??;
-    Ok(Arc::new(config))
-}
 
 #[derive(Clone)]
 pub struct AppShutdown {
@@ -170,14 +51,14 @@ impl AppShutdown {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
     let args: Vec<String> = std::env::args().into_iter().collect();
-    let config = match get_config() {
+    let config = match configuration::get_config() {
         Ok(v) => v,
         Err(e) => {
             tracing::debug!("Trying to read config from file {}", e);
             if args.len() != 2 {
                 Err("Expected only 2 args, file name of config")?;
             }
-            let config: Arc<Config> = Arc::new(serde_json::from_slice(
+            let config: Arc<configuration::Config> = Arc::new(serde_json::from_slice(
                 &tokio::fs::read(&args[1]).await?[..],
             )?);
             config
@@ -186,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     init_main(config, AppShutdown::new()).await
 }
 async fn init_main(
-    config: Arc<Config>,
+    config: Arc<configuration::Config>,
     quit: AppShutdown,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::debug!("Config Loaded");
@@ -264,22 +145,6 @@ async fn init_main(
 
     tracing::debug!("Exiting");
     INFER_UNIT
-}
-
-impl Config {
-    async fn setup_db(&self) -> Result<MsgDB, Box<dyn Error + Send + Sync>> {
-        if self.test_db {
-            let db = MsgDB::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())));
-            db.get_handle().await.setup_tables();
-            Ok(db)
-        } else {
-            let application = format!("attestations.{}", self.subname);
-            let mdb = setup_db(&application, self.prefix.clone())
-                .await
-                .map_err(|e| format!("{}", e))?;
-            Ok(mdb)
-        }
-    }
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@ use super::*;
 use crate::attestations::client::AttestationClient;
 use crate::attestations::client::NotifyOnDrop;
 use crate::attestations::query::Tips;
+use crate::configuration::Config;
 use attest_database::db_handle::insert::SqliteFail;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
@@ -16,7 +17,7 @@ use tracing::trace;
 use tracing::warn;
 
 pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
-    config: Arc<Config>,
+    config: Arc<configuration::Config>,
     shutdown: AppShutdown,
     secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
@@ -216,7 +217,7 @@ async fn handle_envelope<C: Verification + 'static>(
 /// latest_tip_fetcher periodically (randomly) pings a hidden service for it's
 /// latest tips
 pub(crate) fn latest_tip_fetcher(
-    config: Arc<Config>,
+    config: Arc<configuration::Config>,
 
     shutdown: AppShutdown,
     client: AttestationClient,
@@ -244,7 +245,7 @@ pub(crate) fn latest_tip_fetcher(
 /// missing_envelope_fetcher ingests a Vec<Hash> and queries a service for the envelope
 /// of those hashes, then sends those envelopers for processing.
 pub(crate) fn missing_envelope_fetcher(
-    _config: Arc<Config>,
+    _config: Arc<configuration::Config>,
     shutdown: AppShutdown,
     client: AttestationClient,
     service: (String, u16),

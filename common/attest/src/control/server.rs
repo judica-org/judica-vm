@@ -1,6 +1,6 @@
 use crate::{
     peer_services::{PeerQuery, TaskID},
-    Config,
+    configuration::{Config, self},
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
 use attest_messages::{CanonicalEnvelopeHash, Envelope};

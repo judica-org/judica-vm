@@ -1,10 +1,13 @@
 use crate::{
     attestations::client::AttestationClient,
+    configuration::BitcoinConfig,
+    configuration::{ControlConfig, PeerServiceConfig},
+    configuration::{Config, PeerServicesTimers},
     control::{
         client::ControlClient,
         query::{Outcome, PushMsg, Subscribe},
     },
-    init_main, AppShutdown, BitcoinConfig, Config, ControlConfig,
+    init_main, AppShutdown,
 };
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use bitcoincore_rpc_async::Auth;
@@ -12,7 +15,6 @@ use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::XOnlyPublicKey;
-
 use std::{collections::BTreeSet, env::temp_dir, sync::Arc, time::Duration};
 use test_log::test;
 use tokio::spawn;
@@ -63,7 +65,7 @@ where
         dir.push(format!("test-rust-{}", bytes.to_hex()));
         tracing::debug!("Using tmpdir: {}", dir.display());
         let dir = attest_util::ensure_dir(dir).await.unwrap();
-        let timer_override = crate::PeerServicesTimers::scaled_default(0.001);
+        let timer_override = PeerServicesTimers::scaled_default(0.001);
         let config = Config {
             bitcoin: btc_config.clone(),
             subname: format!("subname-{}", test_id),
@@ -73,7 +75,7 @@ where
                 port: 14556 + test_id as u16,
             },
             prefix: Some(dir),
-            peer_service: crate::PeerServiceConfig { timer_override },
+            peer_service: PeerServiceConfig { timer_override },
             test_db: true,
         };
         ports.push((config.attestation_port, config.control.port));
