@@ -35,23 +35,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
-name = "batching-trait"
-version = "0.1.0"
-dependencies = [
- "sapio",
- "sapio-base",
- "sapio-bitcoin",
- "sapio-ctv-emulator-trait",
- "sapio-miniscript",
- "sapio-trait",
- "sapio-wasm-plugin",
- "schemars",
- "serde",
- "serde_derive",
- "serde_json",
-]
-
-[[package]]
 name = "bech32"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -230,6 +213,33 @@ name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
+
+[[package]]
+name = "mine-with-friends-board"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "mining-game-contract"
+version = "0.1.0"
+dependencies = [
+ "mine-with-friends-board",
+ "sapio",
+ "sapio-base",
+ "sapio-bitcoin",
+ "sapio-contrib",
+ "sapio-ctv-emulator-trait",
+ "sapio-miniscript",
+ "sapio-wasm-plugin",
+ "schemars",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
 
 [[package]]
 name = "num"
@@ -525,23 +535,6 @@ dependencies = [
  "jsonschema",
  "sapio-base",
  "sapio-bitcoin",
- "schemars",
- "serde",
- "serde_derive",
- "serde_json",
-]
-
-[[package]]
-name = "sapio-wasm-payment-pool"
-version = "0.1.0"
-dependencies = [
- "sapio",
- "sapio-base",
- "sapio-bitcoin",
- "sapio-contrib",
- "sapio-ctv-emulator-trait",
- "sapio-miniscript",
- "sapio-wasm-plugin",
  "schemars",
  "serde",
  "serde_derive",
