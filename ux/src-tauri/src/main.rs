@@ -97,7 +97,7 @@ async fn game_synchronizer(
         window.emit("game-board", gamestring).unwrap();
         window.emit("materials-price-data", raw_price_data).unwrap();
         window.emit("power-plants",  power_plants.power_plant_data).unwrap();
-        window.emit("energy-exchange", listings).unwrap();
+        window.emit("energy-exchange", listings.listings).unwrap();
         if let Some(w) = wait_on {
             w.await;
         } else {

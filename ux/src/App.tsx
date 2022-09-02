@@ -148,21 +148,7 @@ function App() {
       {game_board && <GameBoard g={game_board}></GameBoard>}
       <RawMaterialsMarket></RawMaterialsMarket>
       <WorkingGlobe></WorkingGlobe>
-      {<EnergyExchange listings={[{
-        price: 937,
-        currency: 'donuts',
-        seller: 95720486,
-        transfer_count: 2,
-        plant_type: 'Nuclear',
-        nft_id: 13134
-      }, {
-        price: 424,
-        currency: 'cookies',
-        seller: 3058572037,
-        transfer_count: 1,
-        plant_type: 'Solar',
-        nft_id: 26783
-      }]}></EnergyExchange>}
+      {<EnergyExchange></EnergyExchange>}
       <MoveForm></MoveForm>
       <SwitchToGame></SwitchToGame>
       <SwitchToDB></SwitchToDB>

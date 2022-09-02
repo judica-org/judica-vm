@@ -1,20 +1,53 @@
 import FactoryIcon from '@mui/icons-material/Factory';
 import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
+import { appWindow } from '@tauri-apps/api/window';
+import { useState, useEffect } from 'react';
 import { PlantType } from '../App';
 import FormModal from '../form-modal';
+import { UserPowerPlant } from '../my-plants';
 import { plant_type_color_map } from '../util';
 
 export type NFTSale = {
   currency: any,
+  nft_id: number,
   plant_type: PlantType
   price: number,
-  nft_id: number,
   seller: number,
   transfer_count: number,
 }
 
-export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
+const stub_listings: NFTSale[] = [{
+  currency: 'donuts',
+  nft_id: 13134,
+  plant_type: 'Nuclear',
+  price: 937,
+  seller: 95720486,
+  transfer_count: 2,
+}, {
+  currency: 'cookies',
+  nft_id: 26783,
+  plant_type: 'Solar',
+  price: 424,
+  seller: 3058572037,
+  transfer_count: 1,
+}]
 
+export const EnergyExchange = () => {
+  const [listings, setListings] = useState<NFTSale[] | null>(null);
+
+  useEffect(() => {
+    setListings(stub_listings)
+    const unlisten_energy_exchange = appWindow.listen("energy-exchange", (ev) => {
+      console.log(['energy-exchange'], ev);
+      // setListings(JSON.parse(ev.payload as string) as NFTSale[]);
+    });
+
+    return () => {
+      (async () => {
+        (await unlisten_energy_exchange)();
+      })();
+    }
+  }, [listings]);
   // const classes = useStyles();
   return (
     <div>
@@ -39,11 +72,11 @@ export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {listings.map((listing, index) => (
+                {listings && listings.map((listing, index) => (
                   <TableRow key={index}>
                     <TableCell>
                       {/* color code these in the future */}
-                      <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[listing.plant_type]}}/>
+                      <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[listing.plant_type] }} />
                     </TableCell>
                     <TableCell component="th" scope="row">
                       {listing.seller}
