@@ -26,7 +26,7 @@ pub(crate) struct PowerPlant {
 
 impl PowerPlant {
     /// Compute the total hashes per second of this powerplant at this game state
-    pub(crate) fn compute_hashrate(&self, game: GameBoard) -> u128 {
+    pub(crate) fn compute_hashrate(&self, game: &mut GameBoard) -> u128 {
         // TODO: Some algo that uses watts / coordinates / plant_type to compute a scalar?
         let _scale = 1000;
         let len = game.tokens.hashboards.len();
