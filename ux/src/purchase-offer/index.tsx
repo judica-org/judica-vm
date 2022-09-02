@@ -21,7 +21,7 @@ const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: nu
   };
 
   const formData = {
-    nft_id: nft_id ?? 12345
+    nft_id: nft_id ?? null
   }
 
   // for creater should be extracted out into a form util
