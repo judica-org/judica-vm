@@ -5,11 +5,12 @@ import FormModal from '../form-modal';
 import { plant_type_color_map } from '../util';
 
 export type NFTSale = {
-  price: number,
   currency: any,
+  plant_type: PlantType
+  price: number,
+  nft_id: number,
   seller: number,
   transfer_count: number,
-  plant_type: PlantType
 }
 
 export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
@@ -50,7 +51,7 @@ export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
                     <TableCell align="right">{listing.price}</TableCell>
                     <TableCell align="right">{listing.currency}</TableCell>
                     <TableCell align="right">{listing.transfer_count}</TableCell>
-                    <TableCell align="right"><FormModal title={"Purchase"} /></TableCell>
+                    <TableCell align="right"><FormModal title={"Purchase"} nft_id={listing.nft_id} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

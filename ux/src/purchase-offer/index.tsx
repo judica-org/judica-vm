@@ -3,7 +3,7 @@ import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const PurchaseOfferForm = ({ subtitle }: { subtitle: string }) => {
+const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: number }) => {
   const [schema, setSchema] = useState<null | any>(null);
 
   useEffect(() => {
@@ -20,11 +20,15 @@ const PurchaseOfferForm = ({ subtitle }: { subtitle: string }) => {
     });
   };
 
+  const formData = {
+    nft_id: nft_id ?? 12345
+  }
+
   // for creater should be extracted out into a form util
   const schema_form = useMemo<JSX.Element>(() => {
     const customFormats = { "uint128": (s: string) => { return true; } };
     if (schema)
-      return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
+      return <Form formData={formData} schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
         <button type="submit">Submit</button>
       </Form>;
 

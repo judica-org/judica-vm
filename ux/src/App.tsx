@@ -153,13 +153,15 @@ function App() {
         currency: 'donuts',
         seller: 95720486,
         transfer_count: 2,
-        plant_type: 'Nuclear'
+        plant_type: 'Nuclear',
+        nft_id: 13134
       }, {
         price: 424,
         currency: 'cookies',
         seller: 3058572037,
         transfer_count: 1,
-        plant_type: 'Solar'
+        plant_type: 'Solar',
+        nft_id: 26783
       }]}></EnergyExchange>}
       <MoveForm></MoveForm>
       <SwitchToGame></SwitchToGame>
