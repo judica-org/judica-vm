@@ -29,27 +29,67 @@ use serde::*;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::str::FromStr;
 
+struct Lobby<const current: usize>;
+struct GameStarted;
+struct Degraded(usize);
 enum Role {
     Player,
     Sequencer,
     Custodian,
 }
+trait GameState {}
+impl GameState for GameStarted {}
+impl<const n: usize> GameState for Lobby<n> {}
+impl GameState for Degraded {}
 
 struct MoveSequence {
     sequence: Vec<GameMove>,
     signature_hex: String,
 }
 
-struct MiningGame {
+struct MiningGame<T: GameState> {
     game_witnesses: Vec<XOnlyPublicKey>,
     players: BTreeMap<XOnlyPublicKey, AmountF64>,
     max_players: usize,
     sequencer: XOnlyPublicKey,
+    game_state: PhantomData<T>,
 }
 
-impl MiningGame {}
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct AddPlayer {}
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct HostKey {}
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct CensorshipProof {}
+
+fn coerce_add_player(
+    k: <MiningGame as Contract>::StatefulArguments,
+) -> Result<AddPlayer, CompilationError> {
+    serde_json::from_value(k).map_err(CompilationError::DeserializationError)
+}
+
+impl MiningGame {
+    fn host_signed() {}
+    fn quorum_signed() {}
+    #[continuation(web_api, coerce_args = "coerce_add_player")]
+    fn add_player(self, ctx: Context, player: AddPlayer) {
+        todo!()
+    }
+    fn game_start(self, ctx: Context, _unit: ()) {}
+    fn host_cheat_equivocate(self, ctx: Context, proof: HostKey) {}
+    fn host_cheat_censor(self, ctx: Context, proof: CensorshipProof) {}
+    fn host_cheat_invalid_sequence(self, ctx: Context, proof: HostKey) {}
+    fn game_end_players_win(self, ctx: Context, _unit: ()) {}
+    fn game_end_players_lose(self, ctx: Context, game_trace: MoveSequence) {}
+    fn degrade(self, ctx: Context, _unit: ()) {}
+}
+
+impl Contract for MiningGame {
+    declare! {updateable<Value>, Self::add_player, Self::game_start, Self::host_cheat, Self::game_end, Self::degrade}
+}
 
 // #[derive(Deserialize, JsonSchema, Clone)]
 // struct PaymentPool {
