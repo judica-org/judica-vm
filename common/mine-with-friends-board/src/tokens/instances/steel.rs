@@ -2,7 +2,16 @@ use std::cmp::min;
 
 use serde::Serialize;
 
-use crate::{callbacks::Callback, entity::EntityID, tokens::{TokenPointer, token_swap::{TradingPairID, ConstantFunctionMarketMaker}}, util::Price, game::CallContext};
+use crate::{
+    callbacks::Callback,
+    entity::EntityID,
+    game::CallContext,
+    tokens::{
+        token_swap::{ConstantFunctionMarketMaker, TradingPairID},
+        TokenPointer,
+    },
+    util::Price,
+};
 
 #[derive(Serialize, Clone)]
 pub enum SteelVariety {
@@ -40,14 +49,10 @@ impl Callback for SteelSmelter {
             asset_a: self.hash_asset,
             asset_b: self.price_asset,
         };
-        // at game start (first) mint initial supply of material tokens
         if self.first {
-            // mint initial units of a raw material
             {
                 let unit = &mut game.tokens[self.hash_asset];
-                // start txn sort of locks token
                 unit.transaction();
-                // mint total units set at game initiation?
                 unit.mint(&self.id, self.total_units);
                 unit.end_transaction();
             }
