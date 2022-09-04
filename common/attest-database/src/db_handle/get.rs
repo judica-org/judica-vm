@@ -367,15 +367,17 @@ pub fn extract_sk(
     let d1 = BigInt::from_bytes_be(Sign::Plus, &d1[..]);
     let d2 = BigInt::from_bytes_be(Sign::Plus, &d2[..]);
     let divisor = d1 - d2;
-    use num_traits::Num;
-    let field = BigInt::from_str_radix(
-        "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
-        16,
-    )
-    .unwrap();
+    let field = BigInt::from_bytes_be(
+        Sign::Plus,
+        &[
+            255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 254, 186,
+            174, 220, 230, 175, 72, 160, 59, 191, 210, 94, 140, 208, 54, 65, 65,
+        ][..],
+    );
 
     use num_integer::Integer;
     let res = divisor.extended_gcd(&field);
+
     {
         let res = res.clone();
         let field = field.clone();
