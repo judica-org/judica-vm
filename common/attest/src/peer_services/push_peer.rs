@@ -9,12 +9,11 @@ use tracing::{trace, warn};
 
 use super::*;
 pub async fn push_to_peer<C: Verification + 'static>(
-    config: Arc<Config>,
+    g: Arc<Globals>,
     _secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
     conn: MsgDB,
-    shutdown: AppShutdown,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     #[derive(Hash, PartialEq, PartialOrd, Ord, Eq, Debug, Copy, Clone)]
     struct GenesisHash(CanonicalEnvelopeHash);
@@ -27,13 +26,13 @@ pub async fn push_to_peer<C: Verification + 'static>(
     let new_tips = Arc::new(Notify::new());
     let mut t1 = spawn({
         let service = service.clone();
-        let shutdown = shutdown.clone();
+        let g = g.clone();
         let tip_tracker = tip_tracker.clone();
         let client = client.clone();
         let (url, port) = service.clone();
         let new_tips = new_tips.clone();
         async move {
-            while !shutdown.should_quit() {
+            while !g.shutdown.should_quit() {
                 // Get the tips this client claims to have
                 let tips = client.get_latest_tips(&url, port).await?;
                 trace!(
@@ -99,24 +98,24 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     }
                 }
                 new_tips.notify_one();
-                config
+                g.config
                     .peer_service
                     .timer_override
                     .scan_for_unsent_tips_delay()
                     .await;
             }
-            INFER_UNIT.map(|_| format!("Shutdown Graceful: {}", shutdown.load(Ordering::Relaxed)))
+            INFER_UNIT.map(|_| format!("Shutdown Graceful: {}", g.shutdown.should_quit()))
         }
     });
     let mut t2 = spawn({
         let service = service.clone();
-        let shutdown = shutdown.clone();
+        let g = g.clone();
         let tip_tracker = tip_tracker.clone();
         let client = client.clone();
         let (url, port) = service.clone();
         let new_tips = new_tips.clone();
         async move {
-            while !shutdown.should_quit() {
+            while !g.shutdown.should_quit() {
                 new_tips.notified().await;
                 let to_broadcast = {
                     // get the DB first as it is more contended, and we're OK
@@ -172,7 +171,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     info!(?service, task = "PUSH", "No Work to Do");
                 }
             }
-            INFER_UNIT.map(|_| format!("Shutdown Graceful: {}", shutdown.should_quit()))
+            INFER_UNIT.map(|_| format!("Shutdown Graceful: {}", g.shutdown.should_quit()))
         }
     });
 
