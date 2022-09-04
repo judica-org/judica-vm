@@ -58,7 +58,7 @@ impl Ancestors {
 }
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct Header {
-    pub key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
+    key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
     next_nonce: PrecomittedPublicNonce,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -137,8 +137,8 @@ impl std::fmt::Debug for Header {
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(from = "from_wrap::Envelope")]
 pub struct Envelope {
-    pub header: Header,
-    pub msg: CanonicalJsonValue,
+    header: Header,
+    msg: CanonicalJsonValue,
     #[serde(skip)]
     cache: Option<CanonicalEnvelopeHash>,
 }

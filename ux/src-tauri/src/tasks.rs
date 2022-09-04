@@ -105,7 +105,7 @@ pub(crate) fn start_sequencer(
                 };
                 match msg {
                     Ok(envelope) => {
-                        match serde_json::from_value::<Channelized<BroadcastByHost>>(ruma_serde::json_string::serialize(envelope.msg, serde_json::value::Serializer).unwrap()) {
+                        match serde_json::from_value::<Channelized<BroadcastByHost>>(envelope.msg().into()) {
                             Ok(v) => {
                                 match v.data {
                                     BroadcastByHost::Sequence(s) => {
@@ -230,10 +230,10 @@ pub(crate) fn start_move_deserializer(
     let (mut tx2, mut rx2) = unbounded_channel();
     let task = spawn(async move {
         while let Some(envelope) = input_envelopes.recv().await {
-            let r_game_move = serde_json::from_value(ruma_serde::json_string::serialize(envelope.msg, serde_json::value::Serializer).unwrap());
+            let r_game_move = serde_json::from_value(envelope.msg().into());
             match r_game_move {
                 Ok(game_move) => {
-                    if tx2.send((game_move, envelope.header.key.to_hex())).is_err() {
+                    if tx2.send((game_move, envelope.header().key().to_hex())).is_err() {
                         return;
                     }
                 }
