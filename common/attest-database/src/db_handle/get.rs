@@ -377,7 +377,7 @@ pub fn extract_sk(
 
     use num_integer::Integer;
     let res = divisor.extended_gcd(&field);
-
+    #[cfg(test)]
     {
         let res = res.clone();
         let field = field.clone();
