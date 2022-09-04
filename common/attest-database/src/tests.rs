@@ -1,4 +1,4 @@
-use crate::db_handle::get::extract_sk;
+use crate::db_handle::get::{extract_sk, extract_sk_from_envelopes};
 use crate::db_handle::MsgDBHandle;
 
 use super::connection::MsgDB;
@@ -71,7 +71,8 @@ async fn test_reused_nonce() {
             &v[..],
             &[envelope_1.inner_ref().clone(), envelope_2.clone().inner()][..]
         );
-        let k = extract_sk(envelope_1.clone(), envelope_2.clone()).expect("Extract successful");
+        let k = extract_sk_from_envelopes(envelope_1.clone(), envelope_2.clone())
+            .expect("Extract successful");
         println!("{:?} {:?}", kp.secret_bytes(), k.secret_bytes());
         assert_eq!(
             k.keypair(&secp).x_only_public_key().0,

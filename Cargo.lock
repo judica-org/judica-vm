@@ -84,7 +84,6 @@ dependencies = [
  "fallible-iterator",
  "num-bigint",
  "num-integer",
- "num-traits",
  "ruma-serde",
  "rusqlite",
  "sapio-bitcoin",

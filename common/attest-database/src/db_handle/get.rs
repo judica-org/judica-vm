@@ -5,12 +5,11 @@ use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Envelope;
 use attest_messages::{Authenticated, CanonicalEnvelopeHash};
 use fallible_iterator::FallibleIterator;
-use num_bigint::{BigInt, BigUint, Sign};
+use num_bigint::{BigInt, Sign};
+use num_integer::Integer;
 use rusqlite::{named_params, params};
 use sapio_bitcoin::hashes::HashEngine;
-use sapio_bitcoin::secp256k1::{Message, Signature};
-use sapio_bitcoin::util::taproot::TapSighashHash;
-use sapio_bitcoin::SchnorrSig;
+use sapio_bitcoin::secp256k1::Message;
 use sapio_bitcoin::{
     hashes::{hex::ToHex, sha256, Hash},
     secp256k1::SecretKey,
@@ -18,7 +17,6 @@ use sapio_bitcoin::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use std::str::FromStr;
 use tracing::{debug, trace};
 #[derive(Serialize, Deserialize)]
 pub struct PeerInfo {
@@ -326,9 +324,9 @@ where
     }
 }
 
-pub fn extract_sk(
-    mut e1: Authenticated<Envelope>,
-    mut e2: Authenticated<Envelope>,
+pub fn extract_sk_from_envelopes(
+    e1: Authenticated<Envelope>,
+    e2: Authenticated<Envelope>,
 ) -> Option<SecretKey> {
     let mut e1 = e1.inner();
     let mut e2 = e2.inner();
@@ -344,13 +342,24 @@ pub fn extract_sk(
     let m2 = e2.signature_digest_mut();
     let s1 = e1.extract_sig_s()?;
     let s2 = e2.extract_sig_s()?;
+    extract_sk(key, m1, m2, &nonce.0.serialize(), &s1, &s2)
+}
 
+pub fn extract_sk<M1, M2>(
+    key: XOnlyPublicKey,
+    m1: M1,
+    m2: M2,
+    nonce: &[u8; 32],
+    s1: &[u8; 32],
+    s2: &[u8; 32],
+) -> Option<SecretKey>
+where
+    Message: From<M1> + From<M2>,
+{
     // H(tag || tag || R || P || m)
-    let mut tag = sha256::Hash::hash("BIP0340/challenge".as_bytes());
-    let mut engine = sha256::Hash::engine();
-    engine.input(&tag.as_inner()[..]);
-    engine.input(&tag.as_inner()[..]);
-    engine.input(&nonce.0.serialize()[..]);
+    let mut engine = get_signature_tagged_hash();
+
+    engine.input(&nonce[..]);
     engine.input(&key.serialize()[..]);
     let mut engine2 = engine.clone();
     engine.input(Message::from(m1).as_ref());
@@ -375,7 +384,6 @@ pub fn extract_sk(
         ][..],
     );
 
-    use num_integer::Integer;
     let res = divisor.extended_gcd(&field);
     #[cfg(test)]
     {
@@ -396,4 +404,12 @@ pub fn extract_sk(
     }
     sig_bytes.reverse();
     SecretKey::from_slice(&sig_bytes[..]).ok()
+}
+
+fn get_signature_tagged_hash() -> sha256::HashEngine {
+    let tag = sha256::Hash::hash("BIP0340/challenge".as_bytes());
+    let mut engine = sha256::Hash::engine();
+    engine.input(&tag.as_inner()[..]);
+    engine.input(&tag.as_inner()[..]);
+    engine
 }
