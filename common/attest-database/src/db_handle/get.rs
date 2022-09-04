@@ -2,10 +2,15 @@ use super::sql_serializers::{self};
 use super::{handle_type, MsgDBHandle};
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
-use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
+use attest_messages::{Authenticated, CanonicalEnvelopeHash};
 use fallible_iterator::FallibleIterator;
+use num_bigint::{BigInt, BigUint, Sign};
 use rusqlite::{named_params, params};
+use sapio_bitcoin::hashes::HashEngine;
+use sapio_bitcoin::secp256k1::{Message, Signature};
+use sapio_bitcoin::util::taproot::TapSighashHash;
+use sapio_bitcoin::SchnorrSig;
 use sapio_bitcoin::{
     hashes::{hex::ToHex, sha256, Hash},
     secp256k1::SecretKey,
@@ -13,6 +18,7 @@ use sapio_bitcoin::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 use tracing::{debug, trace};
 #[derive(Serialize, Deserialize)]
 pub struct PeerInfo {
@@ -318,4 +324,74 @@ where
         })
         .collect()
     }
+}
+
+pub fn extract_sk(
+    mut e1: Authenticated<Envelope>,
+    mut e2: Authenticated<Envelope>,
+) -> Option<SecretKey> {
+    let mut e1 = e1.inner();
+    let mut e2 = e2.inner();
+    let nonce = e1.extract_used_nonce()?;
+    let key = e1.header().key();
+    if key != e2.header().key() {
+        return None;
+    }
+    if nonce != e2.extract_used_nonce()? {
+        return None;
+    }
+    let m1 = e1.signature_digest_mut();
+    let m2 = e2.signature_digest_mut();
+    let s1 = e1.extract_sig_s()?;
+    let s2 = e2.extract_sig_s()?;
+
+    // H(tag || tag || R || P || m)
+    let mut tag = sha256::Hash::hash("BIP0340/challenge".as_bytes());
+    let mut engine = sha256::Hash::engine();
+    engine.input(&tag.as_inner()[..]);
+    engine.input(&tag.as_inner()[..]);
+    engine.input(&nonce.0.serialize()[..]);
+    engine.input(&key.serialize()[..]);
+    let mut engine2 = engine.clone();
+    engine.input(Message::from(m1).as_ref());
+    engine2.input(Message::from(m2).as_ref());
+
+    let d1 = sha256::Hash::from_engine(engine);
+    let d2 = sha256::Hash::from_engine(engine2);
+
+    //    s1 - s2 / d1 - d2 = p
+
+    let s1 = BigInt::from_bytes_be(Sign::Plus, &s1[..]);
+    let s2 = BigInt::from_bytes_be(Sign::Plus, &s2[..]);
+
+    let d1 = BigInt::from_bytes_be(Sign::Plus, &d1[..]);
+    let d2 = BigInt::from_bytes_be(Sign::Plus, &d2[..]);
+    let divisor = d1 - d2;
+    use num_traits::Num;
+    let field = BigInt::from_str_radix(
+        "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+        16,
+    )
+    .unwrap();
+
+    use num_integer::Integer;
+    let res = divisor.extended_gcd(&field);
+    {
+        let res = res.clone();
+        let field = field.clone();
+        let divisor = divisor.clone();
+        assert_eq!(&res.gcd, &1u32.into());
+        assert_eq!((res.x * divisor).mod_floor(&field), 1u32.into());
+    }
+
+    let inv = res.x.mod_floor(&field);
+    let result = (inv * (s1 - s2)).mod_floor(&field);
+
+    let (s, mut sig_bytes) = result.to_bytes_le();
+    assert!(s == Sign::Plus);
+    while sig_bytes.len() < 32 {
+        sig_bytes.push(0);
+    }
+    sig_bytes.reverse();
+    SecretKey::from_slice(&sig_bytes[..]).ok()
 }
