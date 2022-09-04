@@ -9,18 +9,22 @@ use crate::sapio_base::Clause;
 
 use bitcoin::hashes::sha256;
 use bitcoin::hashes::Hash;
+use bitcoin::secp256k1::ffi::SECP256K1_START_NONE;
 use bitcoin::secp256k1::schnorr::Signature;
 use bitcoin::secp256k1::Message;
 use bitcoin::secp256k1::Secp256k1;
+use bitcoin::secp256k1::SecretKey;
 use bitcoin::util::amount::Amount;
 use bitcoin::Address;
 
 use bitcoin::XOnlyPublicKey;
 use mine_with_friends_board::game::game_move::GameMove;
 use sapio::contract::actions::conditional_compile::ConditionalCompileType;
+use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
 use sapio::util::amountrange::{AmountF64, AmountU64};
 use sapio::*;
+use sapio_base::simp::SIMP;
 use sapio_contrib::contracts::treepay::{Payment, TreePay};
 use sapio_wasm_plugin::client::*;
 use sapio_wasm_plugin::*;
@@ -32,63 +36,171 @@ use std::io::Write;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-struct Lobby<const current: usize>;
-struct GameStarted;
-struct Degraded(usize);
-enum Role {
-    Player,
-    Sequencer,
-    Custodian,
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+struct GameKernel {
+    #[schemars(with = "sha256::Hash")]
+    game_host: XOnlyPublicKey,
+    players: BTreeMap<XOnlyPublicKey, AmountF64>,
 }
-trait GameState {}
-impl GameState for GameStarted {}
-impl<const n: usize> GameState for Lobby<n> {}
-impl GameState for Degraded {}
+impl GameKernel {}
+impl SIMP for GameKernel {
+    fn get_protocol_number() -> i64 {
+        -119
+    }
+}
+
+struct GameStarted {
+    kernel: GameKernel,
+    game_witnesses: Vec<XOnlyPublicKey>,
+}
+impl GameStarted {
+    #[guard]
+    fn all_players_signed(self, ctx: Context) {
+        Clause::And(
+            self.kernel
+                .players
+                .iter()
+                .map(|x| Clause::Key(x.0.clone()))
+                .collect(),
+        )
+    }
+
+    #[continuation(
+        coerce_args = "coerce_host_key",
+        guarded_by = "[Self::all_players_signed]"
+    )]
+    fn host_cheat_equivocate(self, ctx: Context, proof: Option<HostKey>) {
+        match proof {
+            Some(k) => {
+                let secp = Secp256k1::new();
+                if k.0.x_only_public_key(&secp).0 == self.kernel.game_host {
+                    let mut tmpl = ctx.template();
+                    for (player, balance) in &self.kernel.players {
+                        tmpl = tmpl.add_output(balance.clone().into(), player, None)?
+                    }
+                    tmpl.into()
+                } else {
+                    Err(CompilationError::Custom(
+                        ("The Secret Key Provided does not match the Public Key of the Game Host"
+                            .into()),
+                    ))
+                }
+            }
+            None => empty(),
+        }
+    }
+
+    #[continuation(
+        coerce_args = "coerce_censorship_proof",
+        guarded_by = "[Self::all_players_signed]"
+    )]
+    fn host_cheat_censor(self, ctx: Context, proof: Option<CensorshipProof>) {
+        todo!()
+    }
+
+    #[continuation(coerce_args = "coerce_move_sequence")]
+    fn game_end_players_win(self, ctx: Context, game_trace: Option<MoveSequence>) {
+        todo!()
+    }
+
+    #[continuation(coerce_args = "coerce_move_sequence")]
+    fn game_end_players_lose(self, ctx: Context, game_trace: Option<MoveSequence>) {
+        todo!()
+    }
+
+    #[continuation(coerce_args = "coerce_degrade")]
+    fn degrade(self, ctx: Context, _unit: Option<()>) {
+        todo!()
+    }
+}
+
+struct Degraded(usize);
 
 struct MoveSequence {
     sequence: Vec<GameMove>,
     signature_hex: String,
 }
 
-struct MiningGame<T: GameState> {
-    game_witnesses: Vec<XOnlyPublicKey>,
-    players: BTreeMap<XOnlyPublicKey, AmountF64>,
-    max_players: usize,
-    sequencer: XOnlyPublicKey,
-    game_state: PhantomData<T>,
-}
+struct MiningGame {}
 
+#[derive(JsonSchema)]
+struct GameStart {
+    #[serde(with = "Vec::<sha256::Hash>")]
+    players: Vec<XOnlyPublicKey>,
+}
 #[derive(Serialize, Deserialize, JsonSchema)]
-struct AddPlayer {}
-#[derive(Serialize, Deserialize, JsonSchema)]
-struct HostKey {}
+struct HostKey(SecretKey);
 #[derive(Serialize, Deserialize, JsonSchema)]
 struct CensorshipProof {}
 
-fn coerce_add_player(
-    k: <MiningGame as Contract>::StatefulArguments,
-) -> Result<AddPlayer, CompilationError> {
-    serde_json::from_value(k).map_err(CompilationError::DeserializationError)
+enum GameEnd {
+    HostCheatEquivocate(HostKey),
+    HostCheatCensor(CensorshipProof),
+    PlayersWin,
+    PlayersLose(MoveSequence),
+    Degrade,
 }
 
-impl MiningGame {
-    fn host_signed() {}
-    fn quorum_signed() {}
-    #[continuation(web_api, coerce_args = "coerce_add_player")]
-    fn add_player(self, ctx: Context, player: AddPlayer) {
-        todo!()
+impl Contract for GameStarted {
+    declare! {
+        updatable<Option<GameEnd>>,
+        Self::host_cheat_equivocate,
+        Self::host_cheat_censor,
+        Self::game_end_players_win,
+        Self::game_end_players_lose,
+        Self::degrade
     }
-    fn game_start(self, ctx: Context, _unit: ()) {}
-    fn host_cheat_equivocate(self, ctx: Context, proof: HostKey) {}
-    fn host_cheat_censor(self, ctx: Context, proof: CensorshipProof) {}
-    fn host_cheat_invalid_sequence(self, ctx: Context, proof: HostKey) {}
-    fn game_end_players_win(self, ctx: Context, _unit: ()) {}
-    fn game_end_players_lose(self, ctx: Context, game_trace: MoveSequence) {}
-    fn degrade(self, ctx: Context, _unit: ()) {}
+
+    fn metadata(&self, _ctx: Context) -> Result<object::ObjectMetadata, CompilationError> {
+        Ok(ObjectMetadata::default().add_simp(self.kernel.clone())?)
+    }
 }
 
-impl Contract for MiningGame {
-    declare! {updateable<Value>, Self::add_player, Self::game_start, Self::host_cheat, Self::game_end, Self::degrade}
+// Coercions
+fn coerce_host_key(
+    k: <GameStarted as Contract>::StatefulArguments,
+) -> Result<Option<HostKey>, CompilationError> {
+    match k {
+        Some(GameEnd::HostCheatEquivocate(x)) => Ok(Some(x)),
+        Some(_) => Err(todo!()),
+        None => Ok(None),
+    }
+}
+
+fn coerce_censorship_proof(
+    k: <GameStarted as Contract>::StatefulArguments,
+) -> Result<Option<CensorshipProof>, CompilationError> {
+    match k {
+        Some(GameEnd::HostCheatCensor(x)) => Ok(Some(x)),
+        Some(_) => Err(todo!()),
+        None => Ok(None),
+    }
+}
+
+fn coerce_players_win(
+    k: <GameStarted as Contract>::StatefulArguments,
+) -> Result<Option<()>, CompilationError> {
+    match k {
+        Some(GameEnd::PlayersWin) => Ok(Some(())),
+        Some(_) => Err(todo!()),
+        None => Ok(None),
+    }
+}
+
+fn coerce_move_sequence(
+    k: <GameStarted as Contract>::StatefulArguments,
+) -> Result<Option<MoveSequence>, CompilationError> {
+    todo!()
+}
+
+fn coerce_degrade(
+    k: <GameStarted as Contract>::StatefulArguments,
+) -> Result<Option<()>, CompilationError> {
+    match k {
+        Some(GameEnd::Degrade) => Ok(Some(())),
+        Some(_) => Err(todo!()),
+        None => Ok(None),
+    }
 }
 
 // #[derive(Deserialize, JsonSchema, Clone)]
