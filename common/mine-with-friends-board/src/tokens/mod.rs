@@ -1,5 +1,5 @@
 //! This module defines components for managing and issuing tokens
-use self::instances::{asics::HashBoardData, steel::Steel};
+use self::instances::{asics::HashBoardData, steel::Steel, silicon::Silicon};
 use super::entity::EntityID;
 use crate::{game::GameBoard, util::Price};
 use schemars::JsonSchema;
@@ -173,7 +173,8 @@ pub(crate) struct TokenRegistry {
     #[serde(serialize_with = "special_serializer")]
     pub tokens: BTreeMap<EntityID, Box<dyn Token>>,
     pub hashboards: BTreeMap<TokenPointer, HashBoardData>,
-    pub steel: BTreeMap<TokenPointer, Steel>
+    pub steel: BTreeMap<TokenPointer, Steel>,
+    pub silicon: BTreeMap<TokenPointer, Silicon>
 }
 
 /// Creates a readable form of a token

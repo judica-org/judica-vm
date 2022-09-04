@@ -18,6 +18,8 @@ use crate::sanitize::Sanitizable;
 use crate::tokens;
 use crate::tokens::instances::asics::ASICProducer;
 use crate::tokens::instances::asics::HashBoardData;
+use crate::tokens::instances::silicon::Silicon;
+use crate::tokens::instances::silicon::SiliconRefinery;
 use crate::tokens::instances::steel::Steel;
 use crate::tokens::instances::steel::SteelSmelter;
 use crate::tokens::token_swap;
@@ -55,6 +57,8 @@ pub struct GameBoard {
     pub(crate) dollar_token_id: Option<TokenPointer>,
     /// If init = true, must be Some
     pub(crate) steel_token_id: Option<TokenPointer>,
+    /// If init = true, must be Some
+    pub(crate) silicon_token_id: Option<TokenPointer>,
 
     /// If init = true, must be Some
     pub(crate) root_user: Option<EntityID>,
@@ -85,6 +89,7 @@ impl GameBoard {
             bitcoin_token_id: None,
             dollar_token_id: None,
             steel_token_id: None,
+            silicon_token_id: None,
             root_user: None,
             callbacks: Default::default(),
             current_time: 0,
@@ -165,6 +170,7 @@ impl GameBoard {
                     let dollar = Box::new(TokenBase::new(self, "US Dollar".into()));
                     let asic = Box::new(TokenBase::new(self, "ASIC Gen 1".into()));
                     let steel = Box::new(TokenBase::new(self, "Steel".into()));
+                    let silicon = Box::new(TokenBase::new(self, "Silicon".into()));
                     let _ = self.bitcoin_token_id.insert(self.tokens.new_token(btc));
                     let _ = self.dollar_token_id.insert(self.tokens.new_token(dollar));
                     let steel = self.tokens.new_token(steel);
@@ -173,6 +179,14 @@ impl GameBoard {
                         steel,
                         Steel {
                             variety: tokens::instances::steel::SteelVariety::Structural,
+                            weight_in_kg: 1,
+                        },
+                    );
+                    let silicon = self.tokens.new_token(silicon);
+                    let _ = self.steel_token_id.insert(silicon);
+                    let _ = self.tokens.silicon.insert(
+                        silicon,
+                        Silicon {
                             weight_in_kg: 1,
                         },
                     );
@@ -200,6 +214,17 @@ impl GameBoard {
                         id: self.alloc.make(),
                         total_units: 100_000,
                         base_price: 1,
+                        price_asset: self.dollar_token_id.unwrap(),
+                        hash_asset: steel,
+                        adjusts_every: 100, // what units?
+                        current_time: self.current_time,
+                        first: true,
+                    }));
+
+                    self.callbacks.schedule(Box::new(SiliconRefinery {
+                        id: self.alloc.make(),
+                        total_units: 100_000,
+                        base_price: 38,
                         price_asset: self.dollar_token_id.unwrap(),
                         hash_asset: steel,
                         adjusts_every: 100, // what units?
