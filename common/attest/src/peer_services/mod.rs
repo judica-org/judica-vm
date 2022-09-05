@@ -27,14 +27,13 @@ pub enum PeerQuery {
     RunningTasks(Sender<Vec<TaskID>>),
 }
 pub fn startup(
-    config: Arc<Config>,
+    g: Arc<Globals>,
     db: MsgDB,
-    quit: AppShutdown,
     mut status: Receiver<PeerQuery>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     let jh = tokio::spawn(async move {
         let mut bld = reqwest::Client::builder();
-        if let Some(tor_config) = config.tor.clone() {
+        if let Some(tor_config) = g.config.tor.clone() {
             // Local Pass if in test mode
             // TODO: make this programmatic?
             #[cfg(test)]
@@ -54,17 +53,18 @@ pub fn startup(
         let inner_client = bld.build()?;
         let client = AttestationClient::new(inner_client);
         let secp = Arc::new(Secp256k1::new());
-        let mut interval = config.peer_service.timer_override.reconnect_interval();
+        let mut interval = g.config.peer_service.timer_override.reconnect_interval();
         let mut task_set: HashMap<TaskID, JoinHandle<Result<(), _>>> = HashMap::new();
         let _tip_attacher = spawn({
             let db = db.clone();
-            let quit = quit.clone();
-            let mut interval = config
+            let mut interval = g
+                .config
                 .peer_service
                 .timer_override
                 .attach_tip_while_busy_interval();
+            let g = g.clone();
             async move {
-                while !quit.should_quit() {
+                while !g.shutdown.should_quit() {
                     interval.tick().await;
                     let handle = db.get_handle().await;
                     let n_attached = handle.attach_tips();
@@ -72,7 +72,7 @@ pub fn startup(
                 }
             }
         });
-        'outer: while !quit.should_quit() {
+        'outer: while !g.shutdown.should_quit() {
             tokio::select! {
                 query = status.recv() => {
                     match query {
@@ -87,7 +87,7 @@ pub fn startup(
                     }
                 }
                 _ = interval.tick() => { // do main loop
-                    if quit.should_quit() {
+                    if g.shutdown.should_quit() {
                         break 'outer;
                     }
                 }
@@ -151,12 +151,11 @@ pub fn startup(
                         task_set.insert(
                             task_id.clone(),
                             tokio::spawn(push_peer::push_to_peer(
-                                config.clone(),
+                                g.clone(),
                                 secp.clone(),
                                 client,
                                 (task_id.0, task_id.1),
                                 db.clone(),
-                                quit.clone(),
                             )),
                         );
                     }
@@ -164,8 +163,7 @@ pub fn startup(
                         task_set.insert(
                             task_id.clone(),
                             tokio::spawn(fetch_peer::fetch_from_peer(
-                                config.clone(),
-                                quit.clone(),
+                                g.clone(),
                                 secp.clone(),
                                 client,
                                 (task_id.0, task_id.1),
