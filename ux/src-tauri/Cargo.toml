@@ -43,6 +43,7 @@ path = "../../common/game-host-messages"
 
 [dependencies.game-sequencer]
 path = "../../common/game-sequencer"
+features = ["database_access"]
 
 [dependencies.sapio-bitcoin]
 version = "0.28.1"

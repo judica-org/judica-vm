@@ -23,6 +23,10 @@ path = "../attest-messages"
 
 [dependencies.attest-database]
 path = "../attest-database"
+optional=true
 
 [dependencies.game-host-messages]
 path = "../game-host-messages"
+
+[features]
+database_access = ["attest-database"]

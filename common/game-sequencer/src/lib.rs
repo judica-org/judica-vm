@@ -1,3 +1,4 @@
+#[cfg(feature = "database_access")]
 use attest_database::connection::MsgDB;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
@@ -24,42 +25,43 @@ use tokio::sync::{
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
-async fn make_sequenceing(db: MsgDB, oracle_publickey: XOnlyPublicKey) -> Option<Vec<Envelope>> {
-    {
-        let handle = db.get_handle().await;
-        let v = handle
-            .load_all_messages_for_user_by_key_connected(&oracle_publickey)
-            .ok()?;
-        let mut already_sequenced: VecDeque<CanonicalEnvelopeHash> = Default::default();
-        for x in v {
-            let d = serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg().clone().into())
-                .ok()?;
-            match d.data {
-                BroadcastByHost::Sequence(l) => already_sequenced.extend(l.iter()),
-                BroadcastByHost::NewPeer(_) => {}
-            }
-        }
-        let mut newer = None;
-        let mut msgs = Default::default();
-        handle
-            .get_all_connected_messages_collect_into(&mut newer, &mut msgs)
-            .ok()?;
-        let all = already_sequenced
-            .iter()
-            .map(|h| msgs.remove(h))
-            .collect::<Option<Vec<_>>>()?;
-        let moves = all
-            .iter()
-            .map(|e| {
-                Ok((
-                    e.header().key(),
-                    serde_json::from_value(e.msg().to_owned().into())?,
-                ))
-            })
-            .collect::<Result<Vec<(XOnlyPublicKey, GameMove)>, serde_json::Error>>();
-    }
-    None
-}
+// TODO: Examine this logic
+// async fn make_sequenceing(db: MsgDB, oracle_publickey: XOnlyPublicKey) -> Option<Vec<Envelope>> {
+//     {
+//         let handle = db.get_handle().await;
+//         let v = handle
+//             .load_all_messages_for_user_by_key_connected(&oracle_publickey)
+//             .ok()?;
+//         let mut already_sequenced: VecDeque<CanonicalEnvelopeHash> = Default::default();
+//         for x in v {
+//             let d = serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg().clone().into())
+//                 .ok()?;
+//             match d.data {
+//                 BroadcastByHost::Sequence(l) => already_sequenced.extend(l.iter()),
+//                 BroadcastByHost::NewPeer(_) => {}
+//             }
+//         }
+//         let mut newer = None;
+//         let mut msgs = Default::default();
+//         handle
+//             .get_all_connected_messages_collect_into(&mut newer, &mut msgs)
+//             .ok()?;
+//         let all = already_sequenced
+//             .iter()
+//             .map(|h| msgs.remove(h))
+//             .collect::<Option<Vec<_>>>()?;
+//         let moves = all
+//             .iter()
+//             .map(|e| {
+//                 Ok((
+//                     e.header().key(),
+//                     serde_json::from_value(e.msg().to_owned().into())?,
+//                 ))
+//             })
+//             .collect::<Result<Vec<(XOnlyPublicKey, GameMove)>, serde_json::Error>>();
+//     }
+//     None
+// }
 
 pub struct OfflineDBFetcher {
     batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
@@ -97,6 +99,7 @@ impl DBFetcher for OfflineDBFetcher {
     }
 }
 
+#[cfg(feature = "database_access")]
 pub struct OnlineDBFetcher {
     poll_sequencer_period: Duration,
     shutdown: Arc<AtomicBool>,
@@ -109,6 +112,7 @@ pub struct OnlineDBFetcher {
     is_running: AtomicBool,
     new_msgs_in_cache: Arc<Notify>,
 }
+#[cfg(feature = "database_access")]
 impl OnlineDBFetcher {
     pub fn new(
         shutdown: Arc<AtomicBool>,
@@ -221,7 +225,7 @@ impl OnlineDBFetcher {
     }
 }
 
-
+#[cfg(feature = "database_access")]
 impl DBFetcher for OnlineDBFetcher {
     fn batches_to_sequence(
         &self,
