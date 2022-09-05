@@ -106,7 +106,7 @@ async fn make_move_inner(
     from: EntityID,
 ) -> Result<(), ()> {
     let msgdb = db.get().await.map_err(|e| ())?;
-    let v = serde_json::to_value(nextMove).map_err(|_| ())?;
+    let v = ruma_serde::to_canonical_value(nextMove).map_err(|_| ())?;
     let handle = msgdb.get_handle().await;
     let keys = handle.get_keymap().map_err(|_| ())?;
     let sk = keys.get(&user).ok_or(())?;

@@ -72,6 +72,7 @@ dependencies = [
  "attest-messages",
  "game-host-messages",
  "mine-with-friends-board",
+ "ruma-serde",
  "sapio-bitcoin",
  "schemars",
  "serde",

@@ -1,6 +1,6 @@
 use crate::{
+    globals::Globals,
     peer_services::{PeerQuery, TaskID},
-    Config,
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
@@ -240,7 +240,7 @@ async fn make_genesis(
     ))
 }
 pub async fn run(
-    config: Arc<Config>,
+    g: Arc<Globals>,
     db: MsgDB,
     peer_status: Sender<PeerQuery>,
     bitcoin_tipcache: Arc<BitcoinCheckPointCache>,
@@ -317,7 +317,7 @@ pub async fn run(
 
         // run our app with hyper
         // `axum::Server` is a re-export of `hyper::Server`
-        let addr = SocketAddr::from(([127, 0, 0, 1], config.control.port));
+        let addr = SocketAddr::from(([127, 0, 0, 1], g.config.control.port));
         tracing::debug!("Control Service Listening on {}", addr);
         let r = axum::Server::bind(&addr)
             .serve(app.into_make_service())

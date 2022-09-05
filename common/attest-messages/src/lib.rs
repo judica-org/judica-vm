@@ -226,6 +226,11 @@ impl ToHex for CanonicalEnvelopeHash {
 }
 
 pub struct SignatureDigest(SchnorrMessage);
+impl From<SignatureDigest> for SchnorrMessage {
+    fn from(m: SignatureDigest) -> Self {
+        m.0
+    }
+}
 
 impl Envelope {
     pub fn get_genesis_hash(&self) -> CanonicalEnvelopeHash {
@@ -239,6 +244,10 @@ impl Envelope {
         XOnlyPublicKey::from_slice(&self.header.unsigned.signature?.as_ref()[..32])
             .map(PrecomittedPublicNonce)
             .ok()
+    }
+    /// Returns the sig used in this [`Envelope`].
+    pub fn extract_sig_s(&self) -> Option<[u8; 32]> {
+        <[u8; 32]>::try_from(&self.header.unsigned.signature?.as_ref()[32..64]).ok()
     }
     /// Converts this [`Envelope`] into an [`Authenticated<Envelope>`] by
     /// checking it's signature. Returns a copy.
@@ -334,13 +343,25 @@ impl Envelope {
     /// Helper to get the [`SchnorrMessage`] from an envelope.
     ///
     /// If Envelope has unsigned data present, must fail
-    pub fn signature_digest(self) -> Option<SignatureDigest> {
+    pub fn signature_digest(&self) -> Option<SignatureDigest> {
         if self.header.unsigned.signature.is_some() {
             return None;
         }
-        let msg_hash = self.canonicalized_hash();
+        let msg_hash = self.canonicalized_hash_ref();
         let msg = SchnorrMessage::from(W(msg_hash.0));
         Some(SignatureDigest(msg))
+    }
+    /// Helper to get the [`SchnorrMessage`] from an envelope.
+    ///
+    /// If Envelope has unsigned data present, clear
+    pub fn signature_digest_mut(&mut self) -> SignatureDigest {
+        let sig = self.header.unsigned.signature.take();
+        let cache = self.cache.take();
+        let msg_hash = self.canonicalized_hash_ref();
+        self.cache = cache;
+        self.header.unsigned.signature = sig;
+        let msg = SchnorrMessage::from(W(msg_hash.0));
+        SignatureDigest(msg)
     }
 
     pub fn msg(&self) -> &CanonicalJsonValue {
