@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RawMaterialsActions } from "../util";
 
-const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action: RawMaterialsActions; readonly subtitle: string; readonly currency?: number }) => {
+const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action: RawMaterialsActions; readonly subtitle: string; readonly currency: string }) => {
   const [schema, setSchema] = useState<null | any>(null);
 
   useEffect(() => {
@@ -22,7 +22,7 @@ const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action:
   };
 
   const formData = {
-    currency: currency ?? null
+    currency
   }
 
   // for creater should be extracted out into a form util

@@ -4,7 +4,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import PurchaseMaterialForm from '../purchase-material';
 import { RawMaterialsActions } from '../util';
 
-function FormModal({ title, currency, material_type }: { readonly title: RawMaterialsActions; readonly currency?: number; material_type: string }) {
+function FormModal({ title, currency, material_type }: { readonly title: RawMaterialsActions; readonly currency: string; material_type: string }) {
   const [open, setOpen] = useState(false);
 
   const CustomModal = () => {

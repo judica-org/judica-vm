@@ -1,15 +1,59 @@
 import ConstructionIcon from '@mui/icons-material/Construction';
 import { Typography, Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
+import { appWindow } from '@tauri-apps/api/window';
+import { useState, useEffect } from 'react';
 import FormModal from '../form-modal';
 import { material_type_color_map } from '../util';
 
-export type Material = {
-  currency: any,
-  material_type: 'Silicon' | 'Steel',
-  price: number,
+export type MaterialPriceData = {
+  readonly trading_pair: {
+    readonly asset_a: number;
+    readonly asset_b: number;
+  },
+  readonly asset_a: string;
+  readonly mkt_qty_a: number;
+  readonly asset_b: string;
+  readonly mkt_qty_b: number;
 }
 
-export const RawMaterialsMarket = ({ materials }: { materials: Material[] }) => {
+type MaterialType = 'Steel'|'Silicon';
+ 
+type MaterialPriceDisplay = {
+  trading_pair: {
+    asset_a: number;
+    asset_b: number;
+  },
+  material_type: MaterialType;
+  price: number;
+  currency: string;
+}
+
+export const RawMaterialsMarket = () => {
+
+  const [materials, set_materials] = useState<MaterialPriceDisplay[] | null>(null);
+  useEffect(() => {
+    const unlisten = appWindow.listen("materials-price-data", (ev) => {
+      console.log(ev);
+      const materials_data = ev.payload as MaterialPriceData[];
+      const transformed:MaterialPriceDisplay[] = materials_data.map(({trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b}) => {
+        return {
+          trading_pair,
+          material_type: asset_a as MaterialType,
+          price: Math.round(mkt_qty_b/mkt_qty_a),
+          currency: asset_b,
+        }
+      })
+      set_materials(transformed)
+    });
+    
+    return () => {
+      (async () => {
+        (await unlisten)()
+      })();
+    }
+  }, [materials]);
+
+
 
   return (
     <div>
@@ -31,7 +75,7 @@ export const RawMaterialsMarket = ({ materials }: { materials: Material[] }) => 
                 </TableRow>
               </TableHead>
               <TableBody>
-                {materials.map((material, index) => (
+                {materials && materials.map((material, index) => (
                   <TableRow key={index}>
                     <TableCell>
                       <ConstructionIcon className='sale-factory-icon' sx={{ color: material_type_color_map[material.material_type] }} fontSize={'medium'} />

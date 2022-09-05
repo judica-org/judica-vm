@@ -116,7 +116,7 @@ function App() {
   return (
     <div className="App">
       {game_board && <GameBoard g={game_board}></GameBoard>}
-      <RawMaterialsMarket materials={[{currency: 'dollars', material_type: 'Silicon', price: 38},{currency: 'dollars', material_type: 'Steel', price: 1}]}></RawMaterialsMarket>
+      <RawMaterialsMarket></RawMaterialsMarket>
       <MoveForm></MoveForm>
     </div>
   );
