@@ -5,7 +5,10 @@
 use attest_database::{connection::MsgDB, generate_new_user, setup_db};
 use mine_with_friends_board::{
     entity::EntityID,
-    game::{game_move::{GameMove, Trade}, GameBoard},
+    game::{
+        game_move::{GameMove, Trade},
+        GameBoard,
+    }, tokens::{token_swap::{UXMaterialsPriceData, TradingPairID}, TokenPointer},
 };
 use sapio_bitcoin::{
     secp256k1::{All, Secp256k1},
@@ -41,8 +44,20 @@ async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
             let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
             (s, w)
         };
+        // Attempt to get data to show prices
+        let raw_price_data = {
+            let mut game = s.inner().lock().await;
+            let p = game
+                .as_mut()
+                .map(|g| g.board.get_ux_materials_prices())
+                .unwrap_or(Ok(Vec::new()))
+                .unwrap();
+            p
+        };
+
         println!("Emitting!");
         window.emit("game-board", gamestring).unwrap();
+        window.emit("materials-price-data", raw_price_data).unwrap();
         if let Some(w) = wait_on {
             w.await;
         } else {
@@ -119,7 +134,7 @@ async fn make_move_inner(
         .ok()
         .ok_or(())?;
     let authenticated = msg.self_authenticate(secp.inner()).ok().ok_or(())?;
-    let  _ = handle
+    let _ = handle
         .try_insert_authenticated_envelope(authenticated)
         .ok()
         .ok_or(())?;

@@ -208,4 +208,29 @@ impl ConstantFunctionMarketMaker {
         tokens[id.asset_a].end_transaction();
         tokens[id.asset_b].end_transaction();
     }
+
+    pub(crate) fn get_pair_price_data (
+        game: &mut GameBoard,
+        id: TradingPairID,
+    ) -> Result<(u128, u128), ()> {
+        // check that a these two tokens are a valid pairing (do we need to?)
+        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
+        let tokens: &mut TokenRegistry = &mut game.tokens;
+        // get the CFMM pair
+        let mkt = &game.swap.markets[&id];
+        let mkt_qty_a = mkt.amt_a(tokens);
+        let mkt_qty_b = mkt.amt_b(tokens);
+
+        Ok((mkt_qty_a, mkt_qty_b))
+    }
+}
+
+/// A struct for passing token qty information to the UX for price calculation
+#[derive(Serialize, Clone)]
+pub struct UXMaterialsPriceData {
+    pub trading_pair: TradingPairID,
+    pub asset_a: String,
+    pub mkt_qty_a: u128,
+    pub asset_b: String,
+    pub mkt_qty_b: u128,
 }
