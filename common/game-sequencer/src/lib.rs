@@ -5,7 +5,6 @@ use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
 use mine_with_friends_board::game::game_move::GameMove;
 use mine_with_friends_board::MoveEnvelope;
-use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
@@ -71,13 +70,21 @@ pub struct Sequencer {
     new_msgs_in_cache: Arc<Notify>,
     push_next_envelope: UnboundedSender<Envelope>,
     output_envelope: Mutex<UnboundedReceiver<Envelope>>,
-    push_next_move: UnboundedSender<(MoveEnvelope, String)>,
-    output_move: Mutex<UnboundedReceiver<(MoveEnvelope, String)>>,
+    push_next_move: UnboundedSender<(MoveEnvelope, XOnlyPublicKey)>,
+    output_move: Mutex<UnboundedReceiver<(MoveEnvelope, XOnlyPublicKey)>>,
     is_running: AtomicBool,
+    poll_sequencer_period: Duration,
+    rebuild_db_period: Duration,
 }
 
 impl Sequencer {
-    pub fn new(shutdown: Arc<AtomicBool>, oracle_key: XOnlyPublicKey, db: MsgDB) -> Arc<Self> {
+    pub fn new(
+        shutdown: Arc<AtomicBool>,
+        oracle_key: XOnlyPublicKey,
+        db: MsgDB,
+        poll_sequencer_period: Duration,
+        rebuild_db_period: Duration,
+    ) -> Arc<Self> {
         let (schedule_batches_to_sequence, mut batches_to_sequence) = unbounded_channel();
         let batches_to_sequence = Mutex::new(batches_to_sequence);
         let (push_next_envelope, output_envelope) = unbounded_channel();
@@ -97,6 +104,8 @@ impl Sequencer {
             push_next_move,
             output_move,
             is_running: Default::default(),
+            poll_sequencer_period,
+            rebuild_db_period,
         })
     }
 
@@ -116,7 +125,7 @@ impl Sequencer {
         }
     }
 
-    pub async fn output_move(self: &Arc<Self>) -> Option<(MoveEnvelope, String)> {
+    pub async fn output_move(self: &Arc<Self>) -> Option<(MoveEnvelope, XOnlyPublicKey)> {
         self.output_move.lock().await.recv().await
     }
 
@@ -166,7 +175,7 @@ impl Sequencer {
                             break 'check;
                         }
                         Err(_) => {
-                            sleep(Duration::from_secs(10)).await;
+                            sleep(self.poll_sequencer_period).await;
                         }
                     }
                 }
@@ -177,23 +186,20 @@ impl Sequencer {
 
     /// This task builds a HashMap of all unprocessed envelopes regularly
     fn start_envelope_db_fetcher(self: Arc<Self>) -> (JoinHandle<()>) {
-        let shared_envelopes =
-            Arc::new(Mutex::new(HashMap::<CanonicalEnvelopeHash, Envelope>::new()));
-        let envelopes = shared_envelopes.clone();
         let task = spawn(async move {
             let mut newer = None;
             while !self.should_shutdown() {
                 let newer_before = newer;
                 {
                     let handle = self.db.get_handle().await;
-                    let mut env = envelopes.lock().await;
+                    let mut env = self.msg_cache.lock().await;
                     handle.get_all_messages_collect_into_inconsistent(&mut newer, &mut env);
                 }
 
                 if newer_before != newer {
                     self.new_msgs_in_cache.notify_waiters();
                 }
-                sleep(Duration::from_secs(10)).await;
+                sleep(self.rebuild_db_period).await;
             }
             self.new_msgs_in_cache.notify_waiters();
         });
@@ -245,7 +251,7 @@ impl Sequencer {
                     Ok(game_move) => {
                         if self
                             .push_next_move
-                            .send((game_move, envelope.header().key().to_hex()))
+                            .send((game_move, envelope.header().key()))
                             .is_err()
                         {
                             return;

@@ -61,7 +61,13 @@ impl GameServer {
                 let db = db.get().await.unwrap();
                 let k = game.host_key;
                 let shutdown: Arc<AtomicBool> = Default::default();
-                let game_sequencer = game_sequencer::Sequencer::new(shutdown.clone(), k, db);
+                let game_sequencer = game_sequencer::Sequencer::new(
+                    shutdown.clone(),
+                    k,
+                    db,
+                    Duration::from_secs(1),
+                    Duration::from_secs(1),
+                );
                 spawn({
                     let game_sequencer = game_sequencer.clone();
                     async move {
@@ -90,7 +96,7 @@ pub(crate) fn start_game(
         while let Some((game_move, s)) = sequencer.output_move().await {
             let mut game = g.lock().await;
             if let Some(game) = game.as_mut() {
-                game.board.play(game_move, s);
+                game.board.play(game_move, s.to_hex());
                 // TODO: Maybe notify less often?
                 game.should_notify.notify_waiters();
                 println!("NOTIFYING");
