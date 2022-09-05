@@ -29,4 +29,5 @@ optional=true
 path = "../game-host-messages"
 
 [features]
+default = ["database_access"]
 database_access = ["attest-database"]
