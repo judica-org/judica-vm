@@ -34,7 +34,6 @@ pub struct Channelized<T> {
     pub channel: ChannelID,
 }
 
-
 #[cfg(test)]
 mod tests {
     #[test]

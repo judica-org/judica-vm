@@ -5,10 +5,7 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
-use game_sequencer::start_envelope_batcher;
-use game_sequencer::start_envelope_db_fetcher;
-use game_sequencer::start_move_deserializer;
-use game_sequencer::start_sequencer;
+use game_sequencer::Sequencer;
 use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::XOnlyPublicKey;
@@ -60,26 +57,20 @@ impl GameServer {
                 if game.server.is_some() {
                     return Err("Game Already has a Server");
                 }
+
                 let db = db.get().await.unwrap();
                 let k = game.host_key;
-                let shutdown = Arc::new(AtomicBool::new(false));
-                let (sequencer_reader_task, output_envelope_hashes) =
-                    { start_sequencer(shutdown.clone(), k, db.clone()) };
-                let (shared_envelopes, notify_new_envelopes, shared_envelopes_task) =
-                    { start_envelope_db_fetcher(shutdown.clone(), db.clone()) };
-                let (envelope_batcher, output_batches) = {
-                    start_envelope_batcher(
-                        shutdown.clone(),
-                        shared_envelopes,
-                        notify_new_envelopes,
-                        output_envelope_hashes,
-                    )
-                };
-                let (move_deserializer, output_moves) =
-                    { start_move_deserializer(shutdown.clone(), output_batches) };
+                let shutdown: Arc<AtomicBool> = Default::default();
+                let game_sequencer = game_sequencer::Sequencer::new(shutdown.clone(), k, db);
+                spawn({
+                    let game_sequencer = game_sequencer.clone();
+                    async move {
+                        game_sequencer.run();
+                    }
+                });
                 let game_task = {
                     let g = g;
-                    start_game(shutdown.clone(), g, output_moves)
+                    start_game(shutdown.clone(), g, game_sequencer)
                 };
                 game.server = Some(Arc::new(GameServer { shutdown }));
             }
@@ -92,11 +83,11 @@ impl GameServer {
 pub(crate) fn start_game(
     shutdown: Arc<AtomicBool>,
     g: GameStateInner,
-    mut input_moves: UnboundedReceiver<(MoveEnvelope, String)>,
+    sequencer: Arc<Sequencer>,
 ) -> JoinHandle<()> {
     let task = spawn(async move {
         // TODO: Check which game the move is for?
-        while let Some((game_move, s)) = input_moves.recv().await {
+        while let Some((game_move, s)) = sequencer.output_move().await {
             let mut game = g.lock().await;
             if let Some(game) = game.as_mut() {
                 game.board.play(game_move, s);

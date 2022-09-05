@@ -184,12 +184,10 @@ impl GameBoard {
                     );
                     let silicon = self.tokens.new_token(silicon);
                     let _ = self.steel_token_id.insert(silicon);
-                    let _ = self.tokens.silicon.insert(
-                        silicon,
-                        Silicon {
-                            weight_in_kg: 1,
-                        },
-                    );
+                    let _ = self
+                        .tokens
+                        .silicon
+                        .insert(silicon, Silicon { weight_in_kg: 1 });
 
                     let asic = self.tokens.new_token(asic);
                     let _ = self.tokens.hashboards.insert(
