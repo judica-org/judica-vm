@@ -200,26 +200,16 @@ where
     }
 
     /// loads all the messages from a given user
-    pub fn load_all_messages_for_user_by_key(
+    pub fn load_all_messages_for_user_by_key_connected(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    ) -> Result<Result<Vec<Envelope>, (Envelope, Envelope)>, rusqlite::Error> {
+    ) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get/all_messages_by_key.sql"))?;
+            .prepare(include_str!("sql/get/all_messages_by_key_connected.sql"))?;
         let rows = stmt.query(params![key.to_hex()])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get(0)).collect()?;
-        let _prev = sha256::Hash::hash(&[]);
-        let _prev_height = 0;
-        for v in vs.windows(2) {
-            if v[0].clone().canonicalized_hash() != v[1].header().ancestors().unwrap().prev_msg()
-                || v[0].header().height() + 1 != v[1].header().height()
-                || Some(v[0].header().next_nonce()) != v[1].extract_used_nonce()
-            {
-                return Ok(Err((v[0].clone(), v[1].clone())));
-            }
-        }
-        Ok(Ok(vs))
+        Ok(vs)
     }
 
     /// build a keymap for all known keypairs.
