@@ -5,6 +5,7 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
+use game_sequencer::OnlineDBFetcher;
 use game_sequencer::Sequencer;
 use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::hashes::hex::ToHex;
@@ -61,13 +62,14 @@ impl GameServer {
                 let db = db.get().await.unwrap();
                 let k = game.host_key;
                 let shutdown: Arc<AtomicBool> = Default::default();
-                let game_sequencer = game_sequencer::Sequencer::new(
+                let db_fetcher = OnlineDBFetcher::new(
                     shutdown.clone(),
+                    Duration::from_secs(1),
+                    Duration::from_secs(1),
                     k,
                     db,
-                    Duration::from_secs(1),
-                    Duration::from_secs(1),
                 );
+                let game_sequencer = game_sequencer::Sequencer::new(shutdown.clone(), db_fetcher);
                 spawn({
                     let game_sequencer = game_sequencer.clone();
                     async move {
