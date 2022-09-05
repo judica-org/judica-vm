@@ -5,7 +5,7 @@
 use attest_database::{connection::MsgDB, generate_new_user, setup_db};
 use mine_with_friends_board::{
     entity::EntityID,
-    game::{game_move::GameMove, GameBoard},
+    game::{game_move::{GameMove, Trade}, GameBoard},
 };
 use sapio_bitcoin::{
     secp256k1::{All, Secp256k1},
@@ -54,6 +54,11 @@ async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
 #[tauri::command]
 fn get_move_schema() -> RootSchema {
     schema_for!(GameMove)
+}
+
+#[tauri::command]
+fn get_materials_schema() -> RootSchema {
+    schema_for!(Trade)
 }
 
 #[tauri::command]
@@ -179,6 +184,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             game_synchronizer,
             get_move_schema,
+            get_materials_schema,
             make_move_inner
         ])
         .run(tauri::generate_context!())
