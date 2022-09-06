@@ -31,3 +31,6 @@ path = "../game-host-messages"
 [features]
 default = ["database_access"]
 database_access = ["attest-database"]
+
+[dev-dependencies]
+ruma-serde = "0.6.0"

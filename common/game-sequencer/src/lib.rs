@@ -71,11 +71,13 @@ pub struct OfflineDBFetcher {
 
 impl OfflineDBFetcher {
     pub fn new(
-        batches_to_sequence: VecDeque<CanonicalEnvelopeHash>,
+        batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
         msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
     ) -> Self {
         let (tx, rx) = unbounded_channel();
-        tx.send(batches_to_sequence).expect("Always Open");
+        for batch in batches_to_sequence {
+            tx.send(batch).expect("Always Open");
+        }
         Self {
             batches_to_sequence: Arc::new(Mutex::new(rx)),
             msg_cache: Arc::new(Mutex::new(msg_cache)),
@@ -353,5 +355,90 @@ impl Sequencer {
             }
         });
         task
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
+    use mine_with_friends_board::{entity::EntityID, game::game_move::Init, sanitize::Unsanitized};
+    use ruma_serde::CanonicalJsonValue;
+    use sapio_bitcoin::secp256k1::{rand, SecretKey};
+    use std::collections::VecDeque;
+
+    #[tokio::test]
+    async fn test_offline_sequencer() {
+        let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
+        let envelopes = (0..10)
+            .map(|j| {
+                (0..100)
+                    .map(|i| {
+                        let next_nonce_s = PrecomittedNonce::new(secp);
+                        let next_nonce = next_nonce_s.get_public(secp);
+                        let sk = SecretKey::new(&mut rand::thread_rng());
+                        let key = sk.x_only_public_key(secp).0;
+
+                        let ancestors = None;
+                        let tips = vec![];
+                        let sent_time_ms = 12431;
+                        let unsigned = Unsigned::new(None);
+                        let checkpoints = Default::default();
+                        let height = 0;
+
+                        let e1 = Envelope::new(
+                            Header::new(
+                                key,
+                                next_nonce,
+                                ancestors,
+                                tips,
+                                height,
+                                sent_time_ms,
+                                unsigned,
+                                checkpoints,
+                            ),
+                            ruma_serde::to_canonical_value(MoveEnvelope::new(
+                                Unsanitized(GameMove::Init(Init())),
+                                1,
+                                EntityID((j<<10) + i),
+                                sent_time_ms as u64,
+                            ))
+                            .unwrap(),
+                        );
+                        e1
+                    })
+                    .collect::<VecDeque<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let hmap = envelopes
+            .iter()
+            .map(|e| e.iter())
+            .flatten()
+            .map(|e| (e.canonicalized_hash_ref(), e.clone()))
+            .collect();
+        let hashes = envelopes
+            .iter()
+            .map(|es| es.iter().map(|e| e.canonicalized_hash_ref()).collect())
+            .collect();
+        let db_fetcher = Arc::new(OfflineDBFetcher::new(hashes, hmap));
+        let s = Sequencer::new(Default::default(), db_fetcher);
+        {
+            let s = s.clone();
+            spawn(async {
+                s.run().await;
+            });
+        }
+        for batch in envelopes {
+            for envelope in batch {
+                if let Some((m, x)) = s.output_move().await {
+                    let game_move = serde_json::from_value(envelope.msg().clone().into()).unwrap();
+                    assert_eq!(m, game_move);
+                    assert_eq!(x, envelope.header().key());
+                } else {
+                    assert!(false);
+                }
+            }
+        }
     }
 }

@@ -68,7 +68,7 @@ impl ConstantFunctionMarketMakerPair {
 /// A TradingPair, not guaranteed to be normalized (which can lead to weird
 /// bugs) Auto-canonicalizing is undesirable since a user might specify
 /// elsewhere in corresponding order what their trade is.
-#[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema, Debug)]
 pub struct TradingPairID {
     pub asset_a: TokenPointer,
     pub asset_b: TokenPointer,
