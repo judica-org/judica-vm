@@ -19,6 +19,8 @@ use bitcoin::Address;
 
 use bitcoin::XOnlyPublicKey;
 use mine_with_friends_board::game::game_move::GameMove;
+use mine_with_friends_board::game::GameBoard;
+use mine_with_friends_board::MoveEnvelope;
 use sapio::contract::actions::conditional_compile::ConditionalCompileType;
 use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
@@ -34,13 +36,18 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::io::Write;
 use std::marker::PhantomData;
+use std::ops::Mul;
 use std::str::FromStr;
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+struct PK(#[schemars(with = "sha256::Hash")] XOnlyPublicKey);
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 struct GameKernel {
     #[schemars(with = "sha256::Hash")]
-    game_host: XOnlyPublicKey,
-    players: BTreeMap<XOnlyPublicKey, AmountF64>,
+    game_host: PK,
+    players: BTreeMap<PK, AmountF64>,
 }
 impl GameKernel {}
 impl SIMP for GameKernel {
@@ -51,21 +58,21 @@ impl SIMP for GameKernel {
 
 struct GameStarted {
     kernel: GameKernel,
-    game_witnesses: Vec<XOnlyPublicKey>,
 }
 impl GameStarted {
     #[guard]
-    fn all_players_signed(self, ctx: Context) {
+    fn all_players_signed(self, _ctx: Context) {
         Clause::And(
             self.kernel
                 .players
                 .iter()
-                .map(|x| Clause::Key(x.0.clone()))
+                .map(|x| Clause::Key(x.0 .0.clone()))
                 .collect(),
         )
     }
 
     #[continuation(
+        web_api,
         coerce_args = "coerce_host_key",
         guarded_by = "[Self::all_players_signed]"
     )]
@@ -73,16 +80,16 @@ impl GameStarted {
         match proof {
             Some(k) => {
                 let secp = Secp256k1::new();
-                if k.0.x_only_public_key(&secp).0 == self.kernel.game_host {
+                if k.0.x_only_public_key(&secp).0 == self.kernel.game_host.0 {
                     let mut tmpl = ctx.template();
                     for (player, balance) in &self.kernel.players {
-                        tmpl = tmpl.add_output(balance.clone().into(), player, None)?
+                        tmpl = tmpl.add_output(balance.clone().into(), &player.0, None)?
                     }
                     tmpl.into()
                 } else {
                     Err(CompilationError::Custom(
-                        ("The Secret Key Provided does not match the Public Key of the Game Host"
-                            .into()),
+                        "The Secret Key Provided does not match the Public Key of the Game Host"
+                            .into(),
                     ))
                 }
             }
@@ -91,6 +98,7 @@ impl GameStarted {
     }
 
     #[continuation(
+        web_api,
         coerce_args = "coerce_censorship_proof",
         guarded_by = "[Self::all_players_signed]"
     )]
@@ -98,17 +106,61 @@ impl GameStarted {
         todo!()
     }
 
-    #[continuation(coerce_args = "coerce_move_sequence")]
+    #[continuation(web_api, coerce_args = "coerce_players_win")]
     fn game_end_players_win(self, ctx: Context, game_trace: Option<MoveSequence>) {
-        todo!()
+        match game_trace {
+            None => empty(),
+            Some(trace) => {
+                let mut game = GameBoard::new();
+                for (mv, pk) in trace.sequence {
+                    match game.play(mv, pk) {
+                        Ok(()) => {
+                            continue;
+                        }
+                        Err(()) => {
+                            return Err(CompilationError::TerminateWith(
+                                "GameBoard corrupted".into(),
+                            ));
+                        }
+                    }
+                }
+                // TODO: validate that the game has actually timed out
+                // TODO: get user data from game state
+                let total_bitcoin = ctx.funds();
+                let mut tmpl = ctx.template();
+                let (total_game_coin, users) = game.user_shares();
+                let user_data = game.user_data();
+                for (eid, game_coin) in users {
+                    let total_bitcoin_atomic = total_bitcoin.as_sat() as u128;
+                    let player_share = Amount::from_sat(
+                        ((game_coin * total_bitcoin_atomic) as f64 / total_game_coin as f64) as u64,
+                    );
+                    let player_key = match user_data.get(&eid) {
+                        None => {
+                            continue;
+                        }
+                        Some(ud) => match XOnlyPublicKey::from_str(&ud.key) {
+                            Err(_) => {
+                                return Err(CompilationError::TerminateWith(
+                                    "GameBoard corrupted: invalid user key".into(),
+                                ));
+                            }
+                            Ok(pk) => pk,
+                        },
+                    };
+                    tmpl = tmpl.add_output(player_share, &player_key, None)?;
+                }
+                tmpl.into()
+            }
+        }
     }
 
-    #[continuation(coerce_args = "coerce_move_sequence")]
+    #[continuation(web_api, coerce_args = "coerce_players_lose")]
     fn game_end_players_lose(self, ctx: Context, game_trace: Option<MoveSequence>) {
         todo!()
     }
 
-    #[continuation(coerce_args = "coerce_degrade")]
+    #[continuation(web_api, coerce_args = "coerce_degrade")]
     fn degrade(self, ctx: Context, _unit: Option<()>) {
         todo!()
     }
@@ -116,9 +168,9 @@ impl GameStarted {
 
 struct Degraded(usize);
 
-struct MoveSequence {
-    sequence: Vec<GameMove>,
-    signature_hex: String,
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct MoveSequence {
+    sequence: Vec<(MoveEnvelope, String)>,
 }
 
 struct MiningGame {}
@@ -129,14 +181,14 @@ struct GameStart {
     players: Vec<XOnlyPublicKey>,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
-struct HostKey(SecretKey);
+pub struct HostKey(SecretKey);
 #[derive(Serialize, Deserialize, JsonSchema)]
-struct CensorshipProof {}
+pub struct CensorshipProof {}
 
-enum GameEnd {
+pub enum GameEnd {
     HostCheatEquivocate(HostKey),
     HostCheatCensor(CensorshipProof),
-    PlayersWin,
+    PlayersWin(MoveSequence),
     PlayersLose(MoveSequence),
     Degrade,
 }
@@ -162,7 +214,9 @@ fn coerce_host_key(
 ) -> Result<Option<HostKey>, CompilationError> {
     match k {
         Some(GameEnd::HostCheatEquivocate(x)) => Ok(Some(x)),
-        Some(_) => Err(todo!()),
+        Some(_) => Err(CompilationError::ContinuationCoercion(
+            "Failed to coerce GameEnd into HostKey".into(),
+        )),
         None => Ok(None),
     }
 }
@@ -172,25 +226,35 @@ fn coerce_censorship_proof(
 ) -> Result<Option<CensorshipProof>, CompilationError> {
     match k {
         Some(GameEnd::HostCheatCensor(x)) => Ok(Some(x)),
-        Some(_) => Err(todo!()),
+        Some(_) => Err(CompilationError::ContinuationCoercion(
+            "Failed to coerce GameEnd into CensorshipProof".into(),
+        )),
         None => Ok(None),
     }
 }
 
 fn coerce_players_win(
     k: <GameStarted as Contract>::StatefulArguments,
-) -> Result<Option<()>, CompilationError> {
+) -> Result<Option<MoveSequence>, CompilationError> {
     match k {
-        Some(GameEnd::PlayersWin) => Ok(Some(())),
-        Some(_) => Err(todo!()),
+        Some(GameEnd::PlayersWin(ms)) => Ok(Some(ms)),
+        Some(_) => Err(CompilationError::ContinuationCoercion(
+            "Failed to coerce GameEnd into PlayersWin".into(),
+        )),
         None => Ok(None),
     }
 }
 
-fn coerce_move_sequence(
+fn coerce_players_lose(
     k: <GameStarted as Contract>::StatefulArguments,
 ) -> Result<Option<MoveSequence>, CompilationError> {
-    todo!()
+    match k {
+        Some(GameEnd::PlayersLose(ms)) => Ok(Some(ms)),
+        Some(_) => Err(CompilationError::ContinuationCoercion(
+            "Failed to coerce GameEnd into MoveSequence".into(),
+        )),
+        None => Ok(None),
+    }
 }
 
 fn coerce_degrade(
