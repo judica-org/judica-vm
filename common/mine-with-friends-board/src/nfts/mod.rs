@@ -43,7 +43,9 @@ impl Serialize for NFTRegistry {
 /// confusion with EntityID type)
 ///
 /// TODO: Guarantee validity for a given NFTRegistry
-#[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy, JsonSchema)]
+#[derive(
+    Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy, JsonSchema, Debug,
+)]
 pub struct NftPtr(EntityID);
 
 impl NFTRegistry {

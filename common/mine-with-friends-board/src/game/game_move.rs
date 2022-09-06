@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// N.B. we do the enum-of-struct-variant pattern to make serialization/schemas
 /// nicer.
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum GameMove {
     /// # Initialize Game
@@ -72,34 +72,39 @@ derive_from!(ListNFTForSale);
 derive_from!(RegisterUser);
 derive_from!(SendTokens);
 
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Init();
-#[derive(Serialize, Deserialize, JsonSchema)]
+
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct NoNewUsers();
-#[derive(Serialize, Deserialize, JsonSchema)]
+
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Trade {
     pub pair: TradingPairID,
     pub amount_a: u128,
     pub amount_b: u128,
 }
-#[derive(Serialize, Deserialize, JsonSchema)]
+
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct PurchaseNFT {
     pub nft_id: NftPtr,
     pub limit_price: Price,
     pub currency: Currency,
 }
-#[derive(Serialize, Deserialize, JsonSchema)]
+
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ListNFTForSale {
     pub nft_id: NftPtr,
     pub price: Price,
     pub currency: Currency,
 }
-#[derive(Serialize, Deserialize, JsonSchema)]
+
+#[derive(Eq, PartialEq, Serialize, Deserialize, JsonSchema, Debug)]
 pub struct RegisterUser {
     pub hex_user_key: String,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SendTokens {
     pub to: EntityID,
     pub amount: Price,
