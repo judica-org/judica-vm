@@ -137,6 +137,9 @@ impl GameStarted {
                     );
                     let player_key = match user_data.get(&eid) {
                         None => {
+                            // TODO: this is possibly a corruption event and warrants aborting?
+                            // If this has occurred it means there is a user in the user shares map
+                            // that is absent from the key map. This implies inconsistent state.
                             continue;
                         }
                         Some(ud) => match XOnlyPublicKey::from_str(&ud.key) {
