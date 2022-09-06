@@ -320,9 +320,9 @@ impl GameBoard {
         let silicon_token_id = self.silicon_token_id.unwrap();
         // get ux names
         let registry = &self.tokens;
-        let human_name_bitcoin = registry.index(bitcoin_token_id).nickname().unwrap_or(String::from("not found"));
-        let human_name_steel = registry.index(steel_token_id).nickname().unwrap_or(String::from("not found"));
-        let human_name_silicon = registry.index(silicon_token_id).nickname().unwrap_or(String::from("not found"));
+        let human_name_bitcoin = registry.index(bitcoin_token_id).nickname().unwrap_or_else(||"Bitcoin".into());
+        let human_name_steel = registry.index(steel_token_id).nickname().unwrap_or_else(||"Steel".into());
+        let human_name_silicon = registry.index(silicon_token_id).nickname().unwrap_or_else(||"Silicon".into());
         // get steel/btc
         let (steel_qty_btc, btc_qty_steel) =
             ConstantFunctionMarketMaker::get_pair_price_data(self, TradingPairID { asset_a:steel_token_id,
