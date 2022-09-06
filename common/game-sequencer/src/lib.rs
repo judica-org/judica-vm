@@ -8,6 +8,9 @@ use game_host_messages::{BroadcastByHost, Channelized};
 use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::XOnlyPublicKey;
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -65,6 +68,7 @@ use tokio::time::sleep;
 //     None
 // }
 
+#[derive(Serialize, Deserialize, JsonSchema)]
 pub struct RawSequencer {
     sequencer_envelopes: Vec<Envelope>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
@@ -140,6 +144,7 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
     }
 }
 
+#[derive(Serialize, Deserialize, JsonSchema)]
 pub struct OfflineSequencer {
     batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
