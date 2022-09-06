@@ -176,13 +176,15 @@ impl OnlineDBFetcher {
                                         BroadcastByHost::NewPeer(Peer { service_url, port }) => {
                                             let handle = self.db.get_handle().await;
                                             // idempotent
-                                            handle.insert_hidden_service(
-                                                service_url,
-                                                port,
-                                                true,
-                                                true,
-                                                true,
-                                            ).ok();
+                                            handle
+                                                .insert_hidden_service(
+                                                    service_url,
+                                                    port,
+                                                    true,
+                                                    true,
+                                                    true,
+                                                )
+                                                .ok();
                                         }
                                     }
                                     count += 1;
@@ -506,16 +508,18 @@ mod test {
                     for (k, v) in send_now {
                         cache.insert(k, v);
                     }
-                    me.new_msgs_in_cache.notify_waiters();
                 }
+                me.new_msgs_in_cache.notify_waiters();
                 spawn({
                     let cache = Arc::clone(&cache);
                     let me = me.clone();
                     async move {
                         tokio::time::sleep(Duration::from_millis(50)).await;
-                        let mut cache = cache.lock().await;
-                        for (k, v) in send_later {
-                            cache.insert(k, v);
+                        {
+                            let mut cache = cache.lock().await;
+                            for (k, v) in send_later {
+                                cache.insert(k, v);
+                            }
                         }
                         me.new_msgs_in_cache.notify_waiters();
                     }
