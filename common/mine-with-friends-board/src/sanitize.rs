@@ -23,7 +23,6 @@ pub trait Sanitizable {
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Unsanitized<D: Sanitizable>(pub D);
 
-
 impl<D> Sanitizable for Unsanitized<D>
 where
     D: Sanitizable,

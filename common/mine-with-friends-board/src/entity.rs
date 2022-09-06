@@ -9,7 +9,9 @@ use std::num::ParseIntError;
 /// - etc
 ///
 /// EntityIDs are global and unique within the game state
-#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(
+    Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Serialize, Deserialize, JsonSchema, Debug,
+)]
 #[serde(transparent)]
 pub struct EntityID(pub u64);
 

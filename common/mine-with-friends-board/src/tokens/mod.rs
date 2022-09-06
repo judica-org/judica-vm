@@ -158,7 +158,9 @@ impl Token for TokenBase {
 /// from safely, or if it has been sanitized.
 ///
 /// However, it cannot (currently) guarantee that it is from the correct source.
-#[derive(Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema, Debug)]
+#[derive(
+    Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd, Copy, Clone, JsonSchema, Debug,
+)]
 #[serde(transparent)]
 pub struct TokenPointer(EntityID);
 impl TokenPointer {
