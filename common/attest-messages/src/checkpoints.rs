@@ -1,7 +1,8 @@
 use sapio_bitcoin::BlockHash;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash, JsonSchema)]
 pub struct BitcoinCheckPoints {
     /// whatever tip hash we've seen recently present if changed where it should
     /// be roughly:
@@ -24,6 +25,7 @@ pub struct BitcoinCheckPoints {
     ///
     /// Note that we may already transitively commit to these (or later)
     /// checkpoints via other commitments in the header.
+    #[schemars(with = "[(sapio_bitcoin::hashes::sha256d::Hash, i64); 5]")]
     pub checkpoints: [(BlockHash, i64); 5],
 }
 

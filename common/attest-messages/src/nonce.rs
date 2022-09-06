@@ -7,6 +7,7 @@ use sapio_bitcoin::secp256k1::{
 };
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub unsafe extern "C" fn custom_nonce(
@@ -64,8 +65,10 @@ impl PrecomittedNonce {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Copy)]
-pub struct PrecomittedPublicNonce(pub XOnlyPublicKey);
+#[derive(
+    Serialize, Deserialize, Clone, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Copy, JsonSchema,
+)]
+pub struct PrecomittedPublicNonce(#[schemars(with = "String")] pub XOnlyPublicKey);
 
 #[cfg(test)]
 mod test {

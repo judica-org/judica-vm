@@ -10,6 +10,7 @@ use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
 use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use std::error::Error;
@@ -22,8 +23,9 @@ pub mod checkpoints;
 #[cfg(feature = "rusqlite")]
 pub mod sql_impl;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash, JsonSchema)]
 pub struct Unsigned {
+    #[schemars(with = "Option<String>")]
     signature: Option<sapio_bitcoin::secp256k1::schnorr::Signature>,
 }
 
@@ -37,7 +39,7 @@ impl Unsigned {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash, JsonSchema)]
 pub struct Ancestors {
     prev_msg: CanonicalEnvelopeHash,
     genesis: CanonicalEnvelopeHash,
@@ -56,8 +58,9 @@ impl Ancestors {
         self.genesis
     }
 }
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, JsonSchema)]
 pub struct Header {
+    #[schemars(with = "String")]
     key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
     next_nonce: PrecomittedPublicNonce,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -67,6 +70,7 @@ pub struct Header {
     // after.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
+    #[schemars(with = "Vec<(String, i64, CanonicalEnvelopeHash)>")]
     tips: Vec<(XOnlyPublicKey, i64, CanonicalEnvelopeHash)>,
     height: i64,
     sent_time_ms: i64,
@@ -134,10 +138,11 @@ impl std::fmt::Debug for Header {
         f.write_str(&serde_json::to_string(self).unwrap())
     }
 }
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, JsonSchema)]
 #[serde(from = "from_wrap::Envelope")]
 pub struct Envelope {
     header: Header,
+    #[schemars(with = "serde_json::Value")]
     msg: CanonicalJsonValue,
     #[serde(skip)]
     cache: Option<CanonicalEnvelopeHash>,
@@ -204,7 +209,7 @@ impl Display for AuthenticationError {
 impl Error for SigningError {}
 impl Error for AuthenticationError {}
 
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, PartialOrd, Ord, Copy, Hash)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, PartialOrd, Ord, Copy, Hash, JsonSchema)]
 pub struct CanonicalEnvelopeHash(sha256::Hash);
 impl CanonicalEnvelopeHash {
     pub fn genesis() -> CanonicalEnvelopeHash {

@@ -1,14 +1,21 @@
 #[cfg(feature = "database_access")]
 use attest_database::connection::MsgDB;
+use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
 use mine_with_friends_board::MoveEnvelope;
+use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::XOnlyPublicKey;
+use schemars::JsonSchema;
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::convert::TryFrom;
+use std::fmt::Display;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -61,6 +68,128 @@ use tokio::time::sleep;
 //     None
 // }
 
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct RawSequencer {
+    sequencer_envelopes: Vec<Envelope>,
+    msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
+}
+
+#[derive(Debug)]
+pub enum SequencerError {
+    BadMessageType,
+    MessageFromWrongEntity,
+    MisingTip,
+    Gap,
+    AuthenticationError,
+}
+
+impl Display for SequencerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+impl std::error::Error for SequencerError {}
+
+impl TryFrom<RawSequencer> for OfflineSequencer {
+    type Error = SequencerError;
+
+    fn try_from(value: RawSequencer) -> Result<Self, Self::Error> {
+        if let Some(false) = value
+            .sequencer_envelopes
+            .first()
+            .map(|v| v.header().height() == 0)
+        {
+            return Err(SequencerError::MisingTip);
+        }
+        if value
+            .sequencer_envelopes
+            .windows(2)
+            .any(|s| s[0].header().height() + 1 != s[1].header().height())
+        {
+            return Err(SequencerError::Gap);
+        }
+        if value
+            .sequencer_envelopes
+            .windows(2)
+            .any(|s| s[0].header().key() != s[1].header().key())
+        {
+            return Err(SequencerError::MessageFromWrongEntity);
+        }
+        let secp = Secp256k1::verification_only();
+        if value
+            .sequencer_envelopes
+            .iter()
+            .any(|s| s.self_authenticate(&secp).is_err())
+        {
+            return Err(SequencerError::AuthenticationError);
+        }
+        let mut batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>> = vec![];
+        for envelope in &value.sequencer_envelopes {
+            match serde_json::from_value::<Channelized<BroadcastByHost>>(
+                envelope.msg().to_owned().into(),
+            ) {
+                Ok(v) => match v.data {
+                    BroadcastByHost::Sequence(s) => batches_to_sequence.push(s),
+                    BroadcastByHost::NewPeer(_) => {}
+                },
+                Err(_) => {
+                    return Err(SequencerError::BadMessageType);
+                }
+            }
+        }
+        Ok(OfflineSequencer {
+            msg_cache: value.msg_cache,
+            batches_to_sequence,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct OfflineSequencer {
+    batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
+    msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
+}
+impl OfflineSequencer {
+    pub fn directly_sequence(&mut self) -> Result<Vec<Envelope>, ()> {
+        let mut v = vec![];
+        for batch in &self.batches_to_sequence {
+            for h in batch {
+                if let Some(e) = self.msg_cache.remove(&h) {
+                    v.push(e);
+                } else {
+                    return Err(());
+                }
+            }
+        }
+
+        Ok(v)
+    }
+}
+impl From<OfflineSequencer> for OfflineDBFetcher {
+    fn from(o: OfflineSequencer) -> Self {
+        OfflineDBFetcher::new(o.batches_to_sequence, o.msg_cache)
+    }
+}
+
+impl TryFrom<OfflineDBFetcher> for OfflineSequencer {
+    type Error = ();
+
+    fn try_from(value: OfflineDBFetcher) -> Result<Self, Self::Error> {
+        let mut batches = value.batches_to_sequence.try_lock().map_err(|_| ())?;
+        let mut cache = value.msg_cache.try_lock().map_err(|_| ())?;
+        let mut c = HashMap::default();
+        let mut batches_to_sequence = Vec::default();
+        std::mem::swap(&mut c, &mut cache);
+        while let Ok(batch) = batches.try_recv() {
+            batches_to_sequence.push(batch);
+        }
+        Ok(OfflineSequencer {
+            batches_to_sequence,
+            msg_cache: c,
+        })
+    }
+}
+
 pub struct OfflineDBFetcher {
     batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
     msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>>,
@@ -81,6 +210,10 @@ impl OfflineDBFetcher {
             msg_cache: Arc::new(Mutex::new(msg_cache)),
             new_msgs_in_cache: Default::default(),
         }
+    }
+
+    pub fn directly_sequence(self) -> Result<Vec<Envelope>, ()> {
+        OfflineSequencer::try_from(self)?.directly_sequence()
     }
 }
 impl DBFetcher for OfflineDBFetcher {
@@ -335,7 +468,7 @@ impl Sequencer {
     // Run the deserialization of the inner message type to move sets in it's own thread so that we can process
     // moves in a pipeline as they get deserialized
     // TODO: We skip invalid moves? Should do something else?
-    fn start_move_deserializer(self: Arc<Self>) -> (JoinHandle<()>) {
+    fn start_move_deserializer(self: Arc<Self>) -> JoinHandle<()> {
         let task = spawn(async move {
             let mut next_envelope = self.output_envelope.lock().await;
             while let Some(envelope) = next_envelope.recv().await {
@@ -367,7 +500,10 @@ mod test {
         game::game_move::{GameMove, Init},
         sanitize::Unsanitized,
     };
-    use sapio_bitcoin::secp256k1::{rand, SecretKey};
+    use sapio_bitcoin::{
+        hashes::Hash,
+        secp256k1::{rand, SecretKey},
+    };
     use std::collections::VecDeque;
 
     fn make_random_moves() -> Vec<VecDeque<Envelope>> {
@@ -422,11 +558,14 @@ mod test {
             .map(|e| e.iter())
             .flatten()
             .map(|e| (e.canonicalized_hash_ref(), e.clone()))
-            .collect();
+            .collect::<HashMap<_, _>>();
         let hashes = envelopes
             .iter()
             .map(|es| es.iter().map(|e| e.canonicalized_hash_ref()).collect())
-            .collect();
+            .collect::<Vec<_>>();
+        let db_fetcher_direct = OfflineDBFetcher::new(hashes.clone(), hmap.clone())
+            .directly_sequence()
+            .unwrap();
         let db_fetcher = Arc::new(OfflineDBFetcher::new(hashes, hmap));
         let s = Sequencer::new(Default::default(), db_fetcher);
         {
@@ -435,6 +574,9 @@ mod test {
                 s.run().await;
             });
         }
+
+        assert!(envelopes.iter().flatten().eq(db_fetcher_direct.iter()));
+
         for batch in envelopes {
             for envelope in batch {
                 if let Some((m, x)) = s.output_move().await {
