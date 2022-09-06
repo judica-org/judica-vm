@@ -10,7 +10,7 @@ pub mod sanitize;
 pub mod tokens;
 pub mod util;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 /// Verified is a wrapper for a data type with sequencing and signature data
 pub struct MoveEnvelope {
     /// The data
@@ -20,6 +20,17 @@ pub struct MoveEnvelope {
     /// The player who is making the move
     from: entity::EntityID,
     time: u64,
+}
+
+impl MoveEnvelope {
+    pub fn new(d: Unsanitized<GameMove>, sequence: u64, from: entity::EntityID, time: u64) -> Self {
+        Self {
+            d,
+            sequence,
+            from,
+            time,
+        }
+    }
 }
 
 #[cfg(test)]

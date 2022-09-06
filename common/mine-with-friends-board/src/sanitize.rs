@@ -20,7 +20,7 @@ pub trait Sanitizable {
     fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error>;
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Unsanitized<D: Sanitizable>(pub D);
 
 impl<D> Sanitizable for Unsanitized<D>

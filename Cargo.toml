@@ -8,6 +8,7 @@ members = [
     "common/bitcoin-header-checkpoints",
     "common/game-host",
     "common/game-host-messages",
+    "common/game-sequencer",
 ]
 
 exclude=["ux/src-tauri/"]

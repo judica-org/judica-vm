@@ -2,7 +2,7 @@ use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
-
+use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::{
     secp256k1::{
         rand::{self},
@@ -80,7 +80,8 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
     // can know which messages we've sequenced previously.
     {
         let handle = db.get_handle().await;
-        if let Ok(v) = handle.load_all_messages_for_user_by_key(&oracle_publickey)? {
+        let v = handle.load_all_messages_for_user_by_key_connected(&oracle_publickey)?;
+        {
             for x in v {
                 let d =
                     serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg().clone().into())?;
@@ -89,8 +90,6 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
                     BroadcastByHost::NewPeer(_) => {}
                 }
             }
-        } else {
-            panic!("Incosistent Database");
         }
     }
     let mut all_unprocessed_messages = HashMap::new();

@@ -1,7 +1,16 @@
 use std::cmp::min;
 
+use crate::{
+    callbacks::Callback,
+    entity::EntityID,
+    game::CallContext,
+    tokens::{
+        token_swap::{ConstantFunctionMarketMaker, TradingPairID},
+        TokenPointer,
+    },
+    util::Price,
+};
 use serde::Serialize;
-use crate::{callbacks::Callback, entity::EntityID, tokens::{TokenPointer, token_swap::{TradingPairID, ConstantFunctionMarketMaker}}, util::Price, game::CallContext};
 
 /// Properties of Silicon
 #[derive(Serialize)]
