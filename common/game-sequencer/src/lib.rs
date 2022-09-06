@@ -4,13 +4,11 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
-use mine_with_friends_board::game::game_move::GameMove;
 use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::future;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -123,7 +121,7 @@ impl OnlineDBFetcher {
         oracle_key: XOnlyPublicKey,
         db: MsgDB,
     ) -> Arc<Self> {
-        let (schedule_batches_to_sequence, mut batches_to_sequence) = unbounded_channel();
+        let (schedule_batches_to_sequence, batches_to_sequence) = unbounded_channel();
         let batches_to_sequence = Arc::new(Mutex::new(batches_to_sequence));
         Arc::new(Self {
             poll_sequencer_period,
@@ -146,8 +144,8 @@ impl OnlineDBFetcher {
         if let Ok(false) = last {
             let sequencer = self.clone().start_sequencer();
             let db_fetcher = self.clone().start_envelope_db_fetcher();
-            sequencer.await;
-            db_fetcher.await;
+            sequencer.await.ok();
+            db_fetcher.await.ok();
         }
     }
     fn should_shutdown(&self) -> bool {
@@ -184,7 +182,7 @@ impl OnlineDBFetcher {
                                                 true,
                                                 true,
                                                 true,
-                                            );
+                                            ).ok();
                                         }
                                     }
                                     count += 1;
@@ -205,7 +203,7 @@ impl OnlineDBFetcher {
         task
     }
     /// This task builds a HashMap of all unprocessed envelopes regularly
-    fn start_envelope_db_fetcher(self: Arc<Self>) -> (JoinHandle<()>) {
+    fn start_envelope_db_fetcher(self: Arc<Self>) -> JoinHandle<()> {
         let task = spawn(async move {
             let mut newer = None;
             while !self.should_shutdown() {
@@ -323,7 +321,7 @@ impl Sequencer {
                             Vacant(k) => {
                                 envelope_hashes.push_front(k.into_key());
                                 should_wait.insert(self.db_fetcher.notified());
-                                break 'wait_for_new;
+                                continue 'wait_for_new;
                             }
                         }
                     }
@@ -362,13 +360,15 @@ impl Sequencer {
 mod test {
     use super::*;
     use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
-    use mine_with_friends_board::{entity::EntityID, game::game_move::Init, sanitize::Unsanitized};
-    use ruma_serde::CanonicalJsonValue;
+    use mine_with_friends_board::{
+        entity::EntityID,
+        game::game_move::{GameMove, Init},
+        sanitize::Unsanitized,
+    };
     use sapio_bitcoin::secp256k1::{rand, SecretKey};
     use std::collections::VecDeque;
 
-    #[tokio::test]
-    async fn test_offline_sequencer() {
+    fn make_random_moves() -> Vec<VecDeque<Envelope>> {
         let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
         let envelopes = (0..10)
             .map(|j| {
@@ -400,7 +400,7 @@ mod test {
                             ruma_serde::to_canonical_value(MoveEnvelope::new(
                                 Unsanitized(GameMove::Init(Init())),
                                 1,
-                                EntityID((j<<10) + i),
+                                EntityID((j << 10) + i),
                                 sent_time_ms as u64,
                             ))
                             .unwrap(),
@@ -410,7 +410,11 @@ mod test {
                     .collect::<VecDeque<_>>()
             })
             .collect::<Vec<_>>();
-
+        envelopes
+    }
+    #[tokio::test]
+    async fn test_offline_sequencer() {
+        let envelopes = make_random_moves();
         let hmap = envelopes
             .iter()
             .map(|e| e.iter())
@@ -422,6 +426,132 @@ mod test {
             .map(|es| es.iter().map(|e| e.canonicalized_hash_ref()).collect())
             .collect();
         let db_fetcher = Arc::new(OfflineDBFetcher::new(hashes, hmap));
+        let s = Sequencer::new(Default::default(), db_fetcher);
+        {
+            let s = s.clone();
+            spawn(async {
+                s.run().await;
+            });
+        }
+        for batch in envelopes {
+            for envelope in batch {
+                if let Some((m, x)) = s.output_move().await {
+                    let game_move = serde_json::from_value(envelope.msg().clone().into()).unwrap();
+                    assert_eq!(m, game_move);
+                    assert_eq!(x, envelope.header().key());
+                } else {
+                    assert!(false);
+                }
+            }
+        }
+    }
+    struct TestDBFetcher {
+        to_seq: Vec<VecDeque<Envelope>>,
+        poll_sequencer_period: Duration,
+        schedule_batches_to_sequence: UnboundedSender<VecDeque<CanonicalEnvelopeHash>>,
+        batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
+        msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>>,
+        rebuild_db_period: Duration,
+        new_msgs_in_cache: Arc<Notify>,
+    }
+    impl TestDBFetcher {
+        pub fn new(
+            to_seq: Vec<VecDeque<Envelope>>,
+            poll_sequencer_period: Duration,
+            rebuild_db_period: Duration,
+        ) -> Arc<Self> {
+            let (schedule_batches_to_sequence, mut batches_to_sequence) = unbounded_channel();
+            let batches_to_sequence = Arc::new(Mutex::new(batches_to_sequence));
+            Arc::new(Self {
+                poll_sequencer_period,
+                schedule_batches_to_sequence,
+                batches_to_sequence,
+                msg_cache: Default::default(),
+                new_msgs_in_cache: Default::default(),
+                rebuild_db_period,
+                to_seq,
+            })
+        }
+        async fn run(self: Arc<Self>) {
+            spawn({
+                let me = Arc::clone(&self);
+                async move {
+                    for batch in &me.to_seq {
+                        me.schedule_batches_to_sequence
+                            .send(batch.iter().map(|e| e.canonicalized_hash_ref()).collect());
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    }
+                }
+            });
+            let me = Arc::clone(&self);
+            let mut all: VecDeque<_> = me.to_seq.iter().flatten().collect();
+            let cache = &Arc::clone(&self.msg_cache);
+            loop {
+                let send_later: Vec<_> = (0..5)
+                    .flat_map(|_| all.pop_front())
+                    .map(|e| (e.canonicalized_hash_ref(), e.clone()))
+                    .collect();
+                let send_now: Vec<_> = (0..5)
+                    .flat_map(|_| all.pop_front())
+                    .map(|e| (e.canonicalized_hash_ref(), e.clone()))
+                    .collect();
+                let quit = send_later.len() < 5 || send_now.len() < 5;
+                if send_later.len() + send_now.len() == 0 {
+                    break;
+                }
+
+                {
+                    let cache = Arc::clone(&cache);
+                    let mut cache = cache.lock().await;
+                    for (k, v) in send_now {
+                        cache.insert(k, v);
+                    }
+                    me.new_msgs_in_cache.notify_waiters();
+                }
+                spawn({
+                    let cache = Arc::clone(&cache);
+                    let me = me.clone();
+                    async move {
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        let mut cache = cache.lock().await;
+                        for (k, v) in send_later {
+                            cache.insert(k, v);
+                        }
+                        me.new_msgs_in_cache.notify_waiters();
+                    }
+                });
+                tokio::time::sleep(Duration::from_millis(50)).await;
+
+                if quit {
+                    break;
+                }
+            }
+        }
+    }
+    impl DBFetcher for TestDBFetcher {
+        fn batches_to_sequence(
+            &self,
+        ) -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>> {
+            self.batches_to_sequence.clone()
+        }
+
+        fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>> {
+            self.msg_cache.clone()
+        }
+
+        fn notified(&self) -> Notified<'_> {
+            self.new_msgs_in_cache.notified()
+        }
+    }
+    #[tokio::test]
+    async fn test_periodic_seqeuencer() {
+        let envelopes = make_random_moves();
+        let db_fetcher = TestDBFetcher::new(
+            envelopes.clone(),
+            Duration::from_secs(1),
+            Duration::from_secs(1),
+        );
+        spawn(db_fetcher.clone().run());
         let s = Sequencer::new(Default::default(), db_fetcher);
         {
             let s = s.clone();
