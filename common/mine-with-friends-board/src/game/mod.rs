@@ -186,7 +186,7 @@ impl GameBoard {
                         },
                     );
                     let silicon = self.tokens.new_token(silicon);
-                    let _ = self.steel_token_id.insert(silicon);
+                    let _ = self.silicon_token_id.insert(silicon);
                     let _ = self
                         .tokens
                         .silicon
@@ -317,7 +317,7 @@ impl GameBoard {
         // get pointer and human name for materials and 
         let bitcoin_token_id = self.bitcoin_token_id.unwrap();
         let steel_token_id = self.steel_token_id.unwrap();
-        let silicon_token_id = self.steel_token_id.unwrap();
+        let silicon_token_id = self.silicon_token_id.unwrap();
         // get ux names
         let registry = &self.tokens;
         let human_name_bitcoin = registry.index(bitcoin_token_id).nickname().unwrap_or(String::from("not found"));

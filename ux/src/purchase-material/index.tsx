@@ -21,12 +21,12 @@ const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action:
     });
   };
 
-  const formData = {
-    currency
-  }
 
   // for creater should be extracted out into a form util
   const schema_form = useMemo<JSX.Element>(() => {
+    const formData = {
+      currency
+    };
     const customFormats = { "uint128": (s: string) => { return true; } };
     if (schema)
       return <Form formData={formData} schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
@@ -36,7 +36,7 @@ const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action:
     else
       return <div></div>
   }
-    , [schema]
+    , [currency, schema]
   )
   const uid = useRef<null | HTMLInputElement>(null);
   return schema && <Card>
