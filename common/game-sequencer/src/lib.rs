@@ -82,6 +82,23 @@ impl OfflineDBFetcher {
             new_msgs_in_cache: Default::default(),
         }
     }
+
+    pub fn directly_sequence(&self) -> Result<Vec<Envelope>, ()> {
+        let mut batches = self.batches_to_sequence.try_lock().map_err(|_|())?;
+        let mut cache = self.msg_cache.try_lock().map_err(|_|())?;
+        let mut v = vec![];
+        while let Ok(batch) = batches.try_recv() {
+            for h in batch {
+                if let Some(e) = cache.remove(&h) {
+                    v.push(e);
+                } else {
+                    return Err(());
+                }
+            }
+        }
+
+        Ok(v)
+    }
 }
 impl DBFetcher for OfflineDBFetcher {
     fn batches_to_sequence(
@@ -335,7 +352,7 @@ impl Sequencer {
     // Run the deserialization of the inner message type to move sets in it's own thread so that we can process
     // moves in a pipeline as they get deserialized
     // TODO: We skip invalid moves? Should do something else?
-    fn start_move_deserializer(self: Arc<Self>) -> (JoinHandle<()>) {
+    fn start_move_deserializer(self: Arc<Self>) -> JoinHandle<()> {
         let task = spawn(async move {
             let mut next_envelope = self.output_envelope.lock().await;
             while let Some(envelope) = next_envelope.recv().await {
@@ -367,7 +384,10 @@ mod test {
         game::game_move::{GameMove, Init},
         sanitize::Unsanitized,
     };
-    use sapio_bitcoin::secp256k1::{rand, SecretKey};
+    use sapio_bitcoin::{
+        hashes::Hash,
+        secp256k1::{rand, SecretKey},
+    };
     use std::collections::VecDeque;
 
     fn make_random_moves() -> Vec<VecDeque<Envelope>> {
@@ -422,11 +442,14 @@ mod test {
             .map(|e| e.iter())
             .flatten()
             .map(|e| (e.canonicalized_hash_ref(), e.clone()))
-            .collect();
+            .collect::<HashMap<_, _>>();
         let hashes = envelopes
             .iter()
             .map(|es| es.iter().map(|e| e.canonicalized_hash_ref()).collect())
-            .collect();
+            .collect::<Vec<_>>();
+        let db_fetcher_direct = OfflineDBFetcher::new(hashes.clone(), hmap.clone())
+            .directly_sequence()
+            .unwrap();
         let db_fetcher = Arc::new(OfflineDBFetcher::new(hashes, hmap));
         let s = Sequencer::new(Default::default(), db_fetcher);
         {
@@ -435,6 +458,9 @@ mod test {
                 s.run().await;
             });
         }
+
+        assert!(envelopes.iter().flatten().eq(db_fetcher_direct.iter()));
+
         for batch in envelopes {
             for envelope in batch {
                 if let Some((m, x)) = s.output_move().await {
