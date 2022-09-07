@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api';
 import { appWindow } from '@tauri-apps/api/window';
-import React, { FormEvent } from 'react';
+import React from 'react';
 import './App.css';
-import logo from './logo.svg';
 import Form, { FormSubmit } from "@rjsf/core";
+import RawMaterialsMarket from './raw-materials';
 
 
 function MoveForm() {
@@ -19,8 +19,8 @@ function MoveForm() {
     invoke("make_move_inner", { nextMove: data.formData, from: uid.current?.valueAsNumber })
 
   };
-  const customFormats = { "uint128": (s: string) => { return true; } };
   const schema_form = React.useMemo<JSX.Element>(() => {
+    const customFormats = { "uint128": (s: string) => { return true; } };
     if (schema)
       return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
         <button type="submit">Submit</button>
@@ -115,6 +115,7 @@ function App() {
   return (
     <div className="App">
       {game_board && <GameBoard g={game_board}></GameBoard>}
+      <RawMaterialsMarket></RawMaterialsMarket>
       <MoveForm></MoveForm>
     </div>
   );

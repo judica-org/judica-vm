@@ -24,10 +24,13 @@ use crate::tokens::instances::steel::Steel;
 use crate::tokens::instances::steel::SteelSmelter;
 use crate::tokens::token_swap;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::token_swap::TradingPairID;
 use crate::MoveEnvelope;
+use crate::tokens::token_swap::UXMaterialsPriceData;
 use serde::Serialize;
 use std::cmp::max;
 use std::collections::BTreeMap;
+use std::ops::Index;
 
 use tokens::TokenBase;
 use tokens::TokenPointer;
@@ -183,7 +186,7 @@ impl GameBoard {
                         },
                     );
                     let silicon = self.tokens.new_token(silicon);
-                    let _ = self.steel_token_id.insert(silicon);
+                    let _ = self.silicon_token_id.insert(silicon);
                     let _ = self
                         .tokens
                         .silicon
@@ -201,7 +204,7 @@ impl GameBoard {
                         id: self.alloc.make(),
                         total_units: 100_000,
                         base_price: 20,
-                        price_asset: self.dollar_token_id.unwrap(),
+                        price_asset: self.bitcoin_token_id.unwrap(),
                         hash_asset: asic,
                         adjusts_every: 100, // what units?
                         current_time: self.current_time,
@@ -212,7 +215,7 @@ impl GameBoard {
                         id: self.alloc.make(),
                         total_units: 100_000,
                         base_price: 1,
-                        price_asset: self.dollar_token_id.unwrap(),
+                        price_asset: self.bitcoin_token_id.unwrap(),
                         hash_asset: steel,
                         adjusts_every: 100, // what units?
                         current_time: self.current_time,
@@ -223,7 +226,7 @@ impl GameBoard {
                         id: self.alloc.make(),
                         total_units: 100_000,
                         base_price: 38,
-                        price_asset: self.dollar_token_id.unwrap(),
+                        price_asset: self.bitcoin_token_id.unwrap(),
                         hash_asset: steel,
                         adjusts_every: 100, // what units?
                         current_time: self.current_time,
@@ -305,6 +308,52 @@ impl GameBoard {
             }
         }
         return Ok(());
+    }
+
+    pub fn get_ux_materials_prices(
+        &mut self,
+    ) -> Result<Vec<UXMaterialsPriceData>, ()> {
+        let mut price_data = Vec::new();
+        // get pointer and human name for materials and 
+        let bitcoin_token_id = self.bitcoin_token_id.unwrap();
+        let steel_token_id = self.steel_token_id.unwrap();
+        let silicon_token_id = self.silicon_token_id.unwrap();
+        // get ux names
+        let registry = &self.tokens;
+        let human_name_bitcoin = registry.index(bitcoin_token_id).nickname().unwrap_or_else(||"Bitcoin".into());
+        let human_name_steel = registry.index(steel_token_id).nickname().unwrap_or_else(||"Steel".into());
+        let human_name_silicon = registry.index(silicon_token_id).nickname().unwrap_or_else(||"Silicon".into());
+        // get steel/btc
+        let (steel_qty_btc, btc_qty_steel) =
+            ConstantFunctionMarketMaker::get_pair_price_data(self, TradingPairID { asset_a:steel_token_id,
+                asset_b:bitcoin_token_id}).unwrap();
+        // get silicon/btc
+        let (silicon_qty_btc, btc_qty_silicon) =
+            ConstantFunctionMarketMaker::get_pair_price_data(self, TradingPairID { asset_a:silicon_token_id,
+                asset_b:bitcoin_token_id}).unwrap();
+        
+        price_data.push(UXMaterialsPriceData {
+            trading_pair: TradingPairID {
+                asset_a:steel_token_id,
+                asset_b:bitcoin_token_id
+            },
+            asset_a: human_name_steel,
+            mkt_qty_a: steel_qty_btc,
+            asset_b: human_name_bitcoin.clone(),
+            mkt_qty_b: btc_qty_steel,
+        });
+        price_data.push(UXMaterialsPriceData {
+            trading_pair: TradingPairID {
+                asset_a:silicon_token_id,
+                asset_b:bitcoin_token_id
+            },
+            asset_a: human_name_silicon,
+            mkt_qty_a: silicon_qty_btc,
+            asset_b: human_name_bitcoin,
+            mkt_qty_b: btc_qty_silicon,
+        });
+        
+        Ok(price_data)
     }
 }
 
