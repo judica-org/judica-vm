@@ -1,4 +1,5 @@
 use super::handle_type;
+use super::ChainCommitGroupID;
 use super::MsgDBHandle;
 use crate::sql_serializers::PK;
 use crate::sql_serializers::SK;
@@ -12,6 +13,8 @@ use rusqlite::Transaction;
 
 use rusqlite::params;
 use rusqlite::ErrorCode;
+use sapio_bitcoin::secp256k1::rand::thread_rng;
+use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::{
     hashes::hex::ToHex,
     secp256k1::{Secp256k1, Signing},
@@ -44,7 +47,9 @@ where
         key: XOnlyPublicKey,
     ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
         let pk_nonce = nonce.get_public(secp);
-        let mut stmt = self.0.prepare_cached(include_str!("sql/insert/nonce.sql"))?;
+        let mut stmt = self
+            .0
+            .prepare_cached(include_str!("sql/insert/nonce.sql"))?;
         stmt.insert(rusqlite::params![PK(key), pk_nonce, nonce,])?;
         Ok(pk_nonce)
     }
@@ -140,6 +145,39 @@ where
         let res = try_insert_authenticated_envelope_with_txn(data, &tx);
         tx.commit()?;
         res
+    }
+
+    /// Create a new Chain Commit Group
+    pub fn new_chain_commit_group(
+        &self,
+        name: Option<String>,
+    ) -> Result<(String, ChainCommitGroupID), rusqlite::Error> {
+        let name = name.unwrap_or_else(|| {
+            let mut r = thread_rng();
+            let u: [u8; 32] = r.gen::<[u8; 32]>();
+            u.to_hex()
+        });
+        let mut stmt = self
+            .0
+            .prepare_cached(include_str!("sql/insert/new_chain_commit_group.sql"))?;
+        let i = stmt.insert(rusqlite::named_params!(":name": name))?;
+        Ok((name, ChainCommitGroupID(i)))
+    }
+
+    /// Add Member to Chain Commit Group
+    pub fn add_member_to_chain_commit_group(
+        &self,
+        group_id: ChainCommitGroupID,
+        genesis_hash: CanonicalEnvelopeHash,
+    ) -> Result<(), rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare_cached(include_str!("sql/insert/add_chain_commit_group_member.sql"))?;
+        let _ = stmt.insert(rusqlite::named_params!(
+            ":genesis_hash": genesis_hash,
+            ":group_id": group_id
+        ))?;
+        Ok(())
     }
 }
 

@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
 
 use super::sql_serializers::{self};
-use rusqlite::Connection;
+use rusqlite::{types::FromSql, Connection, ToSql};
+use serde::{Deserialize, Serialize};
 use tokio::sync::MutexGuard;
 
 pub mod create;
@@ -30,3 +31,22 @@ pub mod handle_type {
     impl Setup for All {}
     impl Update for All {}
 }
+macro_rules! row_type (
+    {$RowType:ident} => {
+#[derive(PartialEq, PartialOrd, Ord, Eq, Clone, Copy, Serialize, Deserialize)]
+pub struct $RowType(i64);
+impl ToSql for $RowType {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        self.0.to_sql()
+    }
+}
+impl FromSql for $RowType {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        value.as_i64().map($RowType)
+    }
+}
+    }
+);
+
+row_type!(ChainCommitGroupID);
+row_type!(MessageID);

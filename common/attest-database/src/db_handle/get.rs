@@ -1,5 +1,5 @@
 use super::sql_serializers::{self};
-use super::{handle_type, MsgDBHandle};
+use super::{handle_type, ChainCommitGroupID, MessageID, MsgDBHandle};
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Envelope;
@@ -107,7 +107,9 @@ where
     pub fn drop_message_by_hash(&self, h: CanonicalEnvelopeHash) -> Result<(), rusqlite::Error> {
         use rusqlite::named_params;
 
-        let mut stmt = self.0.prepare_cached("DELETE FROM messages WHERE :hash = hash")?;
+        let mut stmt = self
+            .0
+            .prepare_cached("DELETE FROM messages WHERE :hash = hash")?;
         stmt.execute(named_params! {":hash": h})?;
         Ok(())
     }
@@ -147,7 +149,8 @@ where
             self.0
                 .prepare_cached(include_str!("sql/get/all_messages_after.sql"))?
         } else {
-            self.0.prepare_cached(include_str!("sql/get/all_messages.sql"))?
+            self.0
+                .prepare_cached(include_str!("sql/get/all_messages.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -166,7 +169,9 @@ where
     pub fn get_reused_nonces(
         &self,
     ) -> Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, rusqlite::Error> {
-        let mut stmt = self.0.prepare_cached(include_str!("sql/get/reused_nonces.sql"))?;
+        let mut stmt = self
+            .0
+            .prepare_cached(include_str!("sql/get/reused_nonces.sql"))?;
         let rows = stmt.query([])?;
         let vs = rows
             .map(|r| r.get::<_, Envelope>(0))
@@ -191,7 +196,9 @@ where
     }
 
     pub fn get_all_genesis(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
-        let mut stmt = self.0.prepare_cached(include_str!("sql/get/all_genesis.sql"))?;
+        let mut stmt = self
+            .0
+            .prepare_cached(include_str!("sql/get/all_genesis.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
@@ -263,7 +270,9 @@ where
     where
         I: Iterator<Item = &'i CanonicalEnvelopeHash>,
     {
-        let mut stmt = self.0.prepare_cached("SELECT body FROM messages WHERE hash = ?")?;
+        let mut stmt = self
+            .0
+            .prepare_cached("SELECT body FROM messages WHERE hash = ?")?;
         let r: Result<Vec<_>, _> = hashes
             .map(|hash| stmt.query_row([hash], |r| r.get::<_, Envelope>(0)))
             .collect();
@@ -312,6 +321,73 @@ where
         })
         .collect()
     }
+}
+
+impl<'a, T> MsgDBHandle<'a, T>
+where
+    T: handle_type::Get,
+{
+    pub fn get_all_chain_commit_groups(
+        &self,
+    ) -> Result<Vec<(ChainCommitGroupID, String)>, rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare_cached(include_str!("sql/get/all_chain_commit_groups.sql"))?;
+        let q = stmt.query([])?;
+        q.mapped(|row| {
+            let r1 = row.get(0)?;
+            let r2 = row.get(1)?;
+            Ok((r1, r2))
+        })
+        .collect()
+    }
+
+    pub fn get_all_chain_commit_groups_for_chain(
+        &self,
+        genesis_hash: CanonicalEnvelopeHash,
+    ) -> Result<Vec<(ChainCommitGroupID, String)>, rusqlite::Error> {
+        let mut stmt = self.0.prepare_cached(include_str!(
+            "sql/get/all_chain_commit_groups_for_chain.sql"
+        ))?;
+        let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
+        q.mapped(|row| {
+            let r1 = row.get(0)?;
+            let r2 = row.get(1)?;
+            Ok((r1, r2))
+        })
+        .collect()
+    }
+
+    pub fn get_all_chain_commit_group_members_for_chain(
+        &self,
+        genesis_hash: CanonicalEnvelopeHash,
+    ) -> Result<Vec<MessageID>, rusqlite::Error> {
+        let mut stmt = self.0.prepare_cached(include_str!(
+            "sql/get/all_chain_commit_group_members_for_chain.sql"
+        ))?;
+        let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
+        q.mapped(|row| {
+            let r1 = row.get(0)?;
+            Ok(r1)
+        })
+        .collect()
+    }
+
+    pub fn get_all_chain_commit_group_members_tips_for_chain(
+        &self,
+        genesis_hash: CanonicalEnvelopeHash,
+    ) -> Result<Vec<Envelope>, rusqlite::Error> {
+        let mut stmt = self.0.prepare_cached(include_str!(
+            "sql/get/all_chain_commit_group_members_tips_for_chain.sql"
+        ))?;
+        let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
+        q.mapped(|row| {
+            let r1 = row.get(0)?;
+            Ok(r1)
+        })
+        .collect()
+    }
+
 }
 
 pub fn extract_sk_from_envelopes(
