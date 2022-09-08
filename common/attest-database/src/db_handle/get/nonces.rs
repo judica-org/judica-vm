@@ -8,14 +8,17 @@ use fallible_iterator::FallibleIterator;
 use num_bigint::BigInt;
 use num_bigint::Sign;
 use num_integer::Integer;
-use sapio_bitcoin::hashes::Hash;
 use sapio_bitcoin::hashes::sha256;
+use sapio_bitcoin::hashes::Hash;
 use sapio_bitcoin::hashes::HashEngine;
 use sapio_bitcoin::secp256k1::Message;
 use sapio_bitcoin::secp256k1::SecretKey;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::HashMap;
 
+const SQL_GET_SECRET_FOR_NONCE: &'static str =
+    include_str!("../sql/get/nonces/secret_for_nonce.sql");
+const SQL_GET_REUSED_NONCE: &'static str = include_str!("../sql/get/nonces/reused_nonces.sql");
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get,
@@ -25,9 +28,7 @@ where
         &self,
         nonce: PrecomittedPublicNonce,
     ) -> Result<PrecomittedNonce, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached("SELECT (private_key) FROM message_nonces where public_key = ?")?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_SECRET_FOR_NONCE)?;
         stmt.query_row([nonce], |r| r.get::<_, PrecomittedNonce>(0))
     }
 
@@ -35,9 +36,7 @@ where
     pub fn get_reused_nonces(
         &self,
     ) -> Result<HashMap<XOnlyPublicKey, Vec<Authenticated<Envelope>>>, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("../sql/get/reused_nonces.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_REUSED_NONCE)?;
         let rows = stmt.query([])?;
         let vs = rows.map(|r| r.get::<_, Authenticated<Envelope>>(0)).fold(
             HashMap::new(),
@@ -133,8 +132,9 @@ where
     SecretKey::from_slice(&sig_bytes[..]).ok()
 }
 
+const BIP340_CHALLENGE: &'static [u8] = "BIP0340/challenge".as_bytes();
 pub(crate) fn get_signature_tagged_hash() -> sha256::HashEngine {
-    let tag = sha256::Hash::hash("BIP0340/challenge".as_bytes());
+    let tag = sha256::Hash::hash(BIP340_CHALLENGE);
     let mut engine = sha256::Hash::engine();
     engine.input(&tag.as_inner()[..]);
     engine.input(&tag.as_inner()[..]);
