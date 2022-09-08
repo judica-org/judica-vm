@@ -33,6 +33,8 @@ const SQL_GET_ALL_TIPS_FOR_ALL_USERS: &str = include_str!("../sql/get/all_tips_f
 const SQL_GET_ALL_GENESIS: &str = include_str!("../sql/get/all_genesis.sql");
 const SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED: &str =
     include_str!("../sql/get/all_messages_by_key_connected.sql");
+const SQL_GET_MESSAGE_EXISTS: &str = include_str!("../sql/get/messages/exists.sql");
+const SQL_GET_MESSAGE_BY_HASH: &str = include_str!("../sql/get/messages/by_hash.sql");
 
 impl<'a, T> MsgDBHandle<'a, T>
 where
@@ -200,12 +202,6 @@ where
         Ok(vs)
     }
 
-    pub fn message_exists(&self, hash: &sha256::Hash) -> Result<bool, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached("SELECT EXISTS(SELECT 1 FROM messages WHERE hash = ?)")?;
-        stmt.exists([hash.to_hex()])
-    }
 
     pub fn messages_by_hash<'i, I, E>(&self, hashes: I) -> Result<Vec<E>, rusqlite::Error>
     where
@@ -214,11 +210,18 @@ where
     {
         let mut stmt = self
             .0
-            .prepare_cached("SELECT body FROM messages WHERE hash = ?")?;
+            .prepare_cached(SQL_GET_MESSAGE_BY_HASH)?;
         let r: Result<Vec<_>, _> = hashes
             .map(|hash| stmt.query_row([hash], |r| r.get::<_, E>(0)))
             .collect();
         r
+    }
+
+    pub fn message_exists(&self, hash: &sha256::Hash) -> Result<bool, rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare_cached(SQL_GET_MESSAGE_EXISTS)?;
+        stmt.exists([hash.to_hex()])
     }
     pub fn message_not_exists_it<'i, I>(
         &self,
@@ -227,9 +230,7 @@ where
     where
         I: Iterator<Item = &'i CanonicalEnvelopeHash>,
     {
-        let mut stmt = self
-            .0
-            .prepare_cached("SELECT 1 FROM messages WHERE hash = ? LIMIT 1")?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_EXISTS)?;
         hashes
             .filter_map(|hash| match stmt.exists([hash]) {
                 Ok(true) => None,
