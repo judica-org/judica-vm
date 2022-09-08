@@ -1,8 +1,7 @@
 use super::PeerInfo;
-use crate::db_handle::{handle_type, MsgDBHandle};
+use crate::db_handle::{handle_type, MsgDBHandle, sql::SQL_GET_ALL_HIDDEN_SERVICES};
 use fallible_iterator::FallibleIterator;
 
-const SQL_GET_ALL_HIDDEN_SERVICES: &str = include_str!("../sql/get/hidden_services/all.sql");
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get,

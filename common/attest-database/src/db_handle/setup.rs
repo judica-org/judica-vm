@@ -1,17 +1,8 @@
-use super::{handle_type, MsgDBHandle};
-
-const SQL_CREATE_TABLES: &'static str = concat!(
-    "PRAGMA foreign_keys = ON;",
-    include_str!("sql/tables/users.sql"),
-    include_str!("sql/tables/messages.sql"),
-    include_str!("sql/tables/nonces.sql"),
-    include_str!("sql/tables/private_keys.sql"),
-    include_str!("sql/tables/chain_commit_groups.sql"),
-    include_str!("sql/tables/chain_commit_group_members.sql"),
-    include_str!("sql/tables/hidden_services.sql"),
-    include_str!("sql/triggers/messages/connect_gap_parent.sql"),
-    "PRAGMA journal_mode = WAL;"
-);
+use super::{
+    handle_type,
+    sql::{CACHED, SQL_CREATE_TABLES},
+    MsgDBHandle,
+};
 
 impl<'a, T> MsgDBHandle<'a, T>
 where
@@ -21,5 +12,11 @@ where
     /// Safe to call multiple times
     pub fn setup_tables(&mut self) {
         self.0.execute_batch(SQL_CREATE_TABLES).unwrap();
+        // avoid accidental evictions with uncached statements
+        self.0
+            .set_prepared_statement_cache_capacity(CACHED.len() * 2);
+        for sql  in CACHED {
+            self.0.prepare_cached(sql).expect("Invalid SQL Query Detected");
+        }
     }
 }

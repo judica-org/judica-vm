@@ -1,6 +1,7 @@
 use super::handle_type;
 use super::ChainCommitGroupID;
 use super::MsgDBHandle;
+use crate::db_handle::sql::insert::*;
 use crate::sql_error;
 use crate::sql_serializers::PK;
 use crate::sql_serializers::SK;
@@ -24,16 +25,6 @@ use sapio_bitcoin::{
 use tracing::debug;
 use tracing::info;
 use tracing::trace;
-
-const SQL_INSERT_NONCE_BY_KEY: &str = include_str!("../sql/insert/nonce.sql");
-const SQL_INSERT_HIDDEN_SERVICE: &str = include_str!("../sql/insert/hidden_service.sql");
-const SQL_INSERT_KEYPAIR: &str = include_str!("../sql/insert/keypair.sql");
-const SQL_INSERT_USER: &str = include_str!("../sql/insert/user.sql");
-const SQL_INSERT_CHAIN_COMMIT_GROUP: &str =
-    include_str!("../sql/insert/new_chain_commit_group.sql");
-const SQL_INSERT_CHAIN_COMMIT_GROUP_MEMBER: &str =
-    include_str!("../sql/insert/add_chain_commit_group_member.sql");
-const SQL_INSERT_ENVELOPE: &str = include_str!("../sql/insert/envelope.sql");
 
 impl<'a, T> MsgDBHandle<'a, T>
 where

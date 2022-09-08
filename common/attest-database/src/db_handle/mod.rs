@@ -10,6 +10,8 @@ pub mod get;
 pub mod insert;
 pub mod setup;
 pub mod update;
+pub mod sql;
+
 pub struct MsgDBHandle<'a, T = handle_type::All>(
     pub MutexGuard<'a, Connection>,
     pub PhantomData<T>,

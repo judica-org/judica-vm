@@ -1,7 +1,7 @@
-use rusqlite::named_params;
-
 use super::handle_type;
 use super::MsgDBHandle;
+use crate::db_handle::sql::update::*;
+use rusqlite::named_params;
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get + handle_type::Insert,
@@ -10,7 +10,7 @@ where
     pub fn resolve_parents(&mut self) -> Result<(), rusqlite::Error> {
         let txn = self.0.transaction()?;
         {
-            let mut s = txn.prepare_cached(include_str!("sql/update/resolve_prev_ids.sql"))?;
+            let mut s = txn.prepare_cached(SQL_UPDATE_CONNECT_PARENTS)?;
             loop {
                 let mut modified = 1000;
                 modified = s.execute(named_params! {":limit": modified})?;
@@ -26,7 +26,7 @@ where
     /// Required to run periodically to make progress...
     /// TODO: Something more efficient?
     pub fn attach_tips(&self) -> Result<usize, rusqlite::Error> {
-        let mut s = self.0.prepare_cached(include_str!("sql/update/do_connect.sql"))?;
+        let mut s = self.0.prepare_cached(SQL_UPDATE_CONNECT_RECURSIVE)?;
         s.execute([])
     }
 
@@ -40,9 +40,7 @@ where
         push_to: Option<bool>,
         allow_unsolicited_tips: Option<bool>,
     ) -> Result<(), rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("sql/update/hidden_service.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_UPDATE_HIDDEN_SERVICE)?;
         stmt.insert(rusqlite::named_params!(
             ":service_url": s,
             ":port": port,

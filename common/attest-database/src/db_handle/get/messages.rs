@@ -1,5 +1,6 @@
 use super::super::handle_type;
 use super::super::MsgDBHandle;
+use crate::db_handle::sql::get::messages::*;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
@@ -14,27 +15,6 @@ use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::HashMap;
 use tracing::debug;
 use tracing::trace;
-
-const SQL_GET_MESSAGES_NEWER_THAN_FOR_GENESIS: &str =
-    include_str!("../sql/get/connected_messages_newer_than_for_genesis.sql");
-const SQL_GET_MESSAGES_BY_HEIGHT_AND_USER: &str =
-    include_str!("../sql/get/message_by_height_and_user.sql");
-const SQL_GET_MESSAGES_TIPS_BY_USER: &str = include_str!("../sql/get/message_tips_by_user.sql");
-const SQL_GET_TIPS_FOR_KNOWN_KEYS: &str = include_str!("../sql/get/tips_for_known_keys.sql");
-const SQL_GET_DISCONNECTED_TIPS_FOR_KNOWN_KEYS: &str =
-    include_str!("../sql/get/disconnected_tips_for_known_keys.sql");
-const SQL_GET_ALL_MESSAGES_AFTER_CONNECTED: &str =
-    include_str!("../sql/get/all_messages_after_connected.sql");
-const SQL_GET_ALL_MESSAGES_CONNECTED: &str = include_str!("../sql/get/all_messages_connected.sql");
-const SQL_GET_ALL_MESSAGES_AFTER_INCONSISTENT: &str =
-    include_str!("../sql/get/all_messages_after.sql");
-const SQL_GET_ALL_MESSAGES_INCONSISTENT: &str = include_str!("../sql/get/all_messages.sql");
-const SQL_GET_ALL_TIPS_FOR_ALL_USERS: &str = include_str!("../sql/get/all_tips_for_all_users.sql");
-const SQL_GET_ALL_GENESIS: &str = include_str!("../sql/get/all_genesis.sql");
-const SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED: &str =
-    include_str!("../sql/get/all_messages_by_key_connected.sql");
-const SQL_GET_MESSAGE_EXISTS: &str = include_str!("../sql/get/messages/exists.sql");
-const SQL_GET_MESSAGE_BY_HASH: &str = include_str!("../sql/get/messages/by_hash.sql");
 
 impl<'a, T> MsgDBHandle<'a, T>
 where
@@ -202,15 +182,12 @@ where
         Ok(vs)
     }
 
-
     pub fn messages_by_hash<'i, I, E>(&self, hashes: I) -> Result<Vec<E>, rusqlite::Error>
     where
         I: Iterator<Item = &'i CanonicalEnvelopeHash>,
         E: AsRef<Envelope> + FromSql,
     {
-        let mut stmt = self
-            .0
-            .prepare_cached(SQL_GET_MESSAGE_BY_HASH)?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_HASH)?;
         let r: Result<Vec<_>, _> = hashes
             .map(|hash| stmt.query_row([hash], |r| r.get::<_, E>(0)))
             .collect();
@@ -218,9 +195,7 @@ where
     }
 
     pub fn message_exists(&self, hash: &sha256::Hash) -> Result<bool, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(SQL_GET_MESSAGE_EXISTS)?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_EXISTS)?;
         stmt.exists([hash.to_hex()])
     }
     pub fn message_not_exists_it<'i, I>(

@@ -30,7 +30,6 @@ pub async fn setup_db_at(dir: PathBuf, name: &str) -> Result<MsgDB, Box<dyn Erro
     db_file.set_extension("sqlite3");
     tracing::debug!("Opening Message DB at: {}", db_file.display());
     let conn = Connection::open(db_file).unwrap();
-    conn.set_prepared_statement_cache_capacity(100);
     let mdb = MsgDB::new(Arc::new(tokio::sync::Mutex::new(conn)));
     mdb.get_handle().await.setup_tables();
     Ok(mdb)

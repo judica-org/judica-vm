@@ -6,10 +6,8 @@ use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::secp256k1::SecretKey;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::BTreeMap;
+use crate::db_handle::sql::get::users::*;
 
-const SQL_GET_ALL_USERS: &'static str = include_str!("../sql/get/users/all_users.sql");
-const SQL_GET_USER_BY_KEY: &'static str = include_str!("../sql/get/users/user_by_key.sql");
-const SQL_GET_ALL_SECRET_KEYS: &'static str = include_str!("../sql/get/users/all_secret_keys.sql");
 
 impl<'a, T> MsgDBHandle<'a, T>
 where

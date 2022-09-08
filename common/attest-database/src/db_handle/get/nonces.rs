@@ -1,3 +1,4 @@
+use crate::db_handle::sql::get::nonces::*;
 use super::super::handle_type;
 use super::super::MsgDBHandle;
 use attest_messages::nonce::PrecomittedNonce;
@@ -16,9 +17,6 @@ use sapio_bitcoin::secp256k1::SecretKey;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::HashMap;
 
-const SQL_GET_SECRET_FOR_NONCE: &'static str =
-    include_str!("../sql/get/nonces/secret_for_nonce.sql");
-const SQL_GET_REUSED_NONCE: &'static str = include_str!("../sql/get/nonces/reused_nonces.sql");
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get,
