@@ -2,15 +2,14 @@ use super::PeerInfo;
 use crate::db_handle::{handle_type, MsgDBHandle};
 use fallible_iterator::FallibleIterator;
 
+const SQL_GET_ALL_HIDDEN_SERVICES: &str = include_str!("../sql/get/hidden_services/all.sql");
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get,
 {
     /// get all added hidden services
     pub fn get_all_hidden_services(&self) -> Result<Vec<PeerInfo>, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached("SELECT service_url, port, fetch_from, push_to, allow_unsolicited_tips FROM hidden_services")?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_ALL_HIDDEN_SERVICES)?;
         let results = stmt
             .query([])?
             .map(|r| {
