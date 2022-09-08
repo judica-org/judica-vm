@@ -1,4 +1,4 @@
-use crate::db_handle::get::{extract_sk, extract_sk_from_envelopes};
+use crate::db_handle::get::nonces::{extract_sk_from_envelopes, extract_sk};
 use crate::db_handle::MsgDBHandle;
 
 use super::connection::MsgDB;
