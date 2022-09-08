@@ -2,8 +2,12 @@ use crate::{
     globals::Globals,
     peer_services::{PeerQuery, TaskID},
 };
-use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
-use attest_messages::{CanonicalEnvelopeHash, Envelope, Authenticated};
+use attest_database::{
+    connection::MsgDB,
+    db_handle::{create::TipControl, get::PeerInfo},
+    generate_new_user,
+};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     http::Response,
@@ -165,7 +169,14 @@ async fn push_message_dangerous(
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
     let tips = bitcoin_tipcache.0.read_cache().await;
     let env = handle
-        .wrap_message_in_envelope_for_user_by_key(msg, &kp, &secp.0, Some(tips), None)
+        .wrap_message_in_envelope_for_user_by_key(
+            msg,
+            &kp,
+            &secp.0,
+            Some(tips),
+            None,
+            TipControl::AllTips,
+        )
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

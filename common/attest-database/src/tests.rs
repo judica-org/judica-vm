@@ -1,4 +1,5 @@
-use crate::db_handle::get::nonces::{extract_sk_from_envelopes, extract_sk};
+use crate::db_handle::create::TipControl;
+use crate::db_handle::get::nonces::{extract_sk, extract_sk_from_envelopes};
 use crate::db_handle::MsgDBHandle;
 
 use super::connection::MsgDB;
@@ -41,7 +42,14 @@ async fn test_reused_nonce() {
     let mut handle = conn.get_handle().await;
     let kp = make_test_user(&secp, &mut handle, test_user);
     let envelope_1 = handle
-        .wrap_message_in_envelope_for_user_by_key(CanonicalJsonValue::Null, &kp, &secp, None, None)
+        .wrap_message_in_envelope_for_user_by_key(
+            CanonicalJsonValue::Null,
+            &kp,
+            &secp,
+            None,
+            None,
+            TipControl::AllTips,
+        )
         .unwrap()
         .unwrap();
     let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
@@ -52,6 +60,7 @@ async fn test_reused_nonce() {
             &secp,
             None,
             None,
+            TipControl::AllTips,
         )
         .unwrap()
         .unwrap();
@@ -86,6 +95,7 @@ async fn test_reused_nonce() {
                 &secp,
                 None,
                 None,
+                TipControl::AllTips,
             )
             .unwrap()
             .unwrap();
@@ -188,6 +198,7 @@ async fn test_envelope_creation() {
                 &secp,
                 None,
                 None,
+                TipControl::AllTips,
             )
             .unwrap()
             .unwrap();
@@ -204,6 +215,7 @@ async fn test_envelope_creation() {
                 &secp,
                 None,
                 None,
+                TipControl::AllTips,
             )
             .unwrap()
             .unwrap();
@@ -223,6 +235,7 @@ async fn test_envelope_creation() {
                     &secp,
                     None,
                     envs.get((i - 1) as usize).map(|a| a.1.inner_ref().clone()),
+                    TipControl::AllTips,
                 )
                 .unwrap()
                 .unwrap();
@@ -319,6 +332,7 @@ async fn test_envelope_creation() {
             &secp,
             None,
             None,
+            TipControl::AllTips,
         )
         .unwrap()
         .unwrap();

@@ -1,8 +1,9 @@
 use super::handle_type;
+use super::ChainCommitGroupID;
 use super::MsgDBHandle;
-use attest_messages::Authenticated;
 use attest_messages::checkpoints::BitcoinCheckPoints;
 use attest_messages::Ancestors;
+use attest_messages::Authenticated;
 use attest_messages::Envelope;
 use attest_messages::Header;
 use attest_messages::SigningError;
@@ -13,6 +14,11 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 
+pub enum TipControl {
+    GroupsOnly,
+    NoTips,
+    AllTips,
+}
 use tracing::debug;
 impl<'a, T> MsgDBHandle<'a, T>
 where
@@ -28,11 +34,18 @@ where
         secp: &Secp256k1<C>,
         bitcoin_tipcache: Option<BitcoinCheckPoints>,
         dangerous_bypass_tip: Option<Envelope>,
+        tip_groups: TipControl,
     ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {
         let key: XOnlyPublicKey = keypair.x_only_public_key().0;
         debug!(key=%key, "Creating new Envelope");
         // Side effect free...
-        let mut tips = self.get_tips_for_all_users::<Authenticated<Envelope>>()?;
+        let mut tips = match tip_groups {
+            TipControl::GroupsOnly => {
+                self.get_all_chain_commit_group_members_tips_for_chain(key)?
+            }
+            TipControl::AllTips => self.get_tips_for_all_users::<Authenticated<Envelope>>()?,
+            TipControl::NoTips => vec![],
+        };
         if let Some(p) = tips.iter().position(|x| x.header().key() == key) {
             tips.swap_remove(p);
         }

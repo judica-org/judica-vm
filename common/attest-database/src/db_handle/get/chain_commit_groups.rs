@@ -1,4 +1,5 @@
 use crate::db_handle::sql::get::chain_commit_groups::*;
+use crate::sql_serializers::PK;
 use super::super::handle_type;
 use super::super::ChainCommitGroupID;
 use super::super::MessageID;
@@ -7,6 +8,7 @@ use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use rusqlite::named_params;
+use sapio_bitcoin::XOnlyPublicKey;
 
 impl<'a, T> MsgDBHandle<'a, T>
 where
@@ -58,12 +60,12 @@ where
 
     pub fn get_all_chain_commit_group_members_tips_for_chain(
         &self,
-        genesis_hash: CanonicalEnvelopeHash,
+        key: XOnlyPublicKey,
     ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare_cached(SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_TIPS_FOR_CHAIN)?;
-        let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
+        let q = stmt.query(named_params! {":key": PK(key)})?;
         q.mapped(|row| {
             let r1 = row.get(0)?;
             Ok(r1)

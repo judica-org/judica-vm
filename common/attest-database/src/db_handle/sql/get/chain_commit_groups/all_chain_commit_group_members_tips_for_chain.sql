@@ -1,11 +1,14 @@
 WITH groups_is_in AS (
     SELECT
-        group_id
+        CommitGroup.group_id
     FROM
         chain_commit_group_members CommitGroup
-        INNER JOIN messages Messages ON Messages.hash = :genesis_hash
-        AND Messages.height = 0
+        INNER JOIN users Users
+        INNER JOIN messages Messages ON Messages.user_id = Users.user_id
         AND CommitGroup.member_id = Messages.message_id
+    WHERE
+        Messages.height = 0
+        AND Users.key = :key
 )
 SELECT
     Messages.body,

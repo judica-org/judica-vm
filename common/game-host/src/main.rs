@@ -1,4 +1,4 @@
-use attest_database::connection::MsgDB;
+use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_database::setup_db;
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
@@ -179,7 +179,14 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
             let mut handle = db.get_handle().await;
             // TODO: Run a tipcache
             let wrapped = handle
-                .wrap_message_in_envelope_for_user_by_key(msg, &keypair, &secp, None, None)??
+                .wrap_message_in_envelope_for_user_by_key(
+                    msg,
+                    &keypair,
+                    &secp,
+                    None,
+                    None,
+                    TipControl::AllTips,
+                )??
                 .self_authenticate(&secp)?;
             handle.try_insert_authenticated_envelope(wrapped)?;
         }
