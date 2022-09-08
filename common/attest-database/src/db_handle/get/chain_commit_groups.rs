@@ -7,6 +7,14 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use rusqlite::named_params;
 
+const SQL_GET_ALL_CHAIN_COMMIT_GROUPS: &str =
+    &include_str!("../sql/get/all_chain_commit_groups.sql");
+const SQL_GET_ALL_CHAIN_COMMIT_GROUPS_FOR_CHAIN: &str =
+    &include_str!("../sql/get/all_chain_commit_groups_for_chain.sql");
+const SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_FOR_CHAIN: &str =
+    include_str!("../sql/get/all_chain_commit_group_members_for_chain.sql");
+const SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_TIPS_FOR_CHAIN: &str =
+    &include_str!("../sql/get/all_chain_commit_group_members_tips_for_chain.sql");
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get,
@@ -14,9 +22,7 @@ where
     pub fn get_all_chain_commit_groups(
         &self,
     ) -> Result<Vec<(ChainCommitGroupID, String)>, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("../sql/get/all_chain_commit_groups.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_ALL_CHAIN_COMMIT_GROUPS)?;
         let q = stmt.query([])?;
         q.mapped(|row| {
             let r1 = row.get(0)?;
@@ -30,9 +36,9 @@ where
         &self,
         genesis_hash: CanonicalEnvelopeHash,
     ) -> Result<Vec<(ChainCommitGroupID, String)>, rusqlite::Error> {
-        let mut stmt = self.0.prepare_cached(include_str!(
-            "../sql/get/all_chain_commit_groups_for_chain.sql"
-        ))?;
+        let mut stmt = self
+            .0
+            .prepare_cached(SQL_GET_ALL_CHAIN_COMMIT_GROUPS_FOR_CHAIN)?;
         let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
         q.mapped(|row| {
             let r1 = row.get(0)?;
@@ -46,9 +52,9 @@ where
         &self,
         genesis_hash: CanonicalEnvelopeHash,
     ) -> Result<Vec<MessageID>, rusqlite::Error> {
-        let mut stmt = self.0.prepare_cached(include_str!(
-            "../sql/get/all_chain_commit_group_members_for_chain.sql"
-        ))?;
+        let mut stmt = self
+            .0
+            .prepare_cached(SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_FOR_CHAIN)?;
         let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
         q.mapped(|row| {
             let r1 = row.get(0)?;
@@ -61,9 +67,9 @@ where
         &self,
         genesis_hash: CanonicalEnvelopeHash,
     ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
-        let mut stmt = self.0.prepare_cached(include_str!(
-            "../sql/get/all_chain_commit_group_members_tips_for_chain.sql"
-        ))?;
+        let mut stmt = self
+            .0
+            .prepare_cached(SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_TIPS_FOR_CHAIN)?;
         let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
         q.mapped(|row| {
             let r1 = row.get(0)?;
