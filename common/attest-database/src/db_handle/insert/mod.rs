@@ -1,6 +1,7 @@
 use super::handle_type;
 use super::ChainCommitGroupID;
 use super::MsgDBHandle;
+use crate::sql_error;
 use crate::sql_serializers::PK;
 use crate::sql_serializers::SK;
 use attest_messages::nonce::PrecomittedNonce;
@@ -9,10 +10,10 @@ use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use rusqlite::ffi;
-use rusqlite::Transaction;
-
+use rusqlite::ffi::{SQLITE_CONSTRAINT_CHECK, SQLITE_CONSTRAINT_NOTNULL, SQLITE_CONSTRAINT_UNIQUE};
 use rusqlite::params;
 use rusqlite::ErrorCode;
+use rusqlite::Transaction;
 use sapio_bitcoin::secp256k1::rand::thread_rng;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::{
@@ -20,11 +21,20 @@ use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
+use tracing::debug;
 use tracing::info;
 use tracing::trace;
 
-use std::os::raw::c_int;
-use tracing::debug;
+const SQL_INSERT_NONCE_BY_KEY: &str = include_str!("../sql/insert/nonce.sql");
+const SQL_INSERT_HIDDEN_SERVICE: &str = include_str!("../sql/insert/hidden_service.sql");
+const SQL_INSERT_KEYPAIR: &str = include_str!("../sql/insert/keypair.sql");
+const SQL_INSERT_USER: &str = include_str!("../sql/insert/user.sql");
+const SQL_INSERT_CHAIN_COMMIT_GROUP: &str =
+    include_str!("../sql/insert/new_chain_commit_group.sql");
+const SQL_INSERT_CHAIN_COMMIT_GROUP_MEMBER: &str =
+    include_str!("../sql/insert/add_chain_commit_group_member.sql");
+const SQL_INSERT_ENVELOPE: &str = include_str!("../sql/insert/envelope.sql");
+
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Insert,
@@ -47,9 +57,7 @@ where
         key: XOnlyPublicKey,
     ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
         let pk_nonce = nonce.get_public(secp);
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("sql/insert/nonce.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_INSERT_NONCE_BY_KEY)?;
         stmt.insert(rusqlite::params![PK(key), pk_nonce, nonce,])?;
         Ok(pk_nonce)
     }
@@ -64,9 +72,7 @@ where
         push_to: bool,
         allow_unsolicited_tips: bool,
     ) -> Result<(), rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("sql/insert/hidden_service.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_INSERT_HIDDEN_SERVICE)?;
         stmt.insert(rusqlite::named_params! {
         ":service_url": s,
         ":port": port,
@@ -78,10 +84,8 @@ where
 
     /// saves a keypair to our keyset
     pub fn save_keypair(&self, kp: KeyPair) -> Result<(), rusqlite::Error> {
-        let mut stmt = self.0
-                                .prepare_cached("
-                                            INSERT INTO private_keys (public_key, private_key) VALUES (?, ?)
-                                            ")?;
+        let mut stmt = self.0.prepare_cached(SQL_INSERT_KEYPAIR)?;
+
         stmt.insert(rusqlite::params![
             PK(kp.x_only_public_key().0),
             SK(kp.secret_key())
@@ -95,10 +99,10 @@ where
         &mut self,
         nickname: String,
         envelope: Authenticated<Envelope>,
-    ) -> Result<Result<String, (SqliteFail, Option<String>)>, rusqlite::Error> {
+    ) -> Result<Result<String, (sql_error::SqliteFail, Option<String>)>, rusqlite::Error> {
         info!(genesis=?envelope.get_genesis_hash(), nickname, "Creating New Genesis");
         let tx = self.0.transaction()?;
-        let mut stmt = tx.prepare_cached("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
+        let mut stmt = tx.prepare_cached(SQL_INSERT_USER)?;
         let hex_key = PK(envelope.header().key());
         match stmt.insert(params![nickname, hex_key]) {
             Ok(_rowid) => {
@@ -140,7 +144,7 @@ where
     pub fn try_insert_authenticated_envelope(
         &mut self,
         data: Authenticated<Envelope>,
-    ) -> Result<Result<(), (SqliteFail, Option<String>)>, rusqlite::Error> {
+    ) -> Result<Result<(), (sql_error::SqliteFail, Option<String>)>, rusqlite::Error> {
         let tx = self.0.transaction()?;
         let res = try_insert_authenticated_envelope_with_txn(data, &tx);
         tx.commit()?;
@@ -157,9 +161,7 @@ where
             let u: [u8; 32] = r.gen::<[u8; 32]>();
             u.to_hex()
         });
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("sql/insert/new_chain_commit_group.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_INSERT_CHAIN_COMMIT_GROUP)?;
         let i = stmt.insert(rusqlite::named_params!(":name": name))?;
         Ok((name, ChainCommitGroupID(i)))
     }
@@ -172,7 +174,7 @@ where
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/insert/add_chain_commit_group_member.sql"))?;
+            .prepare_cached(SQL_INSERT_CHAIN_COMMIT_GROUP_MEMBER)?;
         let _ = stmt.insert(rusqlite::named_params!(
             ":genesis_hash": genesis_hash,
             ":group_id": group_id
@@ -185,9 +187,9 @@ where
 pub fn try_insert_authenticated_envelope_with_txn(
     data: Authenticated<Envelope>,
     tx: &Transaction,
-) -> Result<Result<(), (SqliteFail, Option<String>)>, rusqlite::Error> {
+) -> Result<Result<(), (sql_error::SqliteFail, Option<String>)>, rusqlite::Error> {
     let data = data.inner();
-    let mut stmt = tx.prepare_cached(include_str!("sql/insert/envelope.sql"))?;
+    let mut stmt = tx.prepare_cached(SQL_INSERT_ENVELOPE)?;
     let time = attest_util::now();
     let genesis = data.get_genesis_hash();
     let prev_msg = data
@@ -221,21 +223,24 @@ pub fn try_insert_authenticated_envelope_with_txn(
                         extended_code: SQLITE_CONSTRAINT_UNIQUE,
                     } => {
                         debug!(?hash, "Insert failed due to Uniqueness Constraint");
-                        Ok(Err((SqliteFail::SqliteConstraintUnique, msg)))
+                        Ok(Err((sql_error
+                    ::SqliteFail::SqliteConstraintUnique, msg)))
                     },
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_NOTNULL,
                     } => {
                         debug!(?hash, "Insert failed due to Not-Null Constraint");
-                        Ok(Err((SqliteFail::SqliteConstraintNotNull, msg)))
+                        Ok(Err((sql_error
+                    ::SqliteFail::SqliteConstraintNotNull, msg)))
                     },
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_CHECK,
                     } => {
                         debug!(?hash, "Insert failed due to Check Constraint");
-                        Ok(Err((SqliteFail::SqliteConstraintCheck, msg)))
+                        Ok(Err((sql_error
+                    ::SqliteFail::SqliteConstraintCheck, msg)))
                     },
                     other_err => {
                         debug!(?other_err, "SQL: {}", stmt.expanded_sql().unwrap_or_default());
@@ -249,38 +254,3 @@ pub fn try_insert_authenticated_envelope_with_txn(
             },
         }
 }
-/// Constant for Unique Contraint Violation
-/// Yes, pattern matching works.
-///```
-/// use std::os::raw::c_int;
-/// const X: c_int = 0;
-/// struct Y {
-///     val: c_int,
-/// }
-/// match (Y { val: 1 }) {
-///     Y { val: X } => panic!("bad"),
-///     Y { val: b } => println!("good"),
-/// }
-/// match (Y { val: 0 }) {
-///     Y { val: X } => println!("good"),
-///     Y { val: b } => panic!("bad"),
-/// }
-///```
-const SQLITE_CONSTRAINT_UNIQUE: c_int = SqliteFail::SqliteConstraintUnique as c_int;
-const SQLITE_CONSTRAINT_NOTNULL: c_int = SqliteFail::SqliteConstraintNotNull as c_int;
-const SQLITE_CONSTRAINT_CHECK: c_int = SqliteFail::SqliteConstraintCheck as c_int;
-#[must_use]
-#[derive(Debug)]
-#[repr(C)]
-pub enum SqliteFail {
-    SqliteConstraintUnique = 2067,
-    SqliteConstraintNotNull = 1299,
-    SqliteConstraintCheck = 275,
-}
-
-impl std::fmt::Display for SqliteFail {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-impl std::error::Error for SqliteFail {}

@@ -12,6 +12,7 @@ use sapio_bitcoin::{
 
 pub mod connection;
 pub mod db_handle;
+pub mod sql_error;
 pub mod sql_serializers;
 
 #[cfg(test)]

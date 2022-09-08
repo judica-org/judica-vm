@@ -2,7 +2,7 @@ use super::*;
 use crate::attestations::client::AttestationClient;
 use crate::attestations::client::NotifyOnDrop;
 use crate::attestations::query::Tips;
-use attest_database::db_handle::insert::SqliteFail;
+use attest_database::sql_error::SqliteFail;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use attest_util::now;
