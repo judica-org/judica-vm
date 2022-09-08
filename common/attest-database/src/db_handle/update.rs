@@ -1,26 +1,14 @@
 use super::handle_type;
 use super::MsgDBHandle;
 use crate::db_handle::sql::update::*;
-use rusqlite::named_params;
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get + handle_type::Insert,
 {
     /// Normally not required, as triggered on DB insert
     pub fn resolve_parents(&mut self) -> Result<(), rusqlite::Error> {
-        let txn = self.0.transaction()?;
-        {
-            let mut s = txn.prepare_cached(SQL_UPDATE_CONNECT_PARENTS)?;
-            loop {
-                let mut modified = 1000;
-                modified = s.execute(named_params! {":limit": modified})?;
-                if modified == 0 {
-                    break;
-                }
-            }
-        }
-
-        txn.commit()?;
+        let mut s = self.0.prepare_cached(SQL_UPDATE_CONNECT_PARENTS)?;
+        s.execute([])?;
         Ok(())
     }
     /// Required to run periodically to make progress...

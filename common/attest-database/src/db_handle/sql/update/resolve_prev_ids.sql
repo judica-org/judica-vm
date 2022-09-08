@@ -10,8 +10,8 @@ SET
             M.hash = Mu.prev_msg
     )
 WHERE
-    connected = 0
-    AND prev_msg_id IS NULL
+    Mu.connected = 0
+    AND Mu.prev_msg_id IS NULL
     AND EXISTS(
         SELECT
             1
@@ -22,5 +22,4 @@ WHERE
         LIMIT
             1
     )
-LIMIT
-    :limit
+-- LIMIT :limit -- disabled because not compatible unless option compiled-in

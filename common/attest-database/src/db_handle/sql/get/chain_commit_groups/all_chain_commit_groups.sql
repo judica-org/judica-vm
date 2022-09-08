@@ -1,4 +1,4 @@
 SELECT
-    group_id, name
+    CommitGroup.group_id, CommitGroup.name
 FROM
-    chain_commit_groups
+    chain_commit_groups CommitGroup
