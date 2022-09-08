@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use tokio::{
     spawn,
     sync::{Mutex, Notify},
@@ -10,7 +10,7 @@ use tracing::{trace, warn};
 use super::*;
 pub async fn push_to_peer<C: Verification + 'static>(
     g: Arc<Globals>,
-    _secp: Arc<Secp256k1<C>>,
+    secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
     conn: MsgDB,
@@ -22,7 +22,8 @@ pub async fn push_to_peer<C: Verification + 'static>(
             GenesisHash(e.get_genesis_hash())
         }
     }
-    let tip_tracker: Arc<Mutex<HashMap<GenesisHash, _>>> = Arc::new(Mutex::new(HashMap::new()));
+    let tip_tracker: Arc<Mutex<HashMap<GenesisHash, Authenticated<Envelope>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
     let new_tips = Arc::new(Notify::new());
     let mut t1 = spawn({
         let service = service.clone();
@@ -34,7 +35,12 @@ pub async fn push_to_peer<C: Verification + 'static>(
         async move {
             while !g.shutdown.should_quit() {
                 // Get the tips this client claims to have
-                let tips = client.get_latest_tips(&url, port).await?;
+                let tips: Vec<_> = client
+                    .get_latest_tips(&url, port)
+                    .await?
+                    .iter()
+                    .flat_map(|e| e.self_authenticate(&secp))
+                    .collect();
                 trace!(
                     url,
                     port,
@@ -49,7 +55,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     let mut tip_tracker = tip_tracker.lock().await;
 
                     for t in tips {
-                        let genesis = GenesisHash::from(&t);
+                        let genesis = GenesisHash::from(t.inner_ref());
                         let previous = tip_tracker.entry(genesis).or_insert_with(|| {
                             debug!(url, port, ?t, ?genesis, "Inserting Unseen Genesis");
                             t.clone()
@@ -159,11 +165,18 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     info!(?service, task = "PUSH::broadcast", n = to_broadcast.len());
                     trace!(?service, task="PUSH::broadcast", msgs = ?to_broadcast);
 
-                    let res = client.post_messages(&to_broadcast, &url, port).await?;
+                    let l = to_broadcast.len();
+                    let res = client
+                        .post_messages(
+                            &to_broadcast.into_iter().map(|x| x.inner()).collect(),
+                            &url,
+                            port,
+                        )
+                        .await?;
 
                     info!(
                         accepted = res.iter().filter(|s| s.success).count(),
-                        out_of = to_broadcast.len(),
+                        out_of = l,
                         task = "PUSH",
                         ?service
                     );

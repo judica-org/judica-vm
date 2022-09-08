@@ -3,7 +3,7 @@ use crate::{
     peer_services::{PeerQuery, TaskID},
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_messages::{CanonicalEnvelopeHash, Envelope, Authenticated};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     http::Response,
@@ -46,7 +46,7 @@ async fn get_expensive_db_snapshot(
     let mut map = Default::default();
     let mut newer = None;
     let _r = handle
-        .get_all_messages_collect_into_inconsistent(&mut newer, &mut map)
+        .get_all_messages_collect_into_inconsistent::<Envelope>(&mut newer, &mut map)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()
@@ -67,13 +67,13 @@ async fn get_status(
             .get_all_hidden_services()
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let tips = handle
-            .get_tips_for_all_users()
+            .get_tips_for_all_users::<Authenticated<Envelope>>()
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let tips = tips
             .into_iter()
             .map(|t| TipData {
                 hash: t.canonicalized_hash_ref(),
-                envelope: t,
+                envelope: t.inner(),
             })
             .collect();
         let users = handle.get_all_users().map_err(|e| {

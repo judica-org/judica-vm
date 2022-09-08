@@ -146,7 +146,7 @@ async fn test_envelope_creation() {
         {
             let tips = handle.get_tips_for_all_users().unwrap();
             assert_eq!(tips.len(), user_id + 1);
-            assert!(tips.contains(envelope.inner_ref()));
+            assert!(tips.contains(envelope));
             assert_eq!(
                 tips.iter()
                     .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref()))
@@ -163,7 +163,7 @@ async fn test_envelope_creation() {
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
             assert_eq!(known_tips.len(), user_id + 1);
-            assert!(known_tips.contains(envelope.inner_ref()));
+            assert!(known_tips.contains(envelope));
             assert_eq!(
                 known_tips
                     .iter()
@@ -249,7 +249,7 @@ async fn test_envelope_creation() {
             if i > special_idx {
                 let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
                 assert_eq!(tips.len(), user_id + 1);
-                assert!(tips.contains(&envs[special_idx as usize + 1].1.inner_ref()));
+                assert!(tips.contains(&envs[special_idx as usize + 1].1));
             }
         }
         all_past_tips.insert(envs[(special_idx - 1) as usize].0);
@@ -268,7 +268,7 @@ async fn test_envelope_creation() {
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
             assert_eq!(tips.len(), N_USERS);
-            assert!(tips.contains(disconnected_tip[user_id].inner_ref()));
+            assert!(tips.contains(&disconnected_tip[user_id]));
         }
         {
             let my_tip = handle
@@ -282,7 +282,7 @@ async fn test_envelope_creation() {
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
             assert_eq!(known_tips.len(), N_USERS);
-            assert!(known_tips.contains(disconnected[user_id].inner_ref()));
+            assert!(known_tips.contains(&disconnected[user_id]));
         }
     }
 

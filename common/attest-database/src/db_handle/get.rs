@@ -7,6 +7,7 @@ use attest_messages::{Authenticated, CanonicalEnvelopeHash};
 use fallible_iterator::FallibleIterator;
 use num_bigint::{BigInt, Sign};
 use num_integer::Integer;
+use rusqlite::types::FromSql;
 use rusqlite::{named_params, params};
 use sapio_bitcoin::hashes::HashEngine;
 use sapio_bitcoin::secp256k1::Message;
@@ -17,6 +18,7 @@ use sapio_bitcoin::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Deref;
 use tracing::{debug, trace};
 #[derive(Serialize, Deserialize)]
 pub struct PeerInfo {
@@ -45,9 +47,9 @@ where
     pub fn get_connected_messages_newer_than_envelopes<'v, It>(
         &self,
         envelopes: It,
-    ) -> Result<Vec<Envelope>, rusqlite::Error>
+    ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error>
     where
-        It: Iterator<Item = &'v Envelope>,
+        It: Iterator<Item = &'v Authenticated<Envelope>>,
     {
         let mut stmt = self.0.prepare_cached(include_str!(
             "sql/get/connected_messages_newer_than_for_genesis.sql"
@@ -56,7 +58,9 @@ where
         for envelope in envelopes {
             let rs = stmt
                 .query(named_params! (":genesis": envelope.get_genesis_hash(), ":height": envelope.header().height()))?;
-            let mut envs = rs.map(|r| r.get::<_, Envelope>(0)).collect()?;
+            let mut envs = rs
+                .map(|r| r.get::<_, Authenticated<Envelope>>(0))
+                .collect()?;
             res.append(&mut envs);
         }
         Ok(res)
@@ -66,7 +70,7 @@ where
         &self,
         key: XOnlyPublicKey,
         height: u64,
-    ) -> Result<Envelope, rusqlite::Error> {
+    ) -> Result<Authenticated<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare_cached(include_str!("sql/get/message_by_height_and_user.sql"))?;
@@ -77,7 +81,7 @@ where
     pub fn get_tip_for_user_by_key(
         &self,
         key: XOnlyPublicKey,
-    ) -> Result<Envelope, rusqlite::Error> {
+    ) -> Result<Authenticated<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare_cached(include_str!("sql/get/message_tips_by_user.sql"))?;
@@ -85,21 +89,27 @@ where
     }
 
     /// finds the most recent message only for messages where we know the key
-    pub fn get_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+    pub fn get_tip_for_known_keys(&self) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare_cached(include_str!("sql/get/tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
-        let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        let vs: Vec<Authenticated<Envelope>> = rows
+            .map(|r| r.get::<_, Authenticated<Envelope>>(0))
+            .collect()?;
         Ok(vs)
     }
 
-    pub fn get_disconnected_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+    pub fn get_disconnected_tip_for_known_keys(
+        &self,
+    ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare_cached(include_str!("sql/get/disconnected_tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
-        let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        let vs: Vec<Authenticated<Envelope>> = rows
+            .map(|r| r.get::<_, Authenticated<Envelope>>(0))
+            .collect()?;
         Ok(vs)
     }
 
@@ -118,7 +128,7 @@ where
     pub fn get_all_connected_messages_collect_into(
         &self,
         newer: &mut Option<i64>,
-        map: &mut HashMap<CanonicalEnvelopeHash, Envelope>,
+        map: &mut HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
             self.0
@@ -131,7 +141,7 @@ where
             Some(i) => stmt.query([*i])?,
             None => stmt.query([])?,
         };
-        rows.map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
+        rows.map(|r| Ok((r.get::<_, Authenticated<Envelope>>(0)?, r.get::<_, i64>(1)?)))
             .for_each(|(v, id)| {
                 map.insert(v.canonicalized_hash_ref(), v);
                 *newer = (*newer).max(Some(id));
@@ -140,11 +150,14 @@ where
         Ok(())
     }
 
-    pub fn get_all_messages_collect_into_inconsistent(
+    pub fn get_all_messages_collect_into_inconsistent<E>(
         &self,
         newer: &mut Option<i64>,
-        map: &mut HashMap<CanonicalEnvelopeHash, Envelope>,
-    ) -> Result<(), rusqlite::Error> {
+        map: &mut HashMap<CanonicalEnvelopeHash, E>,
+    ) -> Result<(), rusqlite::Error>
+    where
+        E: FromSql + AsRef<Envelope>,
+    {
         let mut stmt = if newer.is_some() {
             self.0
                 .prepare_cached(include_str!("sql/get/all_messages_after.sql"))?
@@ -156,9 +169,9 @@ where
             Some(i) => stmt.query([*i])?,
             None => stmt.query([])?,
         };
-        rows.map(|r| Ok((r.get::<_, Envelope>(0)?, r.get::<_, i64>(1)?)))
+        rows.map(|r| Ok((r.get::<_, E>(0)?, r.get::<_, i64>(1)?)))
             .for_each(|(v, id)| {
-                map.insert(v.canonicalized_hash_ref(), v);
+                map.insert(v.as_ref().canonicalized_hash_ref(), v);
                 *newer = (*newer).max(Some(id));
                 Ok(())
             })?;
@@ -168,39 +181,45 @@ where
     /// finds a reused nonce
     pub fn get_reused_nonces(
         &self,
-    ) -> Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, rusqlite::Error> {
+    ) -> Result<HashMap<XOnlyPublicKey, Vec<Authenticated<Envelope>>>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare_cached(include_str!("sql/get/reused_nonces.sql"))?;
         let rows = stmt.query([])?;
-        let vs = rows
-            .map(|r| r.get::<_, Envelope>(0))
-            .fold(HashMap::new(), |mut acc, v| {
+        let vs = rows.map(|r| r.get::<_, Authenticated<Envelope>>(0)).fold(
+            HashMap::new(),
+            |mut acc, v| {
                 acc.entry(v.header().key()).or_insert(vec![]).push(v);
                 Ok(acc)
-            })?;
+            },
+        )?;
 
         Ok(vs)
     }
 
     /// finds all most recent messages for all users
-    pub fn get_tips_for_all_users(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+    pub fn get_tips_for_all_users<E>(&self) -> Result<Vec<E>, rusqlite::Error>
+    where
+        E: AsRef<Envelope> + FromSql + std::fmt::Debug,
+    {
         let mut stmt = self
             .0
             .prepare_cached(include_str!("sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
-        let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
-        debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
+        let vs: Vec<E> = rows.map(|r| r.get::<_, E>(0)).collect()?;
+        debug!(tips=?vs.iter().map(|e| (e.as_ref().header().height(), e.as_ref().get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
         trace!(envelopes=?vs, "Tips Returned");
         Ok(vs)
     }
 
-    pub fn get_all_genesis(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
+    pub fn get_all_genesis(&self) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare_cached(include_str!("sql/get/all_genesis.sql"))?;
         let rows = stmt.query([])?;
-        let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
+        let vs: Vec<Authenticated<Envelope>> = rows
+            .map(|r| r.get::<_, Authenticated<Envelope>>(0))
+            .collect()?;
         debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
         trace!(envelopes=?vs, "Genesis Tips Returned");
         Ok(vs)
@@ -210,12 +229,12 @@ where
     pub fn load_all_messages_for_user_by_key_connected(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    ) -> Result<Vec<Envelope>, rusqlite::Error> {
+    ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
             .prepare_cached(include_str!("sql/get/all_messages_by_key_connected.sql"))?;
         let rows = stmt.query(params![key.to_hex()])?;
-        let vs: Vec<Envelope> = rows.map(|r| r.get(0)).collect()?;
+        let vs: Vec<Authenticated<Envelope>> = rows.map(|r| r.get(0)).collect()?;
         Ok(vs)
     }
 
@@ -266,15 +285,16 @@ where
         stmt.exists([hash.to_hex()])
     }
 
-    pub fn messages_by_hash<'i, I>(&self, hashes: I) -> Result<Vec<Envelope>, rusqlite::Error>
+    pub fn messages_by_hash<'i, I, E>(&self, hashes: I) -> Result<Vec<E>, rusqlite::Error>
     where
         I: Iterator<Item = &'i CanonicalEnvelopeHash>,
+        E: AsRef<Envelope> + FromSql,
     {
         let mut stmt = self
             .0
             .prepare_cached("SELECT body FROM messages WHERE hash = ?")?;
         let r: Result<Vec<_>, _> = hashes
-            .map(|hash| stmt.query_row([hash], |r| r.get::<_, Envelope>(0)))
+            .map(|hash| stmt.query_row([hash], |r| r.get::<_, E>(0)))
             .collect();
         r
     }
@@ -376,7 +396,7 @@ where
     pub fn get_all_chain_commit_group_members_tips_for_chain(
         &self,
         genesis_hash: CanonicalEnvelopeHash,
-    ) -> Result<Vec<Envelope>, rusqlite::Error> {
+    ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self.0.prepare_cached(include_str!(
             "sql/get/all_chain_commit_group_members_tips_for_chain.sql"
         ))?;
@@ -387,7 +407,6 @@ where
         })
         .collect()
     }
-
 }
 
 pub fn extract_sk_from_envelopes(
