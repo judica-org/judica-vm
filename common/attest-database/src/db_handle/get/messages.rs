@@ -15,6 +15,25 @@ use std::collections::HashMap;
 use tracing::debug;
 use tracing::trace;
 
+const SQL_GET_MESSAGES_NEWER_THAN_FOR_GENESIS: &str =
+    include_str!("../sql/get/connected_messages_newer_than_for_genesis.sql");
+const SQL_GET_MESSAGES_BY_HEIGHT_AND_USER: &str =
+    include_str!("../sql/get/message_by_height_and_user.sql");
+const SQL_GET_MESSAGES_TIPS_BY_USER: &str = include_str!("../sql/get/message_tips_by_user.sql");
+const SQL_GET_TIPS_FOR_KNOWN_KEYS: &str = include_str!("../sql/get/tips_for_known_keys.sql");
+const SQL_GET_DISCONNECTED_TIPS_FOR_KNOWN_KEYS: &str =
+    include_str!("../sql/get/disconnected_tips_for_known_keys.sql");
+const SQL_GET_ALL_MESSAGES_AFTER_CONNECTED: &str =
+    include_str!("../sql/get/all_messages_after_connected.sql");
+const SQL_GET_ALL_MESSAGES_CONNECTED: &str = include_str!("../sql/get/all_messages_connected.sql");
+const SQL_GET_ALL_MESSAGES_AFTER_INCONSISTENT: &str =
+    include_str!("../sql/get/all_messages_after.sql");
+const SQL_GET_ALL_MESSAGES_INCONSISTENT: &str = include_str!("../sql/get/all_messages.sql");
+const SQL_GET_ALL_TIPS_FOR_ALL_USERS: &str = include_str!("../sql/get/all_tips_for_all_users.sql");
+const SQL_GET_ALL_GENESIS: &str = include_str!("../sql/get/all_genesis.sql");
+const SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED: &str =
+    include_str!("../sql/get/all_messages_by_key_connected.sql");
+
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get,
@@ -27,9 +46,9 @@ where
     where
         It: Iterator<Item = &'v Authenticated<Envelope>>,
     {
-        let mut stmt = self.0.prepare_cached(include_str!(
-            "../sql/get/connected_messages_newer_than_for_genesis.sql"
-        ))?;
+        let mut stmt = self
+            .0
+            .prepare_cached(SQL_GET_MESSAGES_NEWER_THAN_FOR_GENESIS)?;
         let mut res = vec![];
         for envelope in envelopes {
             let rs = stmt
@@ -47,9 +66,7 @@ where
         key: XOnlyPublicKey,
         height: u64,
     ) -> Result<Authenticated<Envelope>, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("../sql/get/message_by_height_and_user.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGES_BY_HEIGHT_AND_USER)?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
 
@@ -58,17 +75,13 @@ where
         &self,
         key: XOnlyPublicKey,
     ) -> Result<Authenticated<Envelope>, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("../sql/get/message_tips_by_user.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGES_TIPS_BY_USER)?;
         stmt.query_row([key.to_hex()], |r| r.get(0))
     }
 
     /// finds the most recent message only for messages where we know the key
     pub fn get_tip_for_known_keys(&self) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("../sql/get/tips_for_known_keys.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_TIPS_FOR_KNOWN_KEYS)?;
         let rows = stmt.query([])?;
         let vs: Vec<Authenticated<Envelope>> = rows
             .map(|r| r.get::<_, Authenticated<Envelope>>(0))
@@ -79,9 +92,9 @@ where
     pub fn get_disconnected_tip_for_known_keys(
         &self,
     ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
-        let mut stmt = self.0.prepare_cached(include_str!(
-            "../sql/get/disconnected_tips_for_known_keys.sql"
-        ))?;
+        let mut stmt = self
+            .0
+            .prepare_cached(SQL_GET_DISCONNECTED_TIPS_FOR_KNOWN_KEYS)?;
         let rows = stmt.query([])?;
         let vs: Vec<Authenticated<Envelope>> = rows
             .map(|r| r.get::<_, Authenticated<Envelope>>(0))
@@ -106,10 +119,9 @@ where
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
             self.0
-                .prepare_cached(include_str!("../sql/get/all_messages_after_connected.sql"))?
+                .prepare_cached(SQL_GET_ALL_MESSAGES_AFTER_CONNECTED)?
         } else {
-            self.0
-                .prepare_cached(include_str!("../sql/get/all_messages_connected.sql"))?
+            self.0.prepare_cached(SQL_GET_ALL_MESSAGES_CONNECTED)?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -134,10 +146,9 @@ where
     {
         let mut stmt = if newer.is_some() {
             self.0
-                .prepare_cached(include_str!("../sql/get/all_messages_after.sql"))?
+                .prepare_cached(SQL_GET_ALL_MESSAGES_AFTER_INCONSISTENT)?
         } else {
-            self.0
-                .prepare_cached(include_str!("../sql/get/all_messages.sql"))?
+            self.0.prepare_cached(SQL_GET_ALL_MESSAGES_INCONSISTENT)?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -157,9 +168,7 @@ where
     where
         E: AsRef<Envelope> + FromSql + std::fmt::Debug,
     {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("../sql/get/all_tips_for_all_users.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_ALL_TIPS_FOR_ALL_USERS)?;
         let rows = stmt.query([])?;
         let vs: Vec<E> = rows.map(|r| r.get::<_, E>(0)).collect()?;
         debug!(tips=?vs.iter().map(|e| (e.as_ref().header().height(), e.as_ref().get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
@@ -168,9 +177,7 @@ where
     }
 
     pub fn get_all_genesis(&self) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
-        let mut stmt = self
-            .0
-            .prepare_cached(include_str!("../sql/get/all_genesis.sql"))?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_ALL_GENESIS)?;
         let rows = stmt.query([])?;
         let vs: Vec<Authenticated<Envelope>> = rows
             .map(|r| r.get::<_, Authenticated<Envelope>>(0))
@@ -187,7 +194,7 @@ where
     ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("../sql/get/all_messages_by_key_connected.sql"))?;
+            .prepare_cached(SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED)?;
         let rows = stmt.query(params![key.to_hex()])?;
         let vs: Vec<Authenticated<Envelope>> = rows.map(|r| r.get(0)).collect()?;
         Ok(vs)
