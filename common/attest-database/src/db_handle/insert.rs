@@ -44,7 +44,7 @@ where
         key: XOnlyPublicKey,
     ) -> Result<PrecomittedPublicNonce, rusqlite::Error> {
         let pk_nonce = nonce.get_public(secp);
-        let mut stmt = self.0.prepare(include_str!("sql/insert/nonce.sql"))?;
+        let mut stmt = self.0.prepare_cached(include_str!("sql/insert/nonce.sql"))?;
         stmt.insert(rusqlite::params![PK(key), pk_nonce, nonce,])?;
         Ok(pk_nonce)
     }
@@ -61,7 +61,7 @@ where
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/insert/hidden_service.sql"))?;
+            .prepare_cached(include_str!("sql/insert/hidden_service.sql"))?;
         stmt.insert(rusqlite::named_params! {
         ":service_url": s,
         ":port": port,
@@ -74,7 +74,7 @@ where
     /// saves a keypair to our keyset
     pub fn save_keypair(&self, kp: KeyPair) -> Result<(), rusqlite::Error> {
         let mut stmt = self.0
-                                .prepare("
+                                .prepare_cached("
                                             INSERT INTO private_keys (public_key, private_key) VALUES (?, ?)
                                             ")?;
         stmt.insert(rusqlite::params![
@@ -93,7 +93,7 @@ where
     ) -> Result<Result<String, (SqliteFail, Option<String>)>, rusqlite::Error> {
         info!(genesis=?envelope.get_genesis_hash(), nickname, "Creating New Genesis");
         let tx = self.0.transaction()?;
-        let mut stmt = tx.prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
+        let mut stmt = tx.prepare_cached("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
         let hex_key = PK(envelope.header().key());
         match stmt.insert(params![nickname, hex_key]) {
             Ok(_rowid) => {
@@ -149,7 +149,7 @@ pub fn try_insert_authenticated_envelope_with_txn(
     tx: &Transaction,
 ) -> Result<Result<(), (SqliteFail, Option<String>)>, rusqlite::Error> {
     let data = data.inner();
-    let mut stmt = tx.prepare(include_str!("sql/insert/envelope.sql"))?;
+    let mut stmt = tx.prepare_cached(include_str!("sql/insert/envelope.sql"))?;
     let time = attest_util::now();
     let genesis = data.get_genesis_hash();
     let prev_msg = data

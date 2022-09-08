@@ -10,7 +10,7 @@ where
     pub fn resolve_parents(&mut self) -> Result<(), rusqlite::Error> {
         let txn = self.0.transaction()?;
         {
-            let mut s = txn.prepare(include_str!("sql/update/resolve_prev_ids.sql"))?;
+            let mut s = txn.prepare_cached(include_str!("sql/update/resolve_prev_ids.sql"))?;
             loop {
                 let mut modified = 1000;
                 modified = s.execute(named_params! {":limit": modified})?;
@@ -26,7 +26,7 @@ where
     /// Required to run periodically to make progress...
     /// TODO: Something more efficient?
     pub fn attach_tips(&self) -> Result<usize, rusqlite::Error> {
-        let mut s = self.0.prepare(include_str!("sql/update/do_connect.sql"))?;
+        let mut s = self.0.prepare_cached(include_str!("sql/update/do_connect.sql"))?;
         s.execute([])
     }
 
@@ -42,7 +42,7 @@ where
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/update/hidden_service.sql"))?;
+            .prepare_cached(include_str!("sql/update/hidden_service.sql"))?;
         stmt.insert(rusqlite::named_params!(
             ":service_url": s,
             ":port": port,

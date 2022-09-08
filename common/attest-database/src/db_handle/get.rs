@@ -37,7 +37,7 @@ where
     ) -> Result<PrecomittedNonce, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT (private_key) FROM message_nonces where public_key = ?")?;
+            .prepare_cached("SELECT (private_key) FROM message_nonces where public_key = ?")?;
         stmt.query_row([nonce], |r| r.get::<_, PrecomittedNonce>(0))
     }
 
@@ -49,7 +49,7 @@ where
     where
         It: Iterator<Item = &'v Envelope>,
     {
-        let mut stmt = self.0.prepare(include_str!(
+        let mut stmt = self.0.prepare_cached(include_str!(
             "sql/get/connected_messages_newer_than_for_genesis.sql"
         ))?;
         let mut res = vec![];
@@ -69,7 +69,7 @@ where
     ) -> Result<Envelope, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get/message_by_height_and_user.sql"))?;
+            .prepare_cached(include_str!("sql/get/message_by_height_and_user.sql"))?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
 
@@ -80,7 +80,7 @@ where
     ) -> Result<Envelope, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get/message_tips_by_user.sql"))?;
+            .prepare_cached(include_str!("sql/get/message_tips_by_user.sql"))?;
         stmt.query_row([key.to_hex()], |r| r.get(0))
     }
 
@@ -88,7 +88,7 @@ where
     pub fn get_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get/tips_for_known_keys.sql"))?;
+            .prepare_cached(include_str!("sql/get/tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
@@ -97,7 +97,7 @@ where
     pub fn get_disconnected_tip_for_known_keys(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get/disconnected_tips_for_known_keys.sql"))?;
+            .prepare_cached(include_str!("sql/get/disconnected_tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         Ok(vs)
@@ -107,7 +107,7 @@ where
     pub fn drop_message_by_hash(&self, h: CanonicalEnvelopeHash) -> Result<(), rusqlite::Error> {
         use rusqlite::named_params;
 
-        let mut stmt = self.0.prepare("DELETE FROM messages WHERE :hash = hash")?;
+        let mut stmt = self.0.prepare_cached("DELETE FROM messages WHERE :hash = hash")?;
         stmt.execute(named_params! {":hash": h})?;
         Ok(())
     }
@@ -120,10 +120,10 @@ where
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
             self.0
-                .prepare(include_str!("sql/get/all_messages_after_connected.sql"))?
+                .prepare_cached(include_str!("sql/get/all_messages_after_connected.sql"))?
         } else {
             self.0
-                .prepare(include_str!("sql/get/all_messages_connected.sql"))?
+                .prepare_cached(include_str!("sql/get/all_messages_connected.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -145,9 +145,9 @@ where
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
             self.0
-                .prepare(include_str!("sql/get/all_messages_after.sql"))?
+                .prepare_cached(include_str!("sql/get/all_messages_after.sql"))?
         } else {
-            self.0.prepare(include_str!("sql/get/all_messages.sql"))?
+            self.0.prepare_cached(include_str!("sql/get/all_messages.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -166,7 +166,7 @@ where
     pub fn get_reused_nonces(
         &self,
     ) -> Result<HashMap<XOnlyPublicKey, Vec<Envelope>>, rusqlite::Error> {
-        let mut stmt = self.0.prepare(include_str!("sql/get/reused_nonces.sql"))?;
+        let mut stmt = self.0.prepare_cached(include_str!("sql/get/reused_nonces.sql"))?;
         let rows = stmt.query([])?;
         let vs = rows
             .map(|r| r.get::<_, Envelope>(0))
@@ -182,7 +182,7 @@ where
     pub fn get_tips_for_all_users(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get/all_tips_for_all_users.sql"))?;
+            .prepare_cached(include_str!("sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
@@ -191,7 +191,7 @@ where
     }
 
     pub fn get_all_genesis(&self) -> Result<Vec<Envelope>, rusqlite::Error> {
-        let mut stmt = self.0.prepare(include_str!("sql/get/all_genesis.sql"))?;
+        let mut stmt = self.0.prepare_cached(include_str!("sql/get/all_genesis.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get::<_, Envelope>(0)).collect()?;
         debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
@@ -206,7 +206,7 @@ where
     ) -> Result<Vec<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare(include_str!("sql/get/all_messages_by_key_connected.sql"))?;
+            .prepare_cached(include_str!("sql/get/all_messages_by_key_connected.sql"))?;
         let rows = stmt.query(params![key.to_hex()])?;
         let vs: Vec<Envelope> = rows.map(|r| r.get(0)).collect()?;
         Ok(vs)
@@ -216,7 +216,7 @@ where
     pub fn get_keymap(&self) -> Result<BTreeMap<XOnlyPublicKey, SecretKey>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT public_key, private_key FROM private_keys")?;
+            .prepare_cached("SELECT public_key, private_key FROM private_keys")?;
         let rows = stmt.query([])?;
         rows.map(|r| {
             Ok((
@@ -231,7 +231,7 @@ where
     pub fn get_all_hidden_services(&self) -> Result<Vec<PeerInfo>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT service_url, port, fetch_from, push_to, allow_unsolicited_tips FROM hidden_services")?;
+            .prepare_cached("SELECT service_url, port, fetch_from, push_to, allow_unsolicited_tips FROM hidden_services")?;
         let results = stmt
             .query([])?
             .map(|r| {
@@ -255,7 +255,7 @@ where
     pub fn message_exists(&self, hash: &sha256::Hash) -> Result<bool, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT EXISTS(SELECT 1 FROM messages WHERE hash = ?)")?;
+            .prepare_cached("SELECT EXISTS(SELECT 1 FROM messages WHERE hash = ?)")?;
         stmt.exists([hash.to_hex()])
     }
 
@@ -263,7 +263,7 @@ where
     where
         I: Iterator<Item = &'i CanonicalEnvelopeHash>,
     {
-        let mut stmt = self.0.prepare("SELECT body FROM messages WHERE hash = ?")?;
+        let mut stmt = self.0.prepare_cached("SELECT body FROM messages WHERE hash = ?")?;
         let r: Result<Vec<_>, _> = hashes
             .map(|hash| stmt.query_row([hash], |r| r.get::<_, Envelope>(0)))
             .collect();
@@ -278,7 +278,7 @@ where
     {
         let mut stmt = self
             .0
-            .prepare("SELECT 1 FROM messages WHERE hash = ? LIMIT 1")?;
+            .prepare_cached("SELECT 1 FROM messages WHERE hash = ? LIMIT 1")?;
         hashes
             .filter_map(|hash| match stmt.exists([hash]) {
                 Ok(true) => None,
@@ -295,14 +295,14 @@ where
     ) -> Result<(i64, String), rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare("SELECT user_id, nickname  FROM users WHERE key = ? LIMIT 1")?;
+            .prepare_cached("SELECT user_id, nickname  FROM users WHERE key = ? LIMIT 1")?;
         stmt.query_row([key.to_hex()], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })
     }
 
     pub fn get_all_users(&self) -> Result<Vec<(XOnlyPublicKey, String)>, rusqlite::Error> {
-        let mut stmt = self.0.prepare("SELECT key, nickname  FROM users")?;
+        let mut stmt = self.0.prepare_cached("SELECT key, nickname  FROM users")?;
         let q = stmt.query([])?;
 
         q.mapped(|row| {
