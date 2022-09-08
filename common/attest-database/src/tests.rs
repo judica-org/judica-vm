@@ -30,7 +30,7 @@ async fn test_add_user() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
     let test_user = "TestUser".into();
-    make_test_user(&secp, &conn.get_handle().await, test_user);
+    make_test_user(&secp, &mut conn.get_handle().await, test_user);
 }
 
 #[test(tokio::test)]
@@ -38,8 +38,8 @@ async fn test_reused_nonce() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
     let test_user = "TestUser".into();
-    let handle = conn.get_handle().await;
-    let kp = make_test_user(&secp, &handle, test_user);
+    let mut handle = conn.get_handle().await;
+    let kp = make_test_user(&secp, &mut handle, test_user);
     let envelope_1 = handle
         .wrap_message_in_envelope_for_user_by_key(CanonicalJsonValue::Null, &kp, &secp, None, None)
         .unwrap()
@@ -175,11 +175,11 @@ async fn test_envelope_creation() {
     };
     let secp = Secp256k1::new();
     let conn = setup_db().await;
-    let handle = conn.get_handle().await;
+    let mut handle = conn.get_handle().await;
     const N_USERS: usize = 10;
     for user_id in 0..N_USERS {
         let test_user = format!("Test_User_{}", user_id);
-        let kp = make_test_user(&secp, &handle, test_user);
+        let kp = make_test_user(&secp, &mut handle, test_user);
 
         let envelope_1 = handle
             .wrap_message_in_envelope_for_user_by_key(
@@ -310,7 +310,7 @@ async fn test_envelope_creation() {
         }
     }
 
-    let kp_2 = make_test_user(&secp, &handle, "TestUser2".into());
+    let kp_2 = make_test_user(&secp, &mut handle, "TestUser2".into());
 
     let envelope_3 = handle
         .wrap_message_in_envelope_for_user_by_key(
@@ -343,7 +343,7 @@ async fn test_envelope_creation() {
 
 fn make_test_user(
     secp: &Secp256k1<All>,
-    handle: &db_handle::MsgDBHandle<'_>,
+    handle: &mut db_handle::MsgDBHandle<'_>,
     name: String,
 ) -> KeyPair {
     let (kp, nonce, envelope) = generate_new_user(secp).unwrap();

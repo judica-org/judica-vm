@@ -8,6 +8,7 @@ use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use rusqlite::ffi;
+use rusqlite::Transaction;
 
 use rusqlite::params;
 use rusqlite::ErrorCode;
@@ -86,14 +87,13 @@ where
     /// creates a new user from a genesis envelope
     #[must_use]
     pub fn insert_user_by_genesis_envelope(
-        &self,
+        &mut self,
         nickname: String,
         envelope: Authenticated<Envelope>,
     ) -> Result<Result<String, (SqliteFail, Option<String>)>, rusqlite::Error> {
         info!(genesis=?envelope.get_genesis_hash(), nickname, "Creating New Genesis");
-        let mut stmt = self
-            .0
-            .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
+        let tx = self.0.transaction()?;
+        let mut stmt = tx.prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
         let hex_key = PK(envelope.header().key());
         match stmt.insert(params![nickname, hex_key]) {
             Ok(_rowid) => {
@@ -120,8 +120,11 @@ where
                 }
             },
         }
-        self.try_insert_authenticated_envelope(envelope)
-            .map(|t| t.and(Ok(hex_key.0.to_hex())))
+        let res = try_insert_authenticated_envelope_with_txn(envelope, &tx)
+            .map(|t| t.and(Ok(hex_key.0.to_hex())));
+        drop(stmt);
+        tx.commit()?;
+        res
     }
     /// attempts to put an authenticated envelope in the DB
     ///
@@ -130,21 +133,33 @@ where
     /// Will return false if the message already existed
     #[must_use]
     pub fn try_insert_authenticated_envelope(
-        &self,
+        &mut self,
         data: Authenticated<Envelope>,
     ) -> Result<Result<(), (SqliteFail, Option<String>)>, rusqlite::Error> {
-        let data = data.inner();
-        let mut stmt = self.0.prepare(include_str!("sql/insert/envelope.sql"))?;
-        let time = attest_util::now();
-        let genesis = data.get_genesis_hash();
-        let prev_msg = data
-            .header()
-            .ancestors()
-            .map(|m| m.prev_msg())
-            .unwrap_or(CanonicalEnvelopeHash::genesis());
-        trace!(?genesis, ?data, "attempt to insert envelope");
-        let hash = data.clone().canonicalized_hash();
-        match stmt.insert(rusqlite::named_params! {
+        let tx = self.0.transaction()?;
+        let res = try_insert_authenticated_envelope_with_txn(data, &tx);
+        tx.commit()?;
+        res
+    }
+}
+
+#[must_use]
+pub fn try_insert_authenticated_envelope_with_txn(
+    data: Authenticated<Envelope>,
+    tx: &Transaction,
+) -> Result<Result<(), (SqliteFail, Option<String>)>, rusqlite::Error> {
+    let data = data.inner();
+    let mut stmt = tx.prepare(include_str!("sql/insert/envelope.sql"))?;
+    let time = attest_util::now();
+    let genesis = data.get_genesis_hash();
+    let prev_msg = data
+        .header()
+        .ancestors()
+        .map(|m| m.prev_msg())
+        .unwrap_or(CanonicalEnvelopeHash::genesis());
+    trace!(?genesis, ?data, "attempt to insert envelope");
+    let hash = data.clone().canonicalized_hash();
+    match stmt.insert(rusqlite::named_params! {
                 ":body": data,
                 ":hash": hash,
                 ":key": PK(data.header().key()),
@@ -195,9 +210,7 @@ where
                 }
             },
         }
-    }
 }
-
 /// Constant for Unique Contraint Violation
 /// Yes, pattern matching works.
 ///```

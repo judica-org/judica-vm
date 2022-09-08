@@ -176,7 +176,7 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
                 data: BroadcastByHost::Sequence(to_sequence),
                 channel: "default".into(),
             })?;
-            let handle = db.get_handle().await;
+            let mut handle = db.get_handle().await;
             // TODO: Run a tipcache
             let wrapped = handle
                 .wrap_message_in_envelope_for_user_by_key(msg, &keypair, &secp, None, None)??

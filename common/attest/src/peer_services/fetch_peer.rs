@@ -138,7 +138,7 @@ async fn handle_envelope<C: Verification + 'static>(
         match envelope.self_authenticate(secp) {
             Ok(authentic) => {
                 tracing::debug!(?service, "Authentic Tip: {:?}", authentic);
-                let handle = conn.get_handle().await;
+                let mut handle = conn.get_handle().await;
                 if authentic.inner_ref().header().ancestors().is_none()
                     && authentic.inner_ref().header().height() == 0
                 {

@@ -152,7 +152,7 @@ async fn push_message_dangerous(
     bitcoin_tipcache: Extension<Arc<BitcoinCheckPointCache>>,
     Json(PushMsg { msg, key }): Json<PushMsg>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
-    let handle = db.0.get_handle().await;
+    let mut handle = db.0.get_handle().await;
     let keys = handle.get_keymap().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -212,7 +212,7 @@ async fn make_genesis(
             format!("Creating Genesis Message failed: {}", e),
         )
     })?;
-    let handle = db.0.get_handle().await;
+    let mut handle = db.0.get_handle().await;
     handle
         .save_keypair(kp)
         .and_then(|()| handle.save_nonce_for_user_by_key(pre, &secp.0, kp.x_only_public_key().0))
