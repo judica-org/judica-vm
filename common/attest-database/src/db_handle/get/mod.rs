@@ -52,7 +52,7 @@ where
         It: Iterator<Item = &'v Authenticated<Envelope>>,
     {
         let mut stmt = self.0.prepare_cached(include_str!(
-            "sql/get/connected_messages_newer_than_for_genesis.sql"
+            "../sql/get/connected_messages_newer_than_for_genesis.sql"
         ))?;
         let mut res = vec![];
         for envelope in envelopes {
@@ -73,7 +73,7 @@ where
     ) -> Result<Authenticated<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/message_by_height_and_user.sql"))?;
+            .prepare_cached(include_str!("../sql/get/message_by_height_and_user.sql"))?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
 
@@ -84,7 +84,7 @@ where
     ) -> Result<Authenticated<Envelope>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/message_tips_by_user.sql"))?;
+            .prepare_cached(include_str!("../sql/get/message_tips_by_user.sql"))?;
         stmt.query_row([key.to_hex()], |r| r.get(0))
     }
 
@@ -92,7 +92,7 @@ where
     pub fn get_tip_for_known_keys(&self) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/tips_for_known_keys.sql"))?;
+            .prepare_cached(include_str!("../sql/get/tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Authenticated<Envelope>> = rows
             .map(|r| r.get::<_, Authenticated<Envelope>>(0))
@@ -105,7 +105,7 @@ where
     ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/disconnected_tips_for_known_keys.sql"))?;
+            .prepare_cached(include_str!("../sql/get/disconnected_tips_for_known_keys.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Authenticated<Envelope>> = rows
             .map(|r| r.get::<_, Authenticated<Envelope>>(0))
@@ -132,10 +132,10 @@ where
     ) -> Result<(), rusqlite::Error> {
         let mut stmt = if newer.is_some() {
             self.0
-                .prepare_cached(include_str!("sql/get/all_messages_after_connected.sql"))?
+                .prepare_cached(include_str!("../sql/get/all_messages_after_connected.sql"))?
         } else {
             self.0
-                .prepare_cached(include_str!("sql/get/all_messages_connected.sql"))?
+                .prepare_cached(include_str!("../sql/get/all_messages_connected.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -160,10 +160,10 @@ where
     {
         let mut stmt = if newer.is_some() {
             self.0
-                .prepare_cached(include_str!("sql/get/all_messages_after.sql"))?
+                .prepare_cached(include_str!("../sql/get/all_messages_after.sql"))?
         } else {
             self.0
-                .prepare_cached(include_str!("sql/get/all_messages.sql"))?
+                .prepare_cached(include_str!("../sql/get/all_messages.sql"))?
         };
         let rows = match newer {
             Some(i) => stmt.query([*i])?,
@@ -184,7 +184,7 @@ where
     ) -> Result<HashMap<XOnlyPublicKey, Vec<Authenticated<Envelope>>>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/reused_nonces.sql"))?;
+            .prepare_cached(include_str!("../sql/get/reused_nonces.sql"))?;
         let rows = stmt.query([])?;
         let vs = rows.map(|r| r.get::<_, Authenticated<Envelope>>(0)).fold(
             HashMap::new(),
@@ -204,7 +204,7 @@ where
     {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/all_tips_for_all_users.sql"))?;
+            .prepare_cached(include_str!("../sql/get/all_tips_for_all_users.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<E> = rows.map(|r| r.get::<_, E>(0)).collect()?;
         debug!(tips=?vs.iter().map(|e| (e.as_ref().header().height(), e.as_ref().get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
@@ -215,7 +215,7 @@ where
     pub fn get_all_genesis(&self) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/all_genesis.sql"))?;
+            .prepare_cached(include_str!("../sql/get/all_genesis.sql"))?;
         let rows = stmt.query([])?;
         let vs: Vec<Authenticated<Envelope>> = rows
             .map(|r| r.get::<_, Authenticated<Envelope>>(0))
@@ -232,7 +232,7 @@ where
     ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/all_messages_by_key_connected.sql"))?;
+            .prepare_cached(include_str!("../sql/get/all_messages_by_key_connected.sql"))?;
         let rows = stmt.query(params![key.to_hex()])?;
         let vs: Vec<Authenticated<Envelope>> = rows.map(|r| r.get(0)).collect()?;
         Ok(vs)
@@ -352,7 +352,7 @@ where
     ) -> Result<Vec<(ChainCommitGroupID, String)>, rusqlite::Error> {
         let mut stmt = self
             .0
-            .prepare_cached(include_str!("sql/get/all_chain_commit_groups.sql"))?;
+            .prepare_cached(include_str!("../sql/get/all_chain_commit_groups.sql"))?;
         let q = stmt.query([])?;
         q.mapped(|row| {
             let r1 = row.get(0)?;
@@ -367,7 +367,7 @@ where
         genesis_hash: CanonicalEnvelopeHash,
     ) -> Result<Vec<(ChainCommitGroupID, String)>, rusqlite::Error> {
         let mut stmt = self.0.prepare_cached(include_str!(
-            "sql/get/all_chain_commit_groups_for_chain.sql"
+            "../sql/get/all_chain_commit_groups_for_chain.sql"
         ))?;
         let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
         q.mapped(|row| {
@@ -383,7 +383,7 @@ where
         genesis_hash: CanonicalEnvelopeHash,
     ) -> Result<Vec<MessageID>, rusqlite::Error> {
         let mut stmt = self.0.prepare_cached(include_str!(
-            "sql/get/all_chain_commit_group_members_for_chain.sql"
+            "../sql/get/all_chain_commit_group_members_for_chain.sql"
         ))?;
         let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
         q.mapped(|row| {
@@ -398,7 +398,7 @@ where
         genesis_hash: CanonicalEnvelopeHash,
     ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
         let mut stmt = self.0.prepare_cached(include_str!(
-            "sql/get/all_chain_commit_group_members_tips_for_chain.sql"
+            "../sql/get/all_chain_commit_group_members_tips_for_chain.sql"
         ))?;
         let q = stmt.query(named_params! {":genesis_hash": genesis_hash})?;
         q.mapped(|row| {
