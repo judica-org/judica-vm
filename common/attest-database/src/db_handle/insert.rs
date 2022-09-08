@@ -95,7 +95,31 @@ where
             .0
             .prepare("INSERT INTO users (nickname, key) VALUES (?, ?)")?;
         let hex_key = PK(envelope.header().key());
-        stmt.insert(params![nickname, hex_key])?;
+        match stmt.insert(params![nickname, hex_key]) {
+            Ok(_rowid) => {
+                tracing::info!(?nickname, key=?hex_key.0, "Successfully Created New User");
+            }
+            Err(e) => match e {
+                rusqlite::Error::SqliteFailure(
+                    ffi::Error {
+                        code: ErrorCode::ConstraintViolation,
+                        extended_code: SQLITE_CONSTRAINT_UNIQUE,
+                    },
+                    msg,
+                ) => {
+                    debug!(key=?hex_key.0, err=msg, "A User with this key already exists...");
+                    // Don't Care -- Insert Envelope Anyway
+                }
+                other_err => {
+                    debug!(
+                        ?other_err,
+                        "SQL: {}",
+                        stmt.expanded_sql().unwrap_or_default()
+                    );
+                    return Err(other_err);
+                }
+            },
+        }
         self.try_insert_authenticated_envelope(envelope)
             .map(|t| t.and(Ok(hex_key.0.to_hex())))
     }
@@ -142,21 +166,33 @@ where
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_UNIQUE,
-                    } => Ok(Err((SqliteFail::SqliteConstraintUnique, msg))),
+                    } => {
+                        debug!(?hash, "Insert failed due to Uniqueness Constraint");
+                        Ok(Err((SqliteFail::SqliteConstraintUnique, msg)))
+                    },
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_NOTNULL,
-                    } => Ok(Err((SqliteFail::SqliteConstraintNotNull, msg))),
+                    } => {
+                        debug!(?hash, "Insert failed due to Not-Null Constraint");
+                        Ok(Err((SqliteFail::SqliteConstraintNotNull, msg)))
+                    },
                     ffi::Error {
                         code: ErrorCode::ConstraintViolation,
                         extended_code: SQLITE_CONSTRAINT_CHECK,
-                    } => Ok(Err((SqliteFail::SqliteConstraintCheck, msg))),
-                    _ => {
-                        debug!("SQL: {}", stmt.expanded_sql().unwrap_or_default());
+                    } => {
+                        debug!(?hash, "Insert failed due to Check Constraint");
+                        Ok(Err((SqliteFail::SqliteConstraintCheck, msg)))
+                    },
+                    other_err => {
+                        debug!(?other_err, "SQL: {}", stmt.expanded_sql().unwrap_or_default());
                         Err(rusqlite::Error::SqliteFailure(err, msg))
                     }
                 },
-                err => Err(err),
+                err =>{
+                    debug!(?err, "SQL: {}", stmt.expanded_sql().unwrap_or_default());
+                    Err(err)
+                }
             },
         }
     }
