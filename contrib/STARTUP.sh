@@ -22,6 +22,9 @@ case "$(uname -s)" in
 esac
 
 
+pushd ..
+cargo build --release
+popd
 
 
 echo "Using Config"
