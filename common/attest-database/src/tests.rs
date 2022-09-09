@@ -1,5 +1,5 @@
 use crate::db_handle::create::TipControl;
-use crate::db_handle::get::nonces::{extract_sk, extract_sk_from_envelopes};
+use crate::db_handle::get::nonces::extract_sk_from_envelopes;
 use crate::db_handle::MsgDBHandle;
 
 use super::connection::MsgDB;
@@ -410,9 +410,9 @@ async fn test_chain_commit_groups() {
             (kp, friends, genesis_hash)
         })
         .collect::<Vec<_>>();
-    for (i, (kp, friend_groups, genesis_hash)) in users.iter().enumerate() {
+    for (i, (_kp, friend_groups, genesis_hash)) in users.iter().enumerate() {
         for friend_group in friend_groups {
-            let (name, group_id) = handle
+            let (_name, group_id) = handle
                 .new_chain_commit_group(Some(format!("g-{}-{:?}", i, friend_group)))
                 .unwrap();
             handle
@@ -427,7 +427,7 @@ async fn test_chain_commit_groups() {
         }
     }
 
-    for (i, (kp, friend_groups, genesis_hash)) in users.iter().enumerate() {
+    for (i, (_kp, friend_groups, genesis_hash)) in users.iter().enumerate() {
         let ids = handle
             .get_all_chain_commit_group_members_for_chain(*genesis_hash)
             .unwrap();
@@ -453,10 +453,10 @@ async fn test_chain_commit_groups() {
         );
     }
 
-    for x in 0..10 {
+    for _x in 0..10 {
         let msgs = users
             .iter()
-            .map(|(kp, u, g)| {
+            .map(|(kp, _u, _g)| {
                 let e = handle
                     .wrap_message_in_envelope_for_user_by_key(
                         CanonicalJsonValue::Null,
@@ -472,7 +472,7 @@ async fn test_chain_commit_groups() {
                 e
             })
             .collect::<Vec<_>>();
-        for (i, (msg, (kp, friend_groups, g))) in msgs.iter().zip(users.iter()).enumerate() {
+        for (i, (msg, (_kp, friend_groups, _g))) in msgs.iter().zip(users.iter()).enumerate() {
             for friend_group in friend_groups {
                 for friend in friend_group {
                     let tip = handle

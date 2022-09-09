@@ -25,8 +25,8 @@ use crate::tokens::instances::steel::SteelSmelter;
 use crate::tokens::token_swap;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
 use crate::tokens::token_swap::TradingPairID;
-use crate::MoveEnvelope;
 use crate::tokens::token_swap::UXMaterialsPriceData;
+use crate::MoveEnvelope;
 use serde::Serialize;
 use std::cmp::max;
 use std::collections::BTreeMap;
@@ -310,32 +310,49 @@ impl GameBoard {
         return Ok(());
     }
 
-    pub fn get_ux_materials_prices(
-        &mut self,
-    ) -> Result<Vec<UXMaterialsPriceData>, ()> {
+    pub fn get_ux_materials_prices(&mut self) -> Result<Vec<UXMaterialsPriceData>, ()> {
         let mut price_data = Vec::new();
-        // get pointer and human name for materials and 
+        // get pointer and human name for materials and
         let bitcoin_token_id = self.bitcoin_token_id.unwrap();
         let steel_token_id = self.steel_token_id.unwrap();
         let silicon_token_id = self.silicon_token_id.unwrap();
         // get ux names
         let registry = &self.tokens;
-        let human_name_bitcoin = registry.index(bitcoin_token_id).nickname().unwrap_or_else(||"Bitcoin".into());
-        let human_name_steel = registry.index(steel_token_id).nickname().unwrap_or_else(||"Steel".into());
-        let human_name_silicon = registry.index(silicon_token_id).nickname().unwrap_or_else(||"Silicon".into());
+        let human_name_bitcoin = registry
+            .index(bitcoin_token_id)
+            .nickname()
+            .unwrap_or_else(|| "Bitcoin".into());
+        let human_name_steel = registry
+            .index(steel_token_id)
+            .nickname()
+            .unwrap_or_else(|| "Steel".into());
+        let human_name_silicon = registry
+            .index(silicon_token_id)
+            .nickname()
+            .unwrap_or_else(|| "Silicon".into());
         // get steel/btc
-        let (steel_qty_btc, btc_qty_steel) =
-            ConstantFunctionMarketMaker::get_pair_price_data(self, TradingPairID { asset_a:steel_token_id,
-                asset_b:bitcoin_token_id}).unwrap();
+        let (steel_qty_btc, btc_qty_steel) = ConstantFunctionMarketMaker::get_pair_price_data(
+            self,
+            TradingPairID {
+                asset_a: steel_token_id,
+                asset_b: bitcoin_token_id,
+            },
+        )
+        .unwrap();
         // get silicon/btc
-        let (silicon_qty_btc, btc_qty_silicon) =
-            ConstantFunctionMarketMaker::get_pair_price_data(self, TradingPairID { asset_a:silicon_token_id,
-                asset_b:bitcoin_token_id}).unwrap();
-        
+        let (silicon_qty_btc, btc_qty_silicon) = ConstantFunctionMarketMaker::get_pair_price_data(
+            self,
+            TradingPairID {
+                asset_a: silicon_token_id,
+                asset_b: bitcoin_token_id,
+            },
+        )
+        .unwrap();
+
         price_data.push(UXMaterialsPriceData {
             trading_pair: TradingPairID {
-                asset_a:steel_token_id,
-                asset_b:bitcoin_token_id
+                asset_a: steel_token_id,
+                asset_b: bitcoin_token_id,
             },
             asset_a: human_name_steel,
             mkt_qty_a: steel_qty_btc,
@@ -344,15 +361,15 @@ impl GameBoard {
         });
         price_data.push(UXMaterialsPriceData {
             trading_pair: TradingPairID {
-                asset_a:silicon_token_id,
-                asset_b:bitcoin_token_id
+                asset_a: silicon_token_id,
+                asset_b: bitcoin_token_id,
             },
             asset_a: human_name_silicon,
             mkt_qty_a: silicon_qty_btc,
             asset_b: human_name_bitcoin,
             mkt_qty_b: btc_qty_silicon,
         });
-        
+
         Ok(price_data)
     }
 }

@@ -1,6 +1,6 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_messages::CanonicalEnvelopeHash;
 use mine_with_friends_board::game::game_move::GameMove;
 use serde::{Deserialize, Serialize};
 

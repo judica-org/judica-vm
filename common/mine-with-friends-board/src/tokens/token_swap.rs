@@ -211,7 +211,7 @@ impl ConstantFunctionMarketMaker {
         tokens[id.asset_b].end_transaction();
     }
 
-    pub(crate) fn get_pair_price_data (
+    pub(crate) fn get_pair_price_data(
         game: &mut GameBoard,
         id: TradingPairID,
     ) -> Result<(u128, u128), ()> {

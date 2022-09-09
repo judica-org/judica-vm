@@ -1,5 +1,5 @@
 use super::PeerInfo;
-use crate::db_handle::{handle_type, MsgDBHandle, sql::SQL_GET_ALL_HIDDEN_SERVICES};
+use crate::db_handle::{handle_type, sql::SQL_GET_ALL_HIDDEN_SERVICES, MsgDBHandle};
 use fallible_iterator::FallibleIterator;
 
 impl<'a, T> MsgDBHandle<'a, T>
