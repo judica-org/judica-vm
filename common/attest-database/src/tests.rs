@@ -491,6 +491,8 @@ async fn test_chain_commit_groups() {
                         .any(|k| k.2 == tip.canonicalized_hash_ref()));
                 }
             }
+            let set: BTreeSet<_> = friend_groups.iter().flatten().collect();
+            assert_eq!(set.len(), msg.header().tips().len());
         }
         for msg in msgs {
             if rng.gen_bool(0.5) {
