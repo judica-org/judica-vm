@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "cross-env": "^7.0.3",
     "@rjsf/core": "^4.2.3",
     "@tauri-apps/api": "^1.0.2",
     "@testing-library/jest-dom": "^5.14.1",
@@ -44,7 +45,6 @@
     ]
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.0.5",
-    "cross-env": "^7.0.3"
+    "@tauri-apps/cli": "^1.0.5"
   }
 }
