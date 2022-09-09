@@ -15,6 +15,10 @@ tracing-subscriber = "0.3.11"
 tracing = "0.1.35"
 directories = "3.0.1"
 ruma-serde = "0.6.0"
+tower-layer = "0.3.1"
+[dependencies.tower-http]
+version = "0.3.4"
+features = [ "cors", "trace" ]
 
 [dependencies.attest-messages]
 path = "../attest-messages"

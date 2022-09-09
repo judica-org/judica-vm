@@ -3,6 +3,7 @@ use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
 
+use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::{
     secp256k1::{
         rand::{self},
@@ -11,14 +12,17 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     error::Error,
     path::PathBuf,
     sync::Arc,
 };
+use tokio::spawn;
+use tokio::task::JoinHandle;
 use tor::TorConfig;
-use tracing::info;
+use tracing::{debug, info};
 mod app;
 mod tor;
 #[derive(Serialize, Deserialize)]
@@ -29,14 +33,6 @@ pub struct Config {
     prefix: Option<PathBuf>,
 }
 
-async fn get_oracle_key(
-    key: &XOnlyPublicKey,
-    db: MsgDB,
-) -> Result<KeyPair, Box<dyn Error + Send + Sync>> {
-    let km = db.get_handle().await.get_keymap()?;
-    let s = km.get(key).map(Clone::clone).ok_or("No Key Known")?;
-    Ok(KeyPair::from_secret_key(&Secp256k1::new(), &s))
-}
 fn get_config() -> Result<Arc<Config>, Box<dyn Error + Send + Sync>> {
     let config = std::env::var("GAME_HOST_CONFIG_JSON").map(|s| serde_json::from_str(&s))??;
     Ok(Arc::new(config))
@@ -63,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     info!("Hosting Onion Service At: {}", host);
 
     let app_instance = app::run(config.clone(), db.clone());
-    let game_instance = game(config, db.clone());
+    let game_instance = game_server(config, db.clone());
     tokio::select! {
         a =  game_instance =>{
             a?;
@@ -75,14 +71,51 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let secp = Secp256k1::new();
+async fn game_server(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let mut task_set = BTreeMap::<_, JoinHandle<_>>::new();
+    let secp = Arc::new(Secp256k1::new());
+    loop {
+        let handle = db.get_handle().await;
+        let keymap = handle.get_keymap()?;
+
+        for (key, value) in keymap {
+            match task_set.entry(key) {
+                std::collections::btree_map::Entry::Vacant(e) => {
+                    let keypair = KeyPair::from_secret_key(&secp, &value);
+                    e.insert(spawn(game(
+                        config.clone(),
+                        db.clone(),
+                        keypair,
+                        secp.clone(),
+                    )));
+                }
+                std::collections::btree_map::Entry::Occupied(ref mut x) => {
+                    if x.get().is_finished() {
+                        let keypair = KeyPair::from_secret_key(&secp, &value);
+                        let old = x.insert(spawn(game(
+                            config.clone(),
+                            db.clone(),
+                            keypair,
+                            secp.clone(),
+                        )));
+                        let res = old.await;
+                        debug!(?res, ?key, "Game Task Quit");
+                    }
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(10)).await;
+    }
+    Ok(())
+}
+
+async fn game(
+    config: Arc<Config>,
+    db: MsgDB,
+    keypair: KeyPair,
+    secp: Arc<Secp256k1<All>>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut seq = None;
-    let keypair = get_oracle_key(
-        &config.key.expect("Key Created Earlier if Missing"),
-        db.clone(),
-    )
-    .await?;
     let oracle_publickey = keypair.public_key().x_only_public_key().0;
     let mut already_sequenced: Vec<CanonicalEnvelopeHash> = vec![];
     // First we get all of the old messages for the Oracle itself, so that we
