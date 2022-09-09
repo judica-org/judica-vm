@@ -188,7 +188,7 @@ where
         I: Iterator<Item = &'i CanonicalEnvelopeHash>,
         E: AsRef<Envelope> + FromSql,
     {
-        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_ID)?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_HASH)?;
         let r: Result<Vec<_>, _> = hashes
             .map(|hash| stmt.query_row([hash], |r| r.get::<_, E>(0)))
             .collect();
