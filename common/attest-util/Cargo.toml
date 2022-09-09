@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.19.0", features = ["full"], optional=true }
+tracing = {version="0.1.35", optional=true}

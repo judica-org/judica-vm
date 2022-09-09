@@ -39,3 +39,32 @@ pub async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
     };
     Ok(data_dir)
 }
+
+#[cfg(feature = "tokio")]
+#[cfg(feature = "tracing")]
+pub async fn get_hidden_service_hostname(
+    mut hidden_service_dir: PathBuf,
+) -> Result<String, Box<dyn Error + Send + Sync>> {
+    use std::time::Duration;
+    use tracing::debug;
+    use tracing::info;
+    hidden_service_dir.push("hostname");
+    loop {
+        info!(location=?hidden_service_dir, "Checking for .onion Hostname");
+        match tokio::fs::read_to_string(&hidden_service_dir).await {
+            Ok(s) => {
+                let s = s.trim();
+                if s.ends_with(".onion") {
+                    return Ok(s.into());
+                } else {
+                    debug!(?s, "Name not yet set");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+            Err(_) => {
+                debug!("Name not yet set");
+                tokio::time::sleep(Duration::from_secs(1)).await
+            }
+        }
+    }
+}

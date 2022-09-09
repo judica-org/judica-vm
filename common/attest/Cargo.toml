@@ -30,6 +30,7 @@ features = ["vendored"]
 
 [dependencies.attest-util]
 path = "../attest-util"
+features = ["tokio", "tracing"]
 [dependencies.attest-database]
 path = "../attest-database"
 

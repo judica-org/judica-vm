@@ -106,7 +106,7 @@ impl PeerServicesTimers {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct PeerServiceConfig {
     #[serde(default)]
     pub timer_override: PeerServicesTimers,
@@ -122,6 +122,7 @@ pub struct Config {
     pub control: ControlConfig,
     #[serde(default)]
     pub prefix: Option<PathBuf>,
+    #[serde(default)]
     pub peer_service: PeerServiceConfig,
     #[serde(skip, default)]
     pub test_db: bool,
