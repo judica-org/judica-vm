@@ -1,6 +1,7 @@
 #[cfg(feature = "database_access")]
 use attest_database::connection::MsgDB;
 use attest_messages::Authenticated;
+use attest_messages::AuthenticationError;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
@@ -69,8 +70,34 @@ use tokio::time::sleep;
 // }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
-pub struct RawSequencer {
+pub struct UnauthenticatedRawSequencer {
     sequencer_envelopes: Vec<Envelope>,
+    msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
+}
+impl TryFrom<UnauthenticatedRawSequencer> for RawSequencer {
+    type Error = AuthenticationError;
+
+    fn try_from(value: UnauthenticatedRawSequencer) -> Result<Self, Self::Error> {
+        let secp = Secp256k1::verification_only();
+        Ok(Self {
+            sequencer_envelopes: value
+                .sequencer_envelopes
+                .iter()
+                .map(|v| v.self_authenticate(&secp))
+                .collect::<Result<Vec<_>, AuthenticationError>>()?,
+            msg_cache: value
+                .msg_cache
+                .iter()
+                .map(|(m, e)| Ok((*m, e.self_authenticate(&secp)?)))
+                .collect::<Result<HashMap<_,_>, AuthenticationError>>()?,
+        })
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(try_from = "UnauthenticatedRawSequencer")]
+pub struct RawSequencer {
+    sequencer_envelopes: Vec<Authenticated<Envelope>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
 }
 
@@ -115,14 +142,6 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
         {
             return Err(SequencerError::MessageFromWrongEntity);
         }
-        let secp = Secp256k1::verification_only();
-        if value
-            .sequencer_envelopes
-            .iter()
-            .any(|s| s.self_authenticate(&secp).is_err())
-        {
-            return Err(SequencerError::AuthenticationError);
-        }
         let mut batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>> = vec![];
         for envelope in &value.sequencer_envelopes {
             match serde_json::from_value::<Channelized<BroadcastByHost>>(
@@ -144,7 +163,8 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(Deserialize, JsonSchema)]
+#[serde(try_from="RawSequencer")]
 pub struct OfflineSequencer {
     batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
@@ -548,7 +568,8 @@ mod test {
                             &KeyPair::from_secret_key(secp, &sk),
                             secp,
                             PrecomittedNonce::new(secp),
-                        ).expect("Signature OK");
+                        )
+                        .expect("Signature OK");
                         e1.self_authenticate(secp).expect("Must Be Correct")
                     })
                     .collect::<VecDeque<_>>()

@@ -1,8 +1,9 @@
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Serialize};
 
 use crate::Envelope;
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, JsonSchema, Serialize)]
+#[serde(transparent)]
 pub struct Authenticated<T>(pub(super) T);
 
 impl<T> std::ops::Deref for Authenticated<T> {
