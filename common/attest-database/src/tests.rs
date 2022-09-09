@@ -527,6 +527,7 @@ async fn test_tables() {
     assert_eq!(
         vec![
             "chain_commit_group_members",
+            "chain_commit_group_subscribers",
             "chain_commit_groups",
             "hidden_services",
             "message_nonces",
