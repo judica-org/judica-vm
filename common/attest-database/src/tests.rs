@@ -1,5 +1,5 @@
 use crate::db_handle::create::TipControl;
-use crate::db_handle::get::nonces::{extract_sk_from_envelopes};
+use crate::db_handle::get::nonces::extract_sk_from_envelopes;
 use crate::db_handle::MsgDBHandle;
 
 use super::connection::MsgDB;
