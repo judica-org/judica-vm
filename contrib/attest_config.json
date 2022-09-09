@@ -1,0 +1,17 @@
+{
+    "bitcoin": {
+        "url": "http://127.0.0.1:18443",
+        "auth": {
+            "CookieFile": "/Users/jr/Library/Application Support/Bitcoin/signet/.cookie"
+        }
+    },
+    "subname": "testing",
+    "tor": {
+        "directory": "/Users/jr/demo-app-dir/attest/tor",
+        "socks_port": 14457
+    },
+    "application_port": 13328,
+    "control": {
+        "port": 15532
+    }
+}
