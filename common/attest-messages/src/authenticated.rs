@@ -1,5 +1,5 @@
 use schemars::JsonSchema;
-use serde::{Serialize};
+use serde::Serialize;
 
 use crate::Envelope;
 #[derive(Debug, Clone, Eq, PartialEq, JsonSchema, Serialize)]

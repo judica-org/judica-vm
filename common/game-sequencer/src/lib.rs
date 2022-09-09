@@ -89,7 +89,7 @@ impl TryFrom<UnauthenticatedRawSequencer> for RawSequencer {
                 .msg_cache
                 .iter()
                 .map(|(m, e)| Ok((*m, e.self_authenticate(&secp)?)))
-                .collect::<Result<HashMap<_,_>, AuthenticationError>>()?,
+                .collect::<Result<HashMap<_, _>, AuthenticationError>>()?,
         })
     }
 }
@@ -164,7 +164,7 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(try_from="RawSequencer")]
+#[serde(try_from = "RawSequencer")]
 pub struct OfflineSequencer {
     batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,

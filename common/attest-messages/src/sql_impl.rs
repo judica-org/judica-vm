@@ -24,7 +24,7 @@ impl FromSql for Envelope {
 impl FromSql for Authenticated<Envelope> {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         let s = value.as_str()?;
-        let envelope : Envelope =
+        let envelope: Envelope =
             serde_json::from_str(s).map_err(|e| rusqlite::types::FromSqlError::Other(e.into()))?;
         Ok(Authenticated(envelope))
     }

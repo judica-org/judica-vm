@@ -1,9 +1,9 @@
-use crate::db_handle::sql::get::chain_commit_groups::*;
-use crate::sql_serializers::PK;
 use super::super::handle_type;
 use super::super::ChainCommitGroupID;
 use super::super::MessageID;
 use super::super::MsgDBHandle;
+use crate::db_handle::sql::get::chain_commit_groups::*;
+use crate::sql_serializers::PK;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;

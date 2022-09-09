@@ -1,4 +1,5 @@
 use super::super::sql_serializers;
+use crate::db_handle::sql::get::users::*;
 use crate::db_handle::{handle_type, MsgDBHandle};
 use fallible_iterator::FallibleIterator;
 use sapio_bitcoin;
@@ -6,8 +7,6 @@ use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::secp256k1::SecretKey;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::BTreeMap;
-use crate::db_handle::sql::get::users::*;
-
 
 impl<'a, T> MsgDBHandle<'a, T>
 where

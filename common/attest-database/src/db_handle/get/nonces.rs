@@ -1,6 +1,6 @@
-use crate::db_handle::sql::get::nonces::*;
 use super::super::handle_type;
 use super::super::MsgDBHandle;
+use crate::db_handle::sql::get::nonces::*;
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::Authenticated;
