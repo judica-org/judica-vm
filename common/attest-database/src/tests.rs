@@ -493,10 +493,12 @@ async fn test_chain_commit_groups() {
             }
         }
         for msg in msgs {
-            handle
-                .try_insert_authenticated_envelope(msg)
-                .unwrap()
-                .unwrap();
+            if rng.gen_bool(0.5) {
+                handle
+                    .try_insert_authenticated_envelope(msg)
+                    .unwrap()
+                    .unwrap();
+            }
         }
     }
 }
