@@ -27,7 +27,7 @@ impl Serialize for CallbackRegistry {
         S: serde::Serializer,
     {
         serializer.collect_seq(self.callbacks.iter().map(
-            |(k, v): (&u64, &Vec<Box<dyn Callback>>)| {
+            |(k, v): (&u64, &Vec<Box<dyn Callback + 'static>>)| {
                 (k, v.iter().map(|x| x.purpose()).collect::<Vec<String>>())
             },
         ))
