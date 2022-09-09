@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS messages (
         CHECK(
             IFNULL(
                 json(body) ->> '$.header.ancestors.genesis',
-                genesis
+                hash
             ) = genesis
         ),
         CHECK(

@@ -10,6 +10,7 @@ use fallible_iterator::FallibleIterator;
 use ruma_serde::CanonicalJsonValue;
 use rusqlite::{params, Connection};
 
+use sapio_bitcoin::secp256k1::rand::{thread_rng, Rng};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use sapio_bitcoin::KeyPair;
 
@@ -376,6 +377,51 @@ async fn setup_db() -> MsgDB {
     let conn = MsgDB::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())));
     conn.get_handle().await.setup_tables();
     conn
+}
+
+#[test(tokio::test)]
+async fn test_chain_commit_groups() {
+    let conn = setup_db().await;
+    let mut handle = conn.get_handle().await;
+    let secp = Secp256k1::new();
+    let mut rng = thread_rng();
+    let users = (0..100)
+        .map(|i| {
+            let mut friends: [[usize; 4]; 2] = rng.gen();
+            for g in &mut friends {
+                loop {
+                    for f in g.iter_mut() {
+                        *f = *f % 100;
+                    }
+                    g.sort();
+                    if g.iter().any(|a| *a == i) || g.windows(2).any(|w| w[0] == w[1]) {
+                        *g = rng.gen();
+                        continue;
+                    }
+                    break;
+                }
+            }
+            let kp = make_test_user(&secp, &mut handle, format!("u-{}", i));
+            let genesis_hash = handle
+                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .unwrap()
+                .get_genesis_hash();
+            (kp, friends, genesis_hash)
+        })
+        .collect::<Vec<_>>();
+    for (i, (kp, friend_groups, genesis_hash)) in users.iter().enumerate() {
+        for friend_group in friend_groups {
+            let (name, group_id) = handle
+                .new_chain_commit_group(Some(format!("g-{}-{:?}", i, friend_group)))
+                .unwrap();
+            for f in friend_group {
+                println!("Connecting To: {:?}", users[*f].2);
+                handle
+                    .add_member_to_chain_commit_group(group_id, users[*f].2)
+                    .unwrap();
+            }
+        }
+    }
 }
 #[test(tokio::test)]
 async fn test_tables() {

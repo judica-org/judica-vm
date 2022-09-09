@@ -4,11 +4,11 @@ VALUES
     (
         (
             SELECT
-                genesis_id
+                M.message_id
             FROM
-                messages
+                messages M
             WHERE
-                genesis = :genesis_hash
+                M.hash = :genesis_hash
             LIMIT
                 1
         ), :group_id
