@@ -11,6 +11,8 @@ pub mod insert {
         include_str!("../sql/insert/new_chain_commit_group.sql");
     pub const SQL_INSERT_CHAIN_COMMIT_GROUP_MEMBER: &str =
         include_str!("../sql/insert/add_chain_commit_group_member.sql");
+    pub const SQL_INSERT_CHAIN_COMMIT_GROUP_SUBSCRIBER: &str =
+        include_str!("../sql/insert/add_chain_commit_group_subscriber.sql");
     pub const SQL_INSERT_ENVELOPE: &str = include_str!("../sql/insert/envelope.sql");
 }
 
@@ -71,6 +73,7 @@ pub mod get {
             include_str!("../sql/get/all_messages_by_key_connected.sql");
         pub const SQL_GET_MESSAGE_EXISTS: &str = include_str!("../sql/get/messages/exists.sql");
         pub const SQL_GET_MESSAGE_BY_HASH: &str = include_str!("../sql/get/messages/by_hash.sql");
+        pub const SQL_GET_MESSAGE_BY_ID: &str = include_str!("../sql/get/messages/by_id.sql");
     }
     pub mod nonces {
 
@@ -97,6 +100,7 @@ pub mod setup {
         include_str!("../sql/tables/private_keys.sql"),
         include_str!("../sql/tables/chain_commit_groups.sql"),
         include_str!("../sql/tables/chain_commit_group_members.sql"),
+        include_str!("../sql/tables/chain_commit_group_subscribers.sql"),
         include_str!("../sql/tables/hidden_services.sql"),
         include_str!("../sql/triggers/messages/connect_gap_parent.sql"),
         "PRAGMA journal_mode = WAL;"
@@ -110,6 +114,7 @@ pub const CACHED: &'static [&'static str] = &[
     SQL_INSERT_USER,
     SQL_INSERT_CHAIN_COMMIT_GROUP,
     SQL_INSERT_CHAIN_COMMIT_GROUP_MEMBER,
+    SQL_INSERT_CHAIN_COMMIT_GROUP_SUBSCRIBER,
     SQL_INSERT_ENVELOPE,
     SQL_UPDATE_CONNECT_RECURSIVE,
     SQL_UPDATE_HIDDEN_SERVICE,
@@ -133,6 +138,7 @@ pub const CACHED: &'static [&'static str] = &[
     SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED,
     SQL_GET_MESSAGE_EXISTS,
     SQL_GET_MESSAGE_BY_HASH,
+    SQL_GET_MESSAGE_BY_ID,
     SQL_GET_SECRET_FOR_NONCE,
     SQL_GET_REUSED_NONCE,
     SQL_GET_ALL_USERS,

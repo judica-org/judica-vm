@@ -35,7 +35,7 @@ pub mod handle_type {
 }
 macro_rules! row_type (
     {$RowType:ident} => {
-#[derive(PartialEq, PartialOrd, Ord, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(PartialEq, PartialOrd, Ord, Eq, Clone, Copy, Serialize, Deserialize, Debug)]
 pub struct $RowType(i64);
 impl ToSql for $RowType {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {

@@ -1,14 +1,15 @@
-WITH groups_is_in AS (
+WITH subscribing_to AS (
     SELECT
         group_id
     FROM
-        chain_commit_group_members CommitGroup
-        INNER JOIN messages Messages ON Messages.hash = :genesis_hash
-        AND Messages.height = 0
-        AND CommitGroup.member_id = Messages.message_id
+        chain_commit_group_subscribers Subscription
+        INNER JOIN messages Msg ON Subscription.member_id = Msg.message_id
+    WHERE
+        Msg.hash = :genesis_hash
+        AND Msg.height = 0
 )
 SELECT
-    member_id
+    DISTINCT member_id
 FROM
-    chain_commit_group_members GroupMembers
-    INNER JOIN groups_is_in InGroups ON GroupMembers.group_id = InGroups.group_id
+    chain_commit_group_members GroupMember
+    INNER JOIN subscribing_to Subscription ON GroupMember.group_id = Subscription.group_id

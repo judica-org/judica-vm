@@ -1,23 +1,26 @@
-WITH groups_is_in AS (
+WITH groups_this_chain_subscribes_to AS (
     SELECT
-        CommitGroup.group_id
+        Subscription.group_id
     FROM
-        chain_commit_group_members CommitGroup
-        INNER JOIN users Users
-        INNER JOIN messages Messages ON Messages.user_id = Users.user_id
-        AND CommitGroup.member_id = Messages.message_id
+        users User
+        INNER JOIN chain_commit_group_subscribers Subscription
+        INNER JOIN messages Msg ON Msg.user_id = User.user_id
+        AND Subscription.member_id = Msg.message_id
     WHERE
-        Messages.height = 0
-        AND Users.key = :key
+        User.key = :key
+        AND Msg.height = 0
 )
 SELECT
-    Messages.body,
-    max(Messages.height)
+    Msg.body,
+    max(Msg.height)
 FROM
-    chain_commit_group_members GroupMembers
-    INNER JOIN groups_is_in InGroups ON GroupMembers.group_id = InGroups.group_id
-    INNER JOIN messages Messages ON GroupMembers.member_id = Messages.message_id
+    groups_this_chain_subscribes_to Subscription
+    INNER JOIN chain_commit_group_members GroupMembers ON GroupMembers.group_id = Subscription.group_id
+    INNER JOIN messages Msg ON (
+        GroupMembers.member_id = Msg.message_id
+        OR GroupMembers.member_id = Msg.genesis_id
+    )
 WHERE
-    Messages.connected
+    Msg.connected
 GROUP BY
-    Messages.height
+    Msg.user_id

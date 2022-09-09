@@ -1,6 +1,7 @@
 use super::super::handle_type;
 use super::super::MsgDBHandle;
 use crate::db_handle::sql::get::messages::*;
+use crate::db_handle::MessageID;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
@@ -187,11 +188,19 @@ where
         I: Iterator<Item = &'i CanonicalEnvelopeHash>,
         E: AsRef<Envelope> + FromSql,
     {
-        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_HASH)?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_ID)?;
         let r: Result<Vec<_>, _> = hashes
             .map(|hash| stmt.query_row([hash], |r| r.get::<_, E>(0)))
             .collect();
         r
+    }
+
+    pub fn messages_by_id<'i, E>(&self, id: MessageID) -> Result<E, rusqlite::Error>
+    where
+        E: AsRef<Envelope> + FromSql,
+    {
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_ID)?;
+        stmt.query_row([id], |r| r.get::<_, E>(0))
     }
 
     pub fn message_exists(&self, hash: &sha256::Hash) -> Result<bool, rusqlite::Error> {

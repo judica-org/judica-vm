@@ -366,6 +366,7 @@ fn make_test_user(
     let genesis = envelope.self_authenticate(secp).unwrap();
     handle
         .insert_user_by_genesis_envelope(name, genesis)
+        .unwrap()
         .unwrap();
     handle
         .save_nonce_for_user_by_key(nonce, secp, kp.x_only_public_key().0)
@@ -414,12 +415,88 @@ async fn test_chain_commit_groups() {
             let (name, group_id) = handle
                 .new_chain_commit_group(Some(format!("g-{}-{:?}", i, friend_group)))
                 .unwrap();
+            handle
+                .add_subscriber_to_chain_commit_group(group_id, *genesis_hash)
+                .unwrap();
             for f in friend_group {
-                println!("Connecting To: {:?}", users[*f].2);
+                println!("Connecting To: {:?} {}-{}", users[*f].2, f, i);
                 handle
                     .add_member_to_chain_commit_group(group_id, users[*f].2)
                     .unwrap();
             }
+        }
+    }
+
+    for (i, (kp, friend_groups, genesis_hash)) in users.iter().enumerate() {
+        let ids = handle
+            .get_all_chain_commit_group_members_for_chain(*genesis_hash)
+            .unwrap();
+        println!("{} is connected to {:?}", i, ids);
+        let env: BTreeSet<_> = ids
+            .iter()
+            .map(|id| {
+                println!("Querying Message: {:?}", id);
+                handle
+                    .messages_by_id::<Envelope>(*id)
+                    .unwrap()
+                    .header()
+                    .key()
+            })
+            .collect();
+        assert_eq!(
+            friend_groups
+                .iter()
+                .flatten()
+                .map(|x| users[*x].0.x_only_public_key().0)
+                .collect::<BTreeSet<_>>(),
+            env
+        );
+    }
+
+    for x in 0..10 {
+        let msgs = users
+            .iter()
+            .map(|(kp, u, g)| {
+                let e = handle
+                    .wrap_message_in_envelope_for_user_by_key(
+                        CanonicalJsonValue::Null,
+                        kp,
+                        &secp,
+                        None,
+                        None,
+                        TipControl::GroupsOnly,
+                    )
+                    .unwrap()
+                    .unwrap();
+                let e = e.self_authenticate(&secp).unwrap();
+                e
+            })
+            .collect::<Vec<_>>();
+        for (i, (msg, (kp, friend_groups, g))) in msgs.iter().zip(users.iter()).enumerate() {
+            for friend_group in friend_groups {
+                for friend in friend_group {
+                    let tip = handle
+                        .get_tip_for_user_by_key(users[*friend].0.x_only_public_key().0)
+                        .unwrap();
+                    println!("{} in {:?} for {}", friend, friend_group, i);
+                    println!(
+                        "{:?} == {:?}",
+                        tip.canonicalized_hash_ref(),
+                        msg.header().tips()
+                    );
+                    assert!(msg
+                        .header()
+                        .tips()
+                        .iter()
+                        .any(|k| k.2 == tip.canonicalized_hash_ref()));
+                }
+            }
+        }
+        for msg in msgs {
+            handle
+                .try_insert_authenticated_envelope(msg)
+                .unwrap()
+                .unwrap();
         }
     }
 }

@@ -172,6 +172,21 @@ where
         ))?;
         Ok(())
     }
+    /// Add Member to Chain Commit Group
+    pub fn add_subscriber_to_chain_commit_group(
+        &self,
+        group_id: ChainCommitGroupID,
+        genesis_hash: CanonicalEnvelopeHash,
+    ) -> Result<(), rusqlite::Error> {
+        let mut stmt = self
+            .0
+            .prepare_cached(SQL_INSERT_CHAIN_COMMIT_GROUP_SUBSCRIBER)?;
+        let _ = stmt.insert(rusqlite::named_params!(
+            ":genesis_hash": genesis_hash,
+            ":group_id": group_id
+        ))?;
+        Ok(())
+    }
 }
 
 #[must_use]
