@@ -40,8 +40,14 @@ else
     tmux split-window -t MySession:0 "$PWD/start_host.sh; /usr/bin/env $SHELL -i"
     tmux split-window -t MySession:0 "$PWD/start_attest.sh; /usr/bin/env $SHELL -i"
 
+
+    tmux new-window -t MySession:
+    tmux split-window -t MySession:1 "$PWD/start_host_www.sh; /usr/bin/env $SHELL -i"
+    tmux split-window -t MySession:1 "$PWD/start_attest_www.sh; /usr/bin/env $SHELL -i"
+
     # change layout to tiled
     tmux select-layout -t MySession:0 tiled
+    tmux select-layout -t MySession:1 tiled
 
     tmux attach -tMySession
 fi
