@@ -113,6 +113,7 @@ name = "attest-util"
 version = "0.1.0"
 dependencies = [
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -602,6 +603,7 @@ version = "0.1.0"
 dependencies = [
  "attest-database",
  "attest-messages",
+ "attest-util",
  "axum",
  "directories",
  "game-host-messages",

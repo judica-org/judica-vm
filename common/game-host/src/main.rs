@@ -18,6 +18,7 @@ use std::{
     sync::Arc,
 };
 use tor::TorConfig;
+use tracing::info;
 mod app;
 mod tor;
 #[derive(Serialize, Deserialize)]
@@ -28,20 +29,25 @@ pub struct Config {
     prefix: Option<PathBuf>,
 }
 
-async fn get_oracle_key(key: &XOnlyPublicKey, db: MsgDB) -> Result<KeyPair, Box<dyn Error>> {
+async fn get_oracle_key(
+    key: &XOnlyPublicKey,
+    db: MsgDB,
+) -> Result<KeyPair, Box<dyn Error + Send + Sync>> {
     let km = db.get_handle().await.get_keymap()?;
     let s = km.get(key).map(Clone::clone).ok_or("No Key Known")?;
     Ok(KeyPair::from_secret_key(&Secp256k1::new(), &s))
 }
-fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
+fn get_config() -> Result<Arc<Config>, Box<dyn Error + Send + Sync>> {
     let config = std::env::var("GAME_HOST_CONFIG_JSON").map(|s| serde_json::from_str(&s))??;
     Ok(Arc::new(config))
 }
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
     let mut config = get_config()?;
-    let db = setup_db("attestations.mining-game-host", config.prefix.clone()).await?;
+    let db = setup_db("attestations.mining-game-host", config.prefix.clone())
+        .await
+        .map_err(|e| format!("DB Setup Failed: {:?}", e))?;
     if config.key.is_none() {
         let handle = db.get_handle().await;
         let kp = KeyPair::new(&Secp256k1::new(), &mut rand::thread_rng());
@@ -52,6 +58,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     tor::start(config.clone());
+
+    let host = config.tor.get_hostname().await?;
+    info!("Hosting Onion Service At: {}", host);
 
     let app_instance = app::run(config.clone(), db.clone());
     let game_instance = game(config, db.clone());
@@ -66,7 +75,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
+async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error + Send + Sync>> {
     let secp = Secp256k1::new();
     let mut seq = None;
     let keypair = get_oracle_key(

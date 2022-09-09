@@ -1,8 +1,11 @@
-use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc};
+use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc, time::Duration};
 
+use attest_database::db_handle::get::hidden_services;
+use attest_util::{ensure_dir, get_hidden_service_hostname};
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
+use tracing::{debug, info};
 
 use crate::Config;
 
@@ -26,17 +29,37 @@ pub struct TorConfig {
     pub application_port: u16,
     pub application_path: String,
 }
-pub fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
-    tokio::task::spawn_blocking(move || {
-        let mut buf = config.tor.directory.clone();
+impl TorConfig {
+    async fn root_dir(&self) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+        let mut buf = self.directory.clone();
         buf.push("onion");
-        let mut tor = Tor::new();
-        tor.flag(TorFlag::DataDirectory(buf.to_str().unwrap().into()));
+        Ok(ensure_dir(buf).await.map_err(|e| format!("{}", e))?)
+    }
+    async fn hidden_service_dir(&self) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+        let mut p = self.root_dir().await?;
+        p.push(&self.application_path);
+        Ok(ensure_dir(p).await.map_err(|e| format!("{}", e))?)
+    }
+    pub async fn get_hostname(&self) -> Result<String, Box<dyn Error + Send + Sync>> {
+        let mut hidden_service_dir = self.hidden_service_dir().await?;
+        get_hidden_service_hostname(hidden_service_dir).await
+    }
+}
 
-        buf.push(&config.tor.application_path);
+pub async fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
+    let root_dir = config.tor.root_dir().await;
+    let hidden_service_dir = config.tor.hidden_service_dir().await;
+    tokio::task::spawn_blocking(move || {
+        let mut tor = Tor::new();
+
         let errc = match tor
+            .flag(TorFlag::DataDirectory(
+                root_dir?.to_str().unwrap().to_owned(),
+            ))
             .flag(TorFlag::SocksPort(config.tor.socks_port))
-            .flag(TorFlag::HiddenServiceDir(buf.to_str().unwrap().into()))
+            .flag(TorFlag::HiddenServiceDir(
+                hidden_service_dir?.to_str().unwrap().to_owned(),
+            ))
             .flag(TorFlag::HiddenServiceVersion(HiddenServiceVersion::V3))
             .flag(TorFlag::HiddenServicePort(
                 TorAddress::Port(config.tor.application_port),
