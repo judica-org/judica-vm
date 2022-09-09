@@ -134,6 +134,7 @@ dependencies = [
  "ruma-serde",
  "rusqlite",
  "sapio-bitcoin",
+ "schemars",
  "serde",
  "serde_derive",
  "serde_json",
@@ -197,6 +198,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
 dependencies = [
+ "schemars",
  "serde",
 ]
 
@@ -959,6 +961,7 @@ dependencies = [
  "game-host-messages",
  "mine-with-friends-board",
  "sapio-bitcoin",
+ "schemars",
  "serde",
  "serde_derive",
  "serde_json",
@@ -2675,6 +2678,7 @@ dependencies = [
  "bech32",
  "bitcoin_hashes",
  "sapio-secp256k1",
+ "schemars",
  "serde",
 ]
 
@@ -2686,6 +2690,7 @@ checksum = "c02d1e32de629c6e925cf9e729b20a97840d8e76d963bad305ad00a1384425fe"
 dependencies = [
  "rand 0.6.5",
  "sapio-secp256k1-sys",
+ "schemars",
  "serde",
 ]
 

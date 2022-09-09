@@ -2,8 +2,12 @@ use crate::{
     globals::Globals,
     peer_services::{PeerQuery, TaskID},
 };
-use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_database::{
+    connection::MsgDB,
+    db_handle::{create::TipControl, get::PeerInfo},
+    generate_new_user,
+};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     http::Response,
@@ -46,7 +50,7 @@ async fn get_expensive_db_snapshot(
     let mut map = Default::default();
     let mut newer = None;
     let _r = handle
-        .get_all_messages_collect_into_inconsistent(&mut newer, &mut map)
+        .get_all_messages_collect_into_inconsistent::<Envelope>(&mut newer, &mut map)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()
@@ -67,13 +71,13 @@ async fn get_status(
             .get_all_hidden_services()
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let tips = handle
-            .get_tips_for_all_users()
+            .get_tips_for_all_users::<Authenticated<Envelope>>()
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let tips = tips
             .into_iter()
             .map(|t| TipData {
                 hash: t.canonicalized_hash_ref(),
-                envelope: t,
+                envelope: t.inner(),
             })
             .collect();
         let users = handle.get_all_users().map_err(|e| {
@@ -152,7 +156,7 @@ async fn push_message_dangerous(
     bitcoin_tipcache: Extension<Arc<BitcoinCheckPointCache>>,
     Json(PushMsg { msg, key }): Json<PushMsg>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
-    let handle = db.0.get_handle().await;
+    let mut handle = db.0.get_handle().await;
     let keys = handle.get_keymap().map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -165,7 +169,14 @@ async fn push_message_dangerous(
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
     let tips = bitcoin_tipcache.0.read_cache().await;
     let env = handle
-        .wrap_message_in_envelope_for_user_by_key(msg, &kp, &secp.0, Some(tips), None)
+        .wrap_message_in_envelope_for_user_by_key(
+            msg,
+            &kp,
+            &secp.0,
+            Some(tips),
+            None,
+            TipControl::AllTips,
+        )
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -212,7 +223,7 @@ async fn make_genesis(
             format!("Creating Genesis Message failed: {}", e),
         )
     })?;
-    let handle = db.0.get_handle().await;
+    let mut handle = db.0.get_handle().await;
     handle
         .save_keypair(kp)
         .and_then(|()| handle.save_nonce_for_user_by_key(pre, &secp.0, kp.x_only_public_key().0))

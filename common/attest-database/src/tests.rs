@@ -1,4 +1,5 @@
-use crate::db_handle::get::{extract_sk, extract_sk_from_envelopes};
+use crate::db_handle::create::TipControl;
+use crate::db_handle::get::nonces::{extract_sk, extract_sk_from_envelopes};
 use crate::db_handle::MsgDBHandle;
 
 use super::connection::MsgDB;
@@ -9,6 +10,7 @@ use fallible_iterator::FallibleIterator;
 use ruma_serde::CanonicalJsonValue;
 use rusqlite::{params, Connection};
 
+use sapio_bitcoin::secp256k1::rand::{thread_rng, Rng};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use sapio_bitcoin::KeyPair;
 
@@ -30,7 +32,7 @@ async fn test_add_user() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
     let test_user = "TestUser".into();
-    make_test_user(&secp, &conn.get_handle().await, test_user);
+    make_test_user(&secp, &mut conn.get_handle().await, test_user);
 }
 
 #[test(tokio::test)]
@@ -38,10 +40,17 @@ async fn test_reused_nonce() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
     let test_user = "TestUser".into();
-    let handle = conn.get_handle().await;
-    let kp = make_test_user(&secp, &handle, test_user);
+    let mut handle = conn.get_handle().await;
+    let kp = make_test_user(&secp, &mut handle, test_user);
     let envelope_1 = handle
-        .wrap_message_in_envelope_for_user_by_key(CanonicalJsonValue::Null, &kp, &secp, None, None)
+        .wrap_message_in_envelope_for_user_by_key(
+            CanonicalJsonValue::Null,
+            &kp,
+            &secp,
+            None,
+            None,
+            TipControl::AllTips,
+        )
         .unwrap()
         .unwrap();
     let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
@@ -52,6 +61,7 @@ async fn test_reused_nonce() {
             &secp,
             None,
             None,
+            TipControl::AllTips,
         )
         .unwrap()
         .unwrap();
@@ -86,6 +96,7 @@ async fn test_reused_nonce() {
                 &secp,
                 None,
                 None,
+                TipControl::AllTips,
             )
             .unwrap()
             .unwrap();
@@ -146,7 +157,7 @@ async fn test_envelope_creation() {
         {
             let tips = handle.get_tips_for_all_users().unwrap();
             assert_eq!(tips.len(), user_id + 1);
-            assert!(tips.contains(envelope.inner_ref()));
+            assert!(tips.contains(envelope));
             assert_eq!(
                 tips.iter()
                     .filter(|f| !all_past_tips.contains(&f.canonicalized_hash_ref()))
@@ -163,7 +174,7 @@ async fn test_envelope_creation() {
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
             assert_eq!(known_tips.len(), user_id + 1);
-            assert!(known_tips.contains(envelope.inner_ref()));
+            assert!(known_tips.contains(envelope));
             assert_eq!(
                 known_tips
                     .iter()
@@ -175,11 +186,11 @@ async fn test_envelope_creation() {
     };
     let secp = Secp256k1::new();
     let conn = setup_db().await;
-    let handle = conn.get_handle().await;
+    let mut handle = conn.get_handle().await;
     const N_USERS: usize = 10;
     for user_id in 0..N_USERS {
         let test_user = format!("Test_User_{}", user_id);
-        let kp = make_test_user(&secp, &handle, test_user);
+        let kp = make_test_user(&secp, &mut handle, test_user);
 
         let envelope_1 = handle
             .wrap_message_in_envelope_for_user_by_key(
@@ -188,6 +199,7 @@ async fn test_envelope_creation() {
                 &secp,
                 None,
                 None,
+                TipControl::AllTips,
             )
             .unwrap()
             .unwrap();
@@ -204,6 +216,7 @@ async fn test_envelope_creation() {
                 &secp,
                 None,
                 None,
+                TipControl::AllTips,
             )
             .unwrap()
             .unwrap();
@@ -223,6 +236,7 @@ async fn test_envelope_creation() {
                     &secp,
                     None,
                     envs.get((i - 1) as usize).map(|a| a.1.inner_ref().clone()),
+                    TipControl::AllTips,
                 )
                 .unwrap()
                 .unwrap();
@@ -249,7 +263,7 @@ async fn test_envelope_creation() {
             if i > special_idx {
                 let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
                 assert_eq!(tips.len(), user_id + 1);
-                assert!(tips.contains(&envs[special_idx as usize + 1].1.inner_ref()));
+                assert!(tips.contains(&envs[special_idx as usize + 1].1));
             }
         }
         all_past_tips.insert(envs[(special_idx - 1) as usize].0);
@@ -268,7 +282,7 @@ async fn test_envelope_creation() {
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
             assert_eq!(tips.len(), N_USERS);
-            assert!(tips.contains(disconnected_tip[user_id].inner_ref()));
+            assert!(tips.contains(&disconnected_tip[user_id]));
         }
         {
             let my_tip = handle
@@ -282,7 +296,7 @@ async fn test_envelope_creation() {
         {
             let known_tips = handle.get_tip_for_known_keys().unwrap();
             assert_eq!(known_tips.len(), N_USERS);
-            assert!(known_tips.contains(disconnected[user_id].inner_ref()));
+            assert!(known_tips.contains(&disconnected[user_id]));
         }
     }
 
@@ -310,7 +324,7 @@ async fn test_envelope_creation() {
         }
     }
 
-    let kp_2 = make_test_user(&secp, &handle, "TestUser2".into());
+    let kp_2 = make_test_user(&secp, &mut handle, "TestUser2".into());
 
     let envelope_3 = handle
         .wrap_message_in_envelope_for_user_by_key(
@@ -319,6 +333,7 @@ async fn test_envelope_creation() {
             &secp,
             None,
             None,
+            TipControl::AllTips,
         )
         .unwrap()
         .unwrap();
@@ -343,7 +358,7 @@ async fn test_envelope_creation() {
 
 fn make_test_user(
     secp: &Secp256k1<All>,
-    handle: &db_handle::MsgDBHandle<'_>,
+    handle: &mut db_handle::MsgDBHandle<'_>,
     name: String,
 ) -> KeyPair {
     let (kp, nonce, envelope) = generate_new_user(secp).unwrap();
@@ -351,6 +366,7 @@ fn make_test_user(
     let genesis = envelope.self_authenticate(secp).unwrap();
     handle
         .insert_user_by_genesis_envelope(name, genesis)
+        .unwrap()
         .unwrap();
     handle
         .save_nonce_for_user_by_key(nonce, secp, kp.x_only_public_key().0)
@@ -362,6 +378,131 @@ async fn setup_db() -> MsgDB {
     let conn = MsgDB::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())));
     conn.get_handle().await.setup_tables();
     conn
+}
+
+#[test(tokio::test)]
+async fn test_chain_commit_groups() {
+    let conn = setup_db().await;
+    let mut handle = conn.get_handle().await;
+    let secp = Secp256k1::new();
+    let mut rng = thread_rng();
+    let users = (0..100)
+        .map(|i| {
+            let mut friends: [[usize; 4]; 2] = rng.gen();
+            for g in &mut friends {
+                loop {
+                    for f in g.iter_mut() {
+                        *f = *f % 100;
+                    }
+                    g.sort();
+                    if g.iter().any(|a| *a == i) || g.windows(2).any(|w| w[0] == w[1]) {
+                        *g = rng.gen();
+                        continue;
+                    }
+                    break;
+                }
+            }
+            let kp = make_test_user(&secp, &mut handle, format!("u-{}", i));
+            let genesis_hash = handle
+                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .unwrap()
+                .get_genesis_hash();
+            (kp, friends, genesis_hash)
+        })
+        .collect::<Vec<_>>();
+    for (i, (kp, friend_groups, genesis_hash)) in users.iter().enumerate() {
+        for friend_group in friend_groups {
+            let (name, group_id) = handle
+                .new_chain_commit_group(Some(format!("g-{}-{:?}", i, friend_group)))
+                .unwrap();
+            handle
+                .add_subscriber_to_chain_commit_group(group_id, *genesis_hash)
+                .unwrap();
+            for f in friend_group {
+                println!("Connecting To: {:?} {}-{}", users[*f].2, f, i);
+                handle
+                    .add_member_to_chain_commit_group(group_id, users[*f].2)
+                    .unwrap();
+            }
+        }
+    }
+
+    for (i, (kp, friend_groups, genesis_hash)) in users.iter().enumerate() {
+        let ids = handle
+            .get_all_chain_commit_group_members_for_chain(*genesis_hash)
+            .unwrap();
+        println!("{} is connected to {:?}", i, ids);
+        let env: BTreeSet<_> = ids
+            .iter()
+            .map(|id| {
+                println!("Querying Message: {:?}", id);
+                handle
+                    .messages_by_id::<Envelope>(*id)
+                    .unwrap()
+                    .header()
+                    .key()
+            })
+            .collect();
+        assert_eq!(
+            friend_groups
+                .iter()
+                .flatten()
+                .map(|x| users[*x].0.x_only_public_key().0)
+                .collect::<BTreeSet<_>>(),
+            env
+        );
+    }
+
+    for x in 0..10 {
+        let msgs = users
+            .iter()
+            .map(|(kp, u, g)| {
+                let e = handle
+                    .wrap_message_in_envelope_for_user_by_key(
+                        CanonicalJsonValue::Null,
+                        kp,
+                        &secp,
+                        None,
+                        None,
+                        TipControl::GroupsOnly,
+                    )
+                    .unwrap()
+                    .unwrap();
+                let e = e.self_authenticate(&secp).unwrap();
+                e
+            })
+            .collect::<Vec<_>>();
+        for (i, (msg, (kp, friend_groups, g))) in msgs.iter().zip(users.iter()).enumerate() {
+            for friend_group in friend_groups {
+                for friend in friend_group {
+                    let tip = handle
+                        .get_tip_for_user_by_key(users[*friend].0.x_only_public_key().0)
+                        .unwrap();
+                    println!("{} in {:?} for {}", friend, friend_group, i);
+                    println!(
+                        "{:?} == {:?}",
+                        tip.canonicalized_hash_ref(),
+                        msg.header().tips()
+                    );
+                    assert!(msg
+                        .header()
+                        .tips()
+                        .iter()
+                        .any(|k| k.2 == tip.canonicalized_hash_ref()));
+                }
+            }
+            let set: BTreeSet<_> = friend_groups.iter().flatten().collect();
+            assert_eq!(set.len(), msg.header().tips().len());
+        }
+        for msg in msgs {
+            if rng.gen_bool(0.5) {
+                handle
+                    .try_insert_authenticated_envelope(msg)
+                    .unwrap()
+                    .unwrap();
+            }
+        }
+    }
 }
 #[test(tokio::test)]
 async fn test_tables() {
@@ -385,6 +526,8 @@ async fn test_tables() {
         .unwrap();
     assert_eq!(
         vec![
+            "chain_commit_group_members",
+            "chain_commit_groups",
             "hidden_services",
             "message_nonces",
             "messages",

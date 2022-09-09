@@ -1,6 +1,7 @@
 #[cfg(feature = "database_access")]
 use attest_database::connection::MsgDB;
 use attest_messages::Authenticated;
+use attest_messages::AuthenticationError;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
@@ -69,9 +70,35 @@ use tokio::time::sleep;
 // }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
-pub struct RawSequencer {
+pub struct UnauthenticatedRawSequencer {
     sequencer_envelopes: Vec<Envelope>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
+}
+impl TryFrom<UnauthenticatedRawSequencer> for RawSequencer {
+    type Error = AuthenticationError;
+
+    fn try_from(value: UnauthenticatedRawSequencer) -> Result<Self, Self::Error> {
+        let secp = Secp256k1::verification_only();
+        Ok(Self {
+            sequencer_envelopes: value
+                .sequencer_envelopes
+                .iter()
+                .map(|v| v.self_authenticate(&secp))
+                .collect::<Result<Vec<_>, AuthenticationError>>()?,
+            msg_cache: value
+                .msg_cache
+                .iter()
+                .map(|(m, e)| Ok((*m, e.self_authenticate(&secp)?)))
+                .collect::<Result<HashMap<_,_>, AuthenticationError>>()?,
+        })
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(try_from = "UnauthenticatedRawSequencer")]
+pub struct RawSequencer {
+    sequencer_envelopes: Vec<Authenticated<Envelope>>,
+    msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
 }
 
 #[derive(Debug)]
@@ -115,14 +142,6 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
         {
             return Err(SequencerError::MessageFromWrongEntity);
         }
-        let secp = Secp256k1::verification_only();
-        if value
-            .sequencer_envelopes
-            .iter()
-            .any(|s| s.self_authenticate(&secp).is_err())
-        {
-            return Err(SequencerError::AuthenticationError);
-        }
         let mut batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>> = vec![];
         for envelope in &value.sequencer_envelopes {
             match serde_json::from_value::<Channelized<BroadcastByHost>>(
@@ -144,13 +163,14 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema)]
+#[derive(Deserialize, JsonSchema)]
+#[serde(try_from="RawSequencer")]
 pub struct OfflineSequencer {
     batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
-    msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
+    msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
 }
 impl OfflineSequencer {
-    pub fn directly_sequence(&mut self) -> Result<Vec<Envelope>, ()> {
+    pub fn directly_sequence(&mut self) -> Result<Vec<Authenticated<Envelope>>, ()> {
         let mut v = vec![];
         for batch in &self.batches_to_sequence {
             for h in batch {
@@ -192,14 +212,14 @@ impl TryFrom<OfflineDBFetcher> for OfflineSequencer {
 
 pub struct OfflineDBFetcher {
     batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
-    msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>>,
+    msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>,
     new_msgs_in_cache: Arc<Notify>,
 }
 
 impl OfflineDBFetcher {
     pub fn new(
         batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
-        msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
+        msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
     ) -> Self {
         let (tx, rx) = unbounded_channel();
         for batch in batches_to_sequence {
@@ -212,7 +232,7 @@ impl OfflineDBFetcher {
         }
     }
 
-    pub fn directly_sequence(self) -> Result<Vec<Envelope>, ()> {
+    pub fn directly_sequence(self) -> Result<Vec<Authenticated<Envelope>>, ()> {
         OfflineSequencer::try_from(self)?.directly_sequence()
     }
 }
@@ -223,7 +243,7 @@ impl DBFetcher for OfflineDBFetcher {
         self.batches_to_sequence.clone()
     }
 
-    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>> {
+    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>> {
         self.msg_cache.clone()
     }
 
@@ -240,7 +260,7 @@ pub struct OnlineDBFetcher {
     schedule_batches_to_sequence: UnboundedSender<VecDeque<CanonicalEnvelopeHash>>,
     batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
     oracle_key: XOnlyPublicKey,
-    msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>>,
+    msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>,
     rebuild_db_period: Duration,
     is_running: AtomicBool,
     new_msgs_in_cache: Arc<Notify>,
@@ -367,7 +387,7 @@ impl DBFetcher for OnlineDBFetcher {
     ) -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>> {
         self.batches_to_sequence.clone()
     }
-    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>> {
+    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>> {
         self.msg_cache.clone()
     }
 
@@ -379,14 +399,14 @@ impl DBFetcher for OnlineDBFetcher {
 pub trait DBFetcher: Send + Sync {
     fn batches_to_sequence(&self)
         -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>;
-    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>>;
+    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>;
     fn notified(&self) -> Notified<'_>;
 }
 pub struct Sequencer {
     db_fetcher: Arc<dyn DBFetcher>,
     shutdown: Arc<AtomicBool>,
-    push_next_envelope: UnboundedSender<Envelope>,
-    output_envelope: Mutex<UnboundedReceiver<Envelope>>,
+    push_next_envelope: UnboundedSender<Authenticated<Envelope>>,
+    output_envelope: Mutex<UnboundedReceiver<Authenticated<Envelope>>>,
     push_next_move: UnboundedSender<(MoveEnvelope, XOnlyPublicKey)>,
     output_move: Mutex<UnboundedReceiver<(MoveEnvelope, XOnlyPublicKey)>>,
     is_running: AtomicBool,
@@ -503,10 +523,11 @@ mod test {
     use sapio_bitcoin::{
         hashes::Hash,
         secp256k1::{rand, SecretKey},
+        KeyPair,
     };
     use std::collections::VecDeque;
 
-    fn make_random_moves() -> Vec<VecDeque<Envelope>> {
+    fn make_random_moves() -> Vec<VecDeque<Authenticated<Envelope>>> {
         let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
         let envelopes = (0..10)
             .map(|j| {
@@ -524,7 +545,7 @@ mod test {
                         let checkpoints = Default::default();
                         let height = 0;
 
-                        let e1 = Envelope::new(
+                        let mut e1 = Envelope::new(
                             Header::new(
                                 key,
                                 next_nonce,
@@ -543,7 +564,13 @@ mod test {
                             ))
                             .unwrap(),
                         );
-                        e1
+                        e1.sign_with(
+                            &KeyPair::from_secret_key(secp, &sk),
+                            secp,
+                            PrecomittedNonce::new(secp),
+                        )
+                        .expect("Signature OK");
+                        e1.self_authenticate(secp).expect("Must Be Correct")
                     })
                     .collect::<VecDeque<_>>()
             })
@@ -590,17 +617,17 @@ mod test {
         }
     }
     struct TestDBFetcher {
-        to_seq: Vec<VecDeque<Envelope>>,
+        to_seq: Vec<VecDeque<Authenticated<Envelope>>>,
         poll_sequencer_period: Duration,
         schedule_batches_to_sequence: UnboundedSender<VecDeque<CanonicalEnvelopeHash>>,
         batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
-        msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>>,
+        msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>,
         rebuild_db_period: Duration,
         new_msgs_in_cache: Arc<Notify>,
     }
     impl TestDBFetcher {
         pub fn new(
-            to_seq: Vec<VecDeque<Envelope>>,
+            to_seq: Vec<VecDeque<Authenticated<Envelope>>>,
             poll_sequencer_period: Duration,
             rebuild_db_period: Duration,
         ) -> Arc<Self> {
@@ -681,7 +708,7 @@ mod test {
             self.batches_to_sequence.clone()
         }
 
-        fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Envelope>>> {
+        fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>> {
             self.msg_cache.clone()
         }
 

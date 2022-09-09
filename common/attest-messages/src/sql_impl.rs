@@ -1,29 +1,32 @@
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
-use crate::{CanonicalEnvelopeHash, Envelope};
-use rusqlite::types::{FromSql, FromSqlError};
+use crate::{Authenticated, CanonicalEnvelopeHash, Envelope};
+use rusqlite::types::{FromSql, FromSqlError, ToSqlOutput};
 use rusqlite::ToSql;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::secp256k1::SecretKey;
 use sapio_bitcoin::XOnlyPublicKey;
-use std::collections::BTreeMap;
 use std::str::FromStr;
 impl ToSql for Envelope {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        let s = serde_json::to_value(self)
+        let cv = ruma_serde::to_canonical_value(&self)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        let c: BTreeMap<String, ruma_serde::CanonicalJsonValue> = serde_json::from_value(s)
-            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-        Ok(ruma_serde::to_canonical_value(&c)
-            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?
-            .to_string()
-            .into())
+        Ok(ToSqlOutput::from(cv.to_string()))
     }
 }
 impl FromSql for Envelope {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         let s = value.as_str()?;
         serde_json::from_str(s).map_err(|e| rusqlite::types::FromSqlError::Other(e.into()))
+    }
+}
+
+impl FromSql for Authenticated<Envelope> {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let s = value.as_str()?;
+        let envelope : Envelope =
+            serde_json::from_str(s).map_err(|e| rusqlite::types::FromSqlError::Other(e.into()))?;
+        Ok(Authenticated(envelope))
     }
 }
 

@@ -2,7 +2,7 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-use attest_database::{connection::MsgDB, generate_new_user, setup_db};
+use attest_database::{connection::MsgDB, generate_new_user, setup_db, db_handle::create::TipControl};
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
@@ -104,7 +104,7 @@ async fn make_new_user(
 ) -> Result<XOnlyPublicKey, Box<dyn Error>> {
     let (kp, next_nonce, genesis) = generate_new_user(secp.inner())?;
     let msgdb = db.get().await?;
-    let handle = msgdb.get_handle().await;
+    let mut handle = msgdb.get_handle().await;
     // TODO: Transaction?
     handle.insert_user_by_genesis_envelope(nickname, genesis.self_authenticate(secp.inner())?);
     let k = kp.public_key().x_only_public_key().0;
@@ -122,13 +122,13 @@ async fn make_move_inner(
 ) -> Result<(), ()> {
     let msgdb = db.get().await.map_err(|e| ())?;
     let v = ruma_serde::to_canonical_value(nextMove).map_err(|_| ())?;
-    let handle = msgdb.get_handle().await;
+    let mut handle = msgdb.get_handle().await;
     let keys = handle.get_keymap().map_err(|_| ())?;
     let sk = keys.get(&user).ok_or(())?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
     // TODO: Runa tipcache
     let msg = handle
-        .wrap_message_in_envelope_for_user_by_key(v, &keypair, secp.inner(), None, None)
+        .wrap_message_in_envelope_for_user_by_key(v, &keypair, secp.inner(), None, None, TipControl::AllTips)
         .ok()
         .ok_or(())?
         .ok()

@@ -1,7 +1,9 @@
 use super::handle_type;
+use super::ChainCommitGroupID;
 use super::MsgDBHandle;
 use attest_messages::checkpoints::BitcoinCheckPoints;
 use attest_messages::Ancestors;
+use attest_messages::Authenticated;
 use attest_messages::Envelope;
 use attest_messages::Header;
 use attest_messages::SigningError;
@@ -12,6 +14,11 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 
+pub enum TipControl {
+    GroupsOnly,
+    NoTips,
+    AllTips,
+}
 use tracing::debug;
 impl<'a, T> MsgDBHandle<'a, T>
 where
@@ -27,11 +34,18 @@ where
         secp: &Secp256k1<C>,
         bitcoin_tipcache: Option<BitcoinCheckPoints>,
         dangerous_bypass_tip: Option<Envelope>,
+        tip_groups: TipControl,
     ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {
         let key: XOnlyPublicKey = keypair.x_only_public_key().0;
         debug!(key=%key, "Creating new Envelope");
         // Side effect free...
-        let mut tips = self.get_tips_for_all_users()?;
+        let mut tips = match tip_groups {
+            TipControl::GroupsOnly => {
+                self.get_all_chain_commit_group_members_tips_for_chain(key)?
+            }
+            TipControl::AllTips => self.get_tips_for_all_users::<Authenticated<Envelope>>()?,
+            TipControl::NoTips => vec![],
+        };
         if let Some(p) = tips.iter().position(|x| x.header().key() == key) {
             tips.swap_remove(p);
         }
@@ -40,7 +54,7 @@ where
         let tips = tips
             .iter()
             .map(|tip| {
-                let h = tip.clone().canonicalized_hash();
+                let h = tip.canonicalized_hash_ref();
                 Some((tip.header().key(), tip.header().height(), h))
             })
             .flatten()
@@ -49,7 +63,7 @@ where
         let my_tip = if let Some(envelope) = dangerous_bypass_tip {
             envelope
         } else {
-            self.get_tip_for_user_by_key(key)?
+            self.get_tip_for_user_by_key(key)?.inner()
         };
         let sent_time_ms = attest_util::now();
         let secret = self.get_secret_for_public_nonce(my_tip.header().next_nonce())?;

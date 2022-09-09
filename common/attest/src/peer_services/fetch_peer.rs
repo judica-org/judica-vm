@@ -2,7 +2,7 @@ use super::*;
 use crate::attestations::client::AttestationClient;
 use crate::attestations::client::NotifyOnDrop;
 use crate::attestations::query::Tips;
-use attest_database::db_handle::insert::SqliteFail;
+use attest_database::sql_error::SqliteFail;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use attest_util::now;
@@ -132,12 +132,13 @@ async fn handle_envelope<C: Verification + 'static>(
         tracing::debug!(height = envelope.header().height(),
                         hash = ?envelope.canonicalized_hash_ref(),
                         genesis = ?envelope.get_genesis_hash(),
+                        ?service,
                         "Processing this envelope");
-        tracing::trace!(?envelope, "Processing this envelope");
+        tracing::trace!(?envelope, ?service, "Processing this envelope");
         match envelope.self_authenticate(secp) {
             Ok(authentic) => {
-                tracing::debug!("Authentic Tip: {:?}", authentic);
-                let handle = conn.get_handle().await;
+                tracing::debug!(?service, "Authentic Tip: {:?}", authentic);
+                let mut handle = conn.get_handle().await;
                 if authentic.inner_ref().header().ancestors().is_none()
                     && authentic.inner_ref().header().height() == 0
                 {
@@ -147,7 +148,7 @@ async fn handle_envelope<C: Verification + 'static>(
                             trace!(key, ?service, "Created New Genesis From Peer");
                         }
                         Err((SqliteFail::SqliteConstraintUnique, _msg)) => {
-                            trace!("Already Have this Chain");
+                            trace!(?service, "Already Have this Chain");
                         }
                         Err(e) => {
                             warn!(err=?e, "Other SQL Error");
@@ -164,6 +165,9 @@ async fn handle_envelope<C: Verification + 'static>(
                             if allow_unsolicited_tips {
                                 all_tips.push(envelope.get_genesis_hash());
                             }
+                        }
+                        Err((SqliteFail::SqliteConstraintUnique, _msg)) => {
+                            trace!("Already Have this Envelope, Passing");
                         }
                         // This means that the constraint that the user ID was known
                         // was hit, so we need to attempt inserting as a genesis

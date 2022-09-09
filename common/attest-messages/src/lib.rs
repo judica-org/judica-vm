@@ -147,6 +147,11 @@ pub struct Envelope {
     #[serde(skip)]
     cache: Option<CanonicalEnvelopeHash>,
 }
+impl AsRef<Envelope> for Envelope {
+    fn as_ref(&self) -> &Envelope {
+        self
+    }
+}
 
 mod from_wrap {
     use serde::Deserialize;

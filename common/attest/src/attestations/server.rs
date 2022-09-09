@@ -83,7 +83,7 @@ pub async fn post_message(
     }
     let mut outcomes = Vec::with_capacity(authed.len());
     {
-        let locked = db.get_handle().await;
+        let mut locked = db.get_handle().await;
         for envelope in authed {
             tracing::trace!("Inserting Into Database");
             match locked.try_insert_authenticated_envelope(envelope) {

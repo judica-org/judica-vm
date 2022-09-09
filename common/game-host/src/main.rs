@@ -1,6 +1,6 @@
-use attest_database::connection::MsgDB;
+use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_database::setup_db;
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::{
@@ -101,7 +101,7 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
         // Incosistency means that we may still be fetching priors.
         {
             let handle = db.get_handle().await;
-            handle.get_all_messages_collect_into_inconsistent(
+            handle.get_all_messages_collect_into_inconsistent::<Authenticated<Envelope>>(
                 &mut seq,
                 &mut all_unprocessed_messages,
             )?
@@ -133,7 +133,7 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
                         if messages_by_user
                             .entry(e.header().key())
                             .or_default()
-                            .insert(e.header().height(), e)
+                            .insert(e.header().height(), e.inner())
                             .is_some()
                         {
                             // TODO: Panic?
@@ -176,10 +176,17 @@ async fn game(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error>> {
                 data: BroadcastByHost::Sequence(to_sequence),
                 channel: "default".into(),
             })?;
-            let handle = db.get_handle().await;
+            let mut handle = db.get_handle().await;
             // TODO: Run a tipcache
             let wrapped = handle
-                .wrap_message_in_envelope_for_user_by_key(msg, &keypair, &secp, None, None)??
+                .wrap_message_in_envelope_for_user_by_key(
+                    msg,
+                    &keypair,
+                    &secp,
+                    None,
+                    None,
+                    TipControl::AllTips,
+                )??
                 .self_authenticate(&secp)?;
             handle.try_insert_authenticated_envelope(wrapped)?;
         }
