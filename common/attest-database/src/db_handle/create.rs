@@ -1,5 +1,5 @@
 use super::handle_type;
-use super::ChainCommitGroupID;
+
 use super::MsgDBHandle;
 use attest_messages::checkpoints::BitcoinCheckPoints;
 use attest_messages::Ancestors;

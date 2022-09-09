@@ -521,7 +521,6 @@ mod test {
         sanitize::Unsanitized,
     };
     use sapio_bitcoin::{
-        hashes::Hash,
         secp256k1::{rand, SecretKey},
         KeyPair,
     };
@@ -631,7 +630,7 @@ mod test {
             poll_sequencer_period: Duration,
             rebuild_db_period: Duration,
         ) -> Arc<Self> {
-            let (schedule_batches_to_sequence, mut batches_to_sequence) = unbounded_channel();
+            let (schedule_batches_to_sequence, batches_to_sequence) = unbounded_channel();
             let batches_to_sequence = Arc::new(Mutex::new(batches_to_sequence));
             Arc::new(Self {
                 poll_sequencer_period,

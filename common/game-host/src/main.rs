@@ -2,7 +2,7 @@ use attest_database::setup_db;
 use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use game_host_messages::{BroadcastByHost, Channelized};
-use ruma_serde::CanonicalJsonValue;
+
 use sapio_bitcoin::{
     secp256k1::{
         rand::{self},
