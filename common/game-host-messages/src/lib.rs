@@ -13,7 +13,7 @@ pub struct Peer {
 pub enum BroadcastByHost {
     Sequence(VecDeque<CanonicalEnvelopeHash>),
     NewPeer(Peer),
-    Heartbeat
+    Heartbeat,
 }
 
 impl BroadcastByHost {
