@@ -9,6 +9,7 @@ use sapio_bitcoin::{
     secp256k1::{rand, Secp256k1, Signing},
     KeyPair,
 };
+use serde::Serialize;
 
 pub mod connection;
 pub mod db_handle;
@@ -46,8 +47,9 @@ pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgD
     setup_db_at(data_dir, "attestations").await
 }
 
-pub fn generate_new_user<C: Signing>(
+pub fn generate_new_user<C: Signing, T: Serialize>(
     secp: &Secp256k1<C>,
+    init: Option<T>,
 ) -> Result<(KeyPair, PrecomittedNonce, Envelope), Box<dyn Error>> {
     let keypair: _ = KeyPair::new(&secp, &mut rand::thread_rng());
     let nonce = PrecomittedNonce::new(&secp);
@@ -66,7 +68,8 @@ pub fn generate_new_user<C: Signing>(
             Unsigned::new(Default::default()),
             Default::default(),
         ),
-        Null,
+        init.map(|v| ruma_serde::to_canonical_value(v))
+            .unwrap_or(Ok(Null))?,
     );
     msg.sign_with(&keypair, &secp, nonce)?;
     Ok((keypair, next_nonce, msg))
