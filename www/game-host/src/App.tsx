@@ -27,7 +27,7 @@ type CreatedNewChain = {
 };
 function NewGame() {
   async function handle_click() {
-    let res = await fetch("http://127.0.0.1:13329/attestation_chain/new",
+    let res = await fetch("http://127.0.0.1:11409/attestation_chain/new",
       { method: "POST" });
 
     let js = await res.json() as CreatedNewChain;
@@ -48,7 +48,7 @@ function AddPeerToNode() {
       service_url: t.service_url,
       port: t.port,
     };
-    let res = await fetch("http://127.0.0.1:13329/peer",
+    let res = await fetch("http://127.0.0.1:11409/peer",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -79,7 +79,7 @@ function AddChainToGroup() {
       genesis_hash: t.genesis_hash,
 
     };
-    let res = await fetch("http://127.0.0.1:13329/attestation_chain/commit_group/add_member",
+    let res = await fetch("http://127.0.0.1:11409/attestation_chain/commit_group/add_member",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -105,7 +105,7 @@ function ListGames() {
     let cancel = false;
     const updater = async () => {
       if (cancel) return;
-      let res = await fetch("http://127.0.0.1:13329/attestation_chain");
+      let res = await fetch("http://127.0.0.1:11409/attestation_chain");
       let js = await res.json();
       console.log(js);
       set_list_of_games(js);
@@ -129,7 +129,7 @@ function ListPeers() {
     let cancel = false;
     const updater = async () => {
       if (cancel) return;
-      let res = await fetch("http://127.0.0.1:13329/peer");
+      let res = await fetch("http://127.0.0.1:11409/peer");
       let js = await res.json();
       console.log(js);
       set_list_of_peers(js);

@@ -31,6 +31,7 @@ pub struct Config {
     key: Option<XOnlyPublicKey>,
     #[serde(default)]
     prefix: Option<PathBuf>,
+    game_host_name: String,
 }
 
 fn get_config() -> Result<Arc<Config>, Box<dyn Error + Send + Sync>> {
@@ -41,9 +42,12 @@ fn get_config() -> Result<Arc<Config>, Box<dyn Error + Send + Sync>> {
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
     let mut config = get_config()?;
-    let db = setup_db("attestations.mining-game-host", config.prefix.clone())
-        .await
-        .map_err(|e| format!("DB Setup Failed: {:?}", e))?;
+    let db = setup_db(
+        &format!("attestations.{}", config.game_host_name),
+        config.prefix.clone(),
+    )
+    .await
+    .map_err(|e| format!("DB Setup Failed: {:?}", e))?;
     if config.key.is_none() {
         let handle = db.get_handle().await;
         let kp = KeyPair::new(&Secp256k1::new(), &mut rand::thread_rng());
