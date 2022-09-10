@@ -150,6 +150,7 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
                 Ok(v) => match v.data {
                     BroadcastByHost::Sequence(s) => batches_to_sequence.push(s),
                     BroadcastByHost::NewPeer(_) => {}
+                    BroadcastByHost::Heartbeat => {}
                 },
                 Err(_) => {
                     return Err(SequencerError::BadMessageType);
@@ -321,6 +322,7 @@ impl OnlineDBFetcher {
                             ) {
                                 Ok(v) => {
                                     match v.data {
+                                        BroadcastByHost::Heartbeat => {}
                                         BroadcastByHost::Sequence(s) => {
                                             if self.schedule_batches_to_sequence.send(s).is_err() {
                                                 return;

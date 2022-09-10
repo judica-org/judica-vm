@@ -130,6 +130,7 @@ async fn game(
                 match d.data {
                     BroadcastByHost::Sequence(l) => already_sequenced.extend(l.iter()),
                     BroadcastByHost::NewPeer(_) => {}
+                    BroadcastByHost::Heartbeat => {}
                 }
             }
         }
@@ -227,7 +228,7 @@ async fn game(
                     &secp,
                     None,
                     None,
-                    TipControl::AllTips,
+                    TipControl::GroupsOnly,
                 )??
                 .self_authenticate(&secp)?;
             handle.try_insert_authenticated_envelope(wrapped)?;
