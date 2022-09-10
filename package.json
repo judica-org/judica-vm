@@ -1,4 +1,8 @@
 {
   "private": true,
-  "workspaces": ["ux", "ux-attest", "www/game-host"]
+  "workspaces": [
+    "ux",
+    "ux-attest",
+    "www/game-host"
+  ]
 }
