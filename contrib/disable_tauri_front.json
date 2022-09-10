@@ -1,0 +1,7 @@
+{
+    "build": {
+        "beforeBuildCommand": "echo 'skipping'",
+        "beforeDevCommand": "echo 'skipping'",
+        "devPath": "http://localhost:3000"
+    }
+}
