@@ -36,14 +36,22 @@ then
 else
     # create a session with five panes
     tmux new-session -d -s MySession -n Shell1 -d "/usr/bin/env $SHELL -c \"echo 'first shell'\"; /usr/bin/env $SHELL -i"
-    tmux split-window -t MySession:0 "$PWD/start_tauri.sh; /usr/bin/env $SHELL -i"
     tmux split-window -t MySession:0 "$PWD/start_host.sh; /usr/bin/env $SHELL -i"
     tmux split-window -t MySession:0 "$PWD/start_attest.sh; /usr/bin/env $SHELL -i"
+    tmux split-window -t MySession:0 "$PWD/start_tauri_front.sh; /usr/bin/env $SHELL -i"
 
 
     tmux new-window -t MySession:
     tmux split-window -t MySession:1 "$PWD/start_host_www.sh; /usr/bin/env $SHELL -i"
     tmux split-window -t MySession:1 "$PWD/start_attest_www.sh; /usr/bin/env $SHELL -i"
+
+    # Player 1
+    tmux new-window -t MySession
+    tmux split-window -t MySession:2 "$PWD/start_tauri.sh; /usr/bin/env $SHELL -i"
+
+    # Player 2
+    tmux new-window -t MySession
+    tmux split-window -t MySession:3 "$PWD/start_tauri.sh; /usr/bin/env $SHELL -i"
 
     # change layout to tiled
     tmux select-layout -t MySession:0 tiled
