@@ -1,9 +1,9 @@
 {
     "tor": {
         "directory": "/Users/jr/demo-app-dir/game-host/tor",
-        "socks_port": 14458,
-        "application_port": 13329,
+        "socks_port": 11408,
+        "application_port": 11409,
         "application_path": "service1"
     },
-    "key": "d4586672776d42aa3359acf585b7f7f40bb6a1fda027904a3cf07c2a07115c99"
+    "game_host_name": "testing-host"
 }

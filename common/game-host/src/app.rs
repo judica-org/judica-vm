@@ -10,7 +10,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use game_host_messages::Peer;
+use game_host_messages::{BroadcastByHost, Channelized, Peer};
 use sapio_bitcoin::hashes::hex::ToHex;
 
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
@@ -24,7 +24,7 @@ use tower_http::cors::{Any, CorsLayer};
 pub struct Tips {
     pub tips: Vec<CanonicalEnvelopeHash>,
 }
-pub async fn get_users(
+pub async fn get_peers(
     Extension(db): Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<Vec<Peer>>), (StatusCode, &'static str)> {
     let handle = db.get_handle().await;
@@ -51,7 +51,7 @@ pub async fn get_users(
         Json(services),
     ))
 }
-pub async fn add_user(
+pub async fn add_new_peer(
     Extension(db): Extension<MsgDB>,
     Json(peer): Json<Peer>,
 ) -> Result<(Response<()>, Json<Value>), (StatusCode, &'static str)> {
@@ -110,8 +110,14 @@ pub async fn create_new_attestation_chain(
     Extension(ref secp): Extension<Secp256k1<All>>,
 ) -> Result<(Response<()>, Json<CreatedNewChain>), (StatusCode, &'static str)> {
     tracing::debug!("Creating New Attestation Chain");
-    let (kp, n, e) =
-        generate_new_user(secp).map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+    let (kp, n, e) = generate_new_user(
+        secp,
+        Some(Channelized {
+            data: BroadcastByHost::Heartbeat,
+            channel: "default".into(),
+        }),
+    )
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     let e = e
         .self_authenticate(secp)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
@@ -162,6 +168,38 @@ pub async fn list_groups(
         Json(v),
     ))
 }
+
+#[derive(Deserialize)]
+pub struct AddChainToGroup {
+    genesis_hash: CanonicalEnvelopeHash,
+    group: String,
+}
+pub async fn add_chain_to_group(
+    Json(j): Json<AddChainToGroup>,
+    Extension(db): Extension<MsgDB>,
+) -> Result<(Response<()>, Json<()>), (StatusCode, &'static str)> {
+    let handle = db.get_handle().await;
+    // todo: more efficient query
+    let groups: Vec<_> = handle
+        .get_all_chain_commit_groups()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+    let id = groups
+        .iter()
+        .find(|x| x.1 == j.group)
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, ""))?
+        .0;
+    handle
+        .add_member_to_chain_commit_group(id, j.genesis_hash)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+    Ok((
+        Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(())
+            .expect("Response<()> should always be valid"),
+        Json(()),
+    ))
+}
 pub fn run(
     config: Arc<Config>,
     db: MsgDB,
@@ -171,10 +209,14 @@ pub fn run(
         // build our application with a route
         let app = Router::new()
             // `POST /msg` goes to `msg`
-            .route("/user", post(add_user))
-            .route("/user", get(get_users))
+            .route("/peer/new", post(add_new_peer))
+            .route("/peer", get(get_peers))
             .route("/attestation_chain/new", post(create_new_attestation_chain))
             .route("/attestation_chain", get(list_groups))
+            .route(
+                "/attestation_chain/commit_group/add_member",
+                post(add_chain_to_group),
+            )
             .layer(Extension(db))
             .layer(Extension(secp))
             .layer(

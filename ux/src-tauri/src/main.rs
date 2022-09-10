@@ -2,13 +2,19 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
-use attest_database::{connection::MsgDB, generate_new_user, setup_db, db_handle::create::TipControl};
+use attest_database::{
+    connection::MsgDB, db_handle::create::TipControl, generate_new_user, setup_db,
+};
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
         game_move::{GameMove, Trade},
         GameBoard,
-    }, tokens::{token_swap::{UXMaterialsPriceData, TradingPairID}, TokenPointer},
+    },
+    tokens::{
+        token_swap::{TradingPairID, UXMaterialsPriceData},
+        TokenPointer,
+    },
 };
 use sapio_bitcoin::{
     secp256k1::{All, Secp256k1},
@@ -102,7 +108,7 @@ async fn make_new_user(
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
 ) -> Result<XOnlyPublicKey, Box<dyn Error>> {
-    let (kp, next_nonce, genesis) = generate_new_user(secp.inner())?;
+    let (kp, next_nonce, genesis) = generate_new_user(secp.inner(), None::<()>)?;
     let msgdb = db.get().await?;
     let mut handle = msgdb.get_handle().await;
     // TODO: Transaction?
@@ -128,7 +134,14 @@ async fn make_move_inner(
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
     // TODO: Runa tipcache
     let msg = handle
-        .wrap_message_in_envelope_for_user_by_key(v, &keypair, secp.inner(), None, None, TipControl::AllTips)
+        .wrap_message_in_envelope_for_user_by_key(
+            v,
+            &keypair,
+            secp.inner(),
+            None,
+            None,
+            TipControl::AllTips,
+        )
         .ok()
         .ok_or(())?
         .ok()

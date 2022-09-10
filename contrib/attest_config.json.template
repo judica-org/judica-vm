@@ -5,13 +5,13 @@
             "CookieFile": "/Users/jr/Library/Application Support/Bitcoin/signet/.cookie"
         }
     },
-    "subname": "testing",
+    "subname": "testing-$PLAYER",
     "tor": {
-        "directory": "/Users/jr/demo-app-dir/attest/tor",
-        "socks_port": 14457
+        "directory": "/Users/jr/demo-app-dir/$PLAYER/attest/tor",
+        "socks_port": $SOCKS_PORT
     },
-    "application_port": 13328,
+    "attestation_port": $APP_PORT,
     "control": {
-        "port": 15532
+        "port": $CONTROL_PORT
     }
 }

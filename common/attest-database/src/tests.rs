@@ -361,7 +361,7 @@ fn make_test_user(
     handle: &mut db_handle::MsgDBHandle<'_>,
     name: String,
 ) -> KeyPair {
-    let (kp, nonce, envelope) = generate_new_user(secp).unwrap();
+    let (kp, nonce, envelope) = generate_new_user(secp, None::<()>).unwrap();
     let _u = handle.save_keypair(kp).unwrap();
     let genesis = envelope.self_authenticate(secp).unwrap();
     handle
