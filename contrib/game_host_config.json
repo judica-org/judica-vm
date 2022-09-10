@@ -5,6 +5,5 @@
         "application_port": 11409,
         "application_path": "service1"
     },
-    "key": "d4586672776d42aa3359acf585b7f7f40bb6a1fda027904a3cf07c2a07115c99",
     "game_host_name": "testing-host"
 }

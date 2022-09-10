@@ -28,7 +28,6 @@ mod tor;
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     tor: TorConfig,
-    key: Option<XOnlyPublicKey>,
     #[serde(default)]
     prefix: Option<PathBuf>,
     game_host_name: String,
@@ -48,16 +47,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )
     .await
     .map_err(|e| format!("DB Setup Failed: {:?}", e))?;
-    if config.key.is_none() {
-        let handle = db.get_handle().await;
-        let kp = KeyPair::new(&Secp256k1::new(), &mut rand::thread_rng());
-        handle.save_keypair(kp)?;
-        if let Some(config) = Arc::get_mut(&mut config) {
-            tracing::debug!("Running On {}", kp.x_only_public_key().0);
-            config.key.insert(kp.x_only_public_key().0);
-        }
-    }
-    tor::start(config.clone());
+    let tor_server = tor::start(config.clone()).await;
 
     let host = config.tor.get_hostname().await?;
     info!("Hosting Onion Service At: {}", host);
@@ -70,6 +60,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         },
         b = app_instance => {
             b?.map_err(|e| format!("{}", e))?;
+        }
+        tor_quit = tor_server => {
+            tor_quit?.map_err(|e| format!("{}", e))?;
         }
     }
     Ok(())
