@@ -2,6 +2,7 @@ import { Card, CardHeader, CardContent } from "@mui/material";
 import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { tauri_host } from "../tauri_host";
 import { RawMaterialsActions } from "../util";
 
 const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action: RawMaterialsActions; readonly subtitle: string; readonly currency: string }) => {
@@ -9,16 +10,15 @@ const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action:
 
   useEffect(() => {
     (async () => {
-      setSchema(await invoke("get_materials_schema"));
+      setSchema(await tauri_host.get_material_schema());
     })()
   });
   console.log("materials schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
-    invoke("make_move_inner", {
-      nextMove: data.formData,
-      from: uid.current?.valueAsNumber 
-    });
+
+    if (uid.current?.valueAsNumber)
+      tauri_host.make_move_inner(data.formData, uid.current?.valueAsNumber)
   };
 
 

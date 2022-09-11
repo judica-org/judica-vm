@@ -155,7 +155,7 @@ async fn make_move_inner(
 }
 
 #[tauri::command]
-async fn create_new_game(
+async fn switch_to_game(
     db: State<'_, Database>,
     game: GameState<'_>,
     key: XOnlyPublicKey,
@@ -213,7 +213,8 @@ fn main() {
             game_synchronizer,
             get_move_schema,
             get_materials_schema,
-            make_move_inner
+            make_move_inner,
+            switch_to_game
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
