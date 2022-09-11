@@ -42,10 +42,16 @@ pub struct TorConfig {
     pub(crate) directory: PathBuf,
     #[serde(default = "default_socks_port")]
     pub(crate) socks_port: u16,
+    #[serde(default = "default_exposed_port")]
+    pub(crate) exposed_application_port: u16,
 }
 
 pub(crate) fn default_control_port() -> u16 {
     14322
+}
+
+pub(crate) fn default_exposed_port() -> u16 {
+    26874
 }
 
 #[derive(Serialize, Deserialize)]
