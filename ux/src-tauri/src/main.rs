@@ -3,7 +3,9 @@
     windows_subsystem = "windows"
 )]
 use attest_database::{
-    connection::MsgDB, db_handle::create::TipControl, generate_new_user, setup_db,
+    connection::MsgDB,
+    db_handle::{create::TipControl, MsgDBHandle},
+    generate_new_user, setup_db,
 };
 use mine_with_friends_board::{
     entity::EntityID,
@@ -54,12 +56,14 @@ async fn game_synchronizer(
             let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
             (s, w, game.as_ref().map(|g| g.host_key))
         };
-        let (appName, prefix) = {
+        let (appName, prefix, list_of_chains) = {
             let l = d.inner().state.lock().await;
             if let Some(g) = l.as_ref() {
-                (g.name.clone(), g.prefix.clone())
+                let mut handle = g.db.get_handle().await;
+                let v = handle.get_all_users().map_err(|_| ())?;
+                (g.name.clone(), g.prefix.clone(), v)
             } else {
-                ("".into(), None)
+                ("".into(), None, vec![])
             }
         };
         // Attempt to get data to show prices
@@ -74,7 +78,7 @@ async fn game_synchronizer(
         };
 
         println!("Emitting!");
-
+        window.emit("available-sequencers", list_of_chains);
         window.emit("host-key", key).unwrap();
         window.emit("db-connection", (appName, prefix)).unwrap();
         window.emit("game-board", gamestring).unwrap();
@@ -246,7 +250,7 @@ impl Database {
     async fn connect(&self, appname: &str, prefix: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
         let mut g = self.state.lock().await;
         *g = Some(DatabaseInner {
-            db: setup_db(appname, prefix.clone()).await?,
+            db: setup_db(&format!("attestations.{}", appname), prefix.clone()).await?,
             name: appname.to_owned(),
             prefix: prefix.clone(),
         });
