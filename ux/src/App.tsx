@@ -5,6 +5,7 @@ import Form, { FormSubmit } from "@rjsf/core";
 import RawMaterialsMarket from './raw-materials';
 import { tauri_host } from './tauri_host';
 import { SwitchToGame } from './SwitchToGame';
+import { SwitchToDB } from './SwitchToDB';
 
 function MoveForm() {
   const [schema, set_schema] = React.useState<null | any>(null);
@@ -113,6 +114,7 @@ function App() {
       <RawMaterialsMarket></RawMaterialsMarket>
       <MoveForm></MoveForm>
       <SwitchToGame></SwitchToGame>
+      <SwitchToDB></SwitchToDB>
     </div>
   );
 }

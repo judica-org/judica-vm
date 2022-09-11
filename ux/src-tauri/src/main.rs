@@ -21,7 +21,7 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
-use std::{error::Error, sync::Arc};
+use std::{error::Error, path::PathBuf, sync::Arc};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::{
@@ -180,6 +180,15 @@ async fn switch_to_game(
     Ok(())
 }
 
+#[tauri::command]
+async fn switch_to_db(
+    db: State<'_, Database>,
+    appName: String,
+    prefix: Option<PathBuf>,
+) -> Result<(), ()> {
+    db.connect(&appName, prefix).await.map_err(|_| ())
+}
+
 pub struct Game {
     board: GameBoard,
     should_notify: Arc<Notify>,
@@ -192,18 +201,25 @@ type GameState<'a> = State<'a, GameStateInner>;
 
 // Safe to clone because MsgDB has Clone
 #[derive(Clone)]
-pub struct Database(OnceCell<MsgDB>);
+pub struct Database(Arc<Mutex<Option<MsgDB>>>);
 impl Database {
     async fn get(&self) -> Result<MsgDB, Box<dyn Error>> {
-        self.0
-            .get_or_try_init(|| setup_db("attestations.mining-game", None))
+        Ok(self
+            .0
+            .lock()
             .await
-            .map(|v| v.clone())
+            .clone()
+            .ok_or("No Database Connection")?)
+    }
+    async fn connect(&self, appname: &str, prefix: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
+        let mut g = self.0.lock().await;
+        *g = Some(setup_db("attestations.mining-game", prefix).await?);
+        Ok(())
     }
 }
 fn main() {
     let game = GameStateInner::new(Mutex::new(None));
-    let db = Database(OnceCell::new());
+    let db = Database(Arc::new(Mutex::new(None)));
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(Secp256k1::new())
@@ -214,7 +230,8 @@ fn main() {
             get_move_schema,
             get_materials_schema,
             make_move_inner,
-            switch_to_game
+            switch_to_game,
+            switch_to_db
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
