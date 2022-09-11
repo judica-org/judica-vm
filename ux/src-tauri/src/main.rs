@@ -8,7 +8,7 @@ use attest_database::{
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
-        game_move::{GameMove, Trade},
+        game_move::{GameMove, Init, Trade},
         GameBoard,
     },
     tokens::{
@@ -31,7 +31,11 @@ use tokio::{
 mod tasks;
 
 #[tauri::command]
-async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
+async fn game_synchronizer(
+    window: Window,
+    s: GameState<'_>,
+    d: State<'_, Database>,
+) -> Result<(), ()> {
     println!("Registering");
     loop {
         // No Idea why the borrow checker likes this, but it seems to be the case
@@ -40,7 +44,7 @@ async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
         // that the lifetime is 'static and we can successfully wait on it outside
         // the lock.
         let mut arc_cheat = None;
-        let (gamestring, wait_on) = {
+        let (gamestring, wait_on, key) = {
             let game = s.inner().lock().await;
             let s = game
                 .as_ref()
@@ -48,7 +52,15 @@ async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
                 .unwrap_or("null".into());
             arc_cheat = game.as_ref().map(|g: &Game| g.should_notify.clone());
             let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
-            (s, w)
+            (s, w, game.as_ref().map(|g| g.host_key))
+        };
+        let (appName, prefix) = {
+            let l = d.inner().state.lock().await;
+            if let Some(g) = l.as_ref() {
+                (g.name.clone(), g.prefix.clone())
+            } else {
+                ("".into(), None)
+            }
         };
         // Attempt to get data to show prices
         let raw_price_data = {
@@ -62,6 +74,9 @@ async fn game_synchronizer(window: Window, s: GameState<'_>) -> Result<(), ()> {
         };
 
         println!("Emitting!");
+
+        window.emit("host-key", key).unwrap();
+        window.emit("db-connection", (appName, prefix)).unwrap();
         window.emit("game-board", gamestring).unwrap();
         window.emit("materials-price-data", raw_price_data).unwrap();
         if let Some(w) = wait_on {
@@ -167,12 +182,16 @@ async fn switch_to_game(
         let mut g = game2.lock().await;
         g.as_mut()
             .map(|game| game.server.as_ref().map(|s| s.shutdown()));
-        let new_game = Game {
+        let mut new_game = Game {
             board: GameBoard::new(),
             should_notify: Arc::new(Notify::new()),
             host_key: key,
             server: None,
         };
+        new_game
+            .board
+            .play_inner(GameMove::Init(Init()), EntityID(0))
+            .unwrap();
         *g = Some(new_game);
         GameServer::start(&db, g, game).await?;
         Ok::<(), &'static str>(())
@@ -182,11 +201,14 @@ async fn switch_to_game(
 
 #[tauri::command]
 async fn switch_to_db(
+    window: Window,
     db: State<'_, Database>,
     appName: String,
     prefix: Option<PathBuf>,
 ) -> Result<(), ()> {
-    db.connect(&appName, prefix).await.map_err(|_| ())
+    let res = db.connect(&appName, prefix.clone()).await.map_err(|_| ());
+
+    res
 }
 
 pub struct Game {
@@ -201,25 +223,41 @@ type GameState<'a> = State<'a, GameStateInner>;
 
 // Safe to clone because MsgDB has Clone
 #[derive(Clone)]
-pub struct Database(Arc<Mutex<Option<MsgDB>>>);
+pub struct Database {
+    state: Arc<Mutex<Option<DatabaseInner>>>,
+}
+
+pub struct DatabaseInner {
+    db: MsgDB,
+    name: String,
+    prefix: Option<PathBuf>,
+}
 impl Database {
     async fn get(&self) -> Result<MsgDB, Box<dyn Error>> {
         Ok(self
-            .0
+            .state
             .lock()
             .await
-            .clone()
-            .ok_or("No Database Connection")?)
+            .as_ref()
+            .ok_or("No Database Connection")?
+            .db
+            .clone())
     }
     async fn connect(&self, appname: &str, prefix: Option<PathBuf>) -> Result<(), Box<dyn Error>> {
-        let mut g = self.0.lock().await;
-        *g = Some(setup_db("attestations.mining-game", prefix).await?);
+        let mut g = self.state.lock().await;
+        *g = Some(DatabaseInner {
+            db: setup_db(appname, prefix.clone()).await?,
+            name: appname.to_owned(),
+            prefix: prefix.clone(),
+        });
         Ok(())
     }
 }
 fn main() {
     let game = GameStateInner::new(Mutex::new(None));
-    let db = Database(Arc::new(Mutex::new(None)));
+    let db = Database {
+        state: Arc::new(Mutex::new(None)),
+    };
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(Secp256k1::new())
@@ -231,7 +269,7 @@ fn main() {
             get_materials_schema,
             make_move_inner,
             switch_to_game,
-            switch_to_db
+            switch_to_db,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

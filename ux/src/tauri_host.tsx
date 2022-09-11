@@ -22,6 +22,5 @@ export const tauri_host = {
   },
   switch_to_db: async (appName: string, prefix: string | null) => {
     return invoke("switch_to_db", { appName, prefix });
-
-  }
+  },
 };
