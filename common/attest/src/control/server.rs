@@ -41,6 +41,7 @@ pub struct Status {
     tips: Vec<TipData>,
     peer_connections: Vec<TaskID>,
     all_users: Vec<(XOnlyPublicKey, String, bool)>,
+    hidden_service_url: Option<(String, u16)>,
 }
 
 async fn get_expensive_db_snapshot(
@@ -62,6 +63,7 @@ async fn get_expensive_db_snapshot(
     ))
 }
 async fn get_status(
+    g: Extension<Arc<Globals>>,
     db: Extension<MsgDB>,
     peer_status: Extension<Sender<PeerQuery>>,
 ) -> Result<(Response<()>, Json<Status>), (StatusCode, String)> {
@@ -108,11 +110,21 @@ async fn get_status(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    let hidden_service_url = if let Some(conf) = g.config.tor.as_ref() {
+        let h = conf
+            .get_hostname()
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Some(h)
+    } else {
+        None
+    };
     let status = Status {
         peers,
         tips,
         peer_connections,
         all_users,
+        hidden_service_url,
     };
 
     Ok((
@@ -320,6 +332,7 @@ pub async fn run(
                         .allow_origin(Any),
                 ),
             )
+            .layer(Extension(g.clone()))
             .layer(Extension(db))
             .layer(Extension(peer_status))
             .layer(Extension(Secp256k1::new()))

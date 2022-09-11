@@ -54,6 +54,10 @@ function App() {
       <hr></hr>
       {url && <MakeGenesis url={url}></MakeGenesis>}
       <hr></hr>
+      {status && status.hidden_service_url && <div>
+        <h1>Tor Enabled:</h1>
+        <h2>{status.hidden_service_url[0]}:{status.hidden_service_url[1]} </h2>
+      </div>}
       {status && <Peers peers={status.peers}></Peers>}
       {status && <TaskSet tasks={status.peer_connections}></TaskSet>}
       {status && <Tips tips={status.tips}></Tips>}
@@ -124,10 +128,10 @@ function Users(props: { users: Array<[String, String, boolean]>, url: String }) 
     </tbody>
   </table>
 }
-function Tips(props: { tips: Array<{ envelope: { header: { ancestors?:{genesis: string}, height: string }, msg: any }, hash: string }> }) {
+function Tips(props: { tips: Array<{ envelope: { header: { ancestors?: { genesis: string }, height: string }, msg: any }, hash: string }> }) {
 
   const rows = props.tips.map((x) => <tr key={x.hash}>
-    <td>{x.envelope.header.ancestors?.genesis.substring(0, 16)??""}</td>
+    <td>{x.envelope.header.ancestors?.genesis.substring(0, 16) ?? ""}</td>
     <td>{x.hash.substring(0, 16)}</td>
     <td>{x.envelope.header.height}</td>
     <td>{JSON.stringify(x.envelope.msg).substring(0, 20)}</td>
