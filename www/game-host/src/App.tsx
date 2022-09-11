@@ -184,7 +184,7 @@ function ListPeers() {
   }, []);
   const games = list_of_peers.map((m) => <li> {`${m.service_url}:${m.port}`}</li>);
   return <div>
-    <h2>Game Room IDs</h2>
+    <h2>Connected to Peers</h2>
     <ul>
       {games}
     </ul>
