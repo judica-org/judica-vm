@@ -52,7 +52,7 @@ pub async fn start(
                 ))
                 .flag(TorFlag::HiddenServiceVersion(HiddenServiceVersion::V3))
                 .flag(TorFlag::HiddenServicePort(
-                    TorAddress::Port(g.config.attestation_port),
+                    TorAddress::Port(tor_config.exposed_application_port),
                     Some(TorAddress::Port(g.config.attestation_port)).into(),
                 ))
                 .start_background()
