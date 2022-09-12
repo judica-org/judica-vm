@@ -10,7 +10,6 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
-use crate::nfts::sale::NFTSale;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::BaseNFT;
 use crate::nfts::NFTRegistry;

@@ -3,7 +3,7 @@ use std::cmp::min;
 use serde::Serialize;
 
 pub mod events;
-use crate::{entity::EntityID, game::GameBoard, nfts::NftPtr, tokens::TokenPointer, util::Price};
+use crate::{game::GameBoard, nfts::NftPtr, tokens::TokenPointer, util::Price};
 
 use super::lockup::CoinLockup;
 
