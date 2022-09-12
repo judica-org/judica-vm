@@ -1,6 +1,6 @@
 {
     "tor": {
-        "directory": "/Users/jr/demo-app-dir/game-host/tor",
+        "directory": "$TOR_DIR/game-host/tor",
         "socks_port": 11408,
         "application_port": 11409,
         "application_path": "service1"
