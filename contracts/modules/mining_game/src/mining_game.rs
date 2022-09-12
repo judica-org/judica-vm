@@ -48,6 +48,7 @@ struct GameKernel {
     #[schemars(with = "sha256::Hash")]
     game_host: PK,
     players: BTreeMap<PK, AmountF64>,
+    timeout: u64,
 }
 impl GameKernel {}
 impl SIMP for GameKernel {
@@ -124,8 +125,12 @@ impl GameStarted {
                         }
                     }
                 }
-                // TODO: validate that the game has actually timed out
-                // TODO: get user data from game state
+                // validate that the game has actually timed out
+                if game.current_time() < self.kernel.timeout {
+                    return empty();
+                }
+
+                // calculate payouts for each player
                 let total_bitcoin = ctx.funds();
                 let mut tmpl = ctx.template();
                 let (total_game_coin, users) = game.user_shares();

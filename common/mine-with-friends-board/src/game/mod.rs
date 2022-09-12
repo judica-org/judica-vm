@@ -285,6 +285,12 @@ impl GameBoard {
     pub fn user_shares(&self) -> (u128, BTreeMap<EntityID, u128>) {
         todo!()
     }
+    pub fn user_hashrates(&self) -> (u128, BTreeMap<EntityID, u128>) {
+        todo!()
+    }
+    pub fn current_time(&self) -> u64 {
+        self.current_time
+    }
     /// Check if a given user is the root_user
     pub fn user_is_admin(&self, user: EntityID) -> bool {
         user == self.root_user
