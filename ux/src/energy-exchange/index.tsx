@@ -19,7 +19,7 @@ export type NFTSale = {
 const stub_listings: NFTSale[] = [{
   currency: 'donuts',
   nft_id: 13134,
-  plant_type: 'Nuclear',
+  plant_type: 'Flare',
   price: 937,
   seller: 95720486,
   transfer_count: 2,
@@ -55,7 +55,6 @@ export const EnergyExchange = () => {
         <Card className={'card'}>
           <CardHeader
             className={'root'}
-            // classes={cardHeaderStyles}
             title={'Energy Exchange'}
             subheader={'Power Plants For Sale'}
           />
@@ -84,7 +83,7 @@ export const EnergyExchange = () => {
                     <TableCell align="right">{listing.price}</TableCell>
                     <TableCell align="right">{listing.currency}</TableCell>
                     <TableCell align="right">{listing.transfer_count}</TableCell>
-                    <TableCell align="right"><FormModal title={"Purchase"} nft_id={listing.nft_id} /></TableCell>
+                    <TableCell align="right"><FormModal title={"Purchase Plant"} nft_id={listing.nft_id} currency={''} material_type={''} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

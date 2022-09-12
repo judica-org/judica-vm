@@ -84,8 +84,8 @@ export const RawMaterialsMarket = () => {
                     <TableCell align="right">{material.price}</TableCell>
                     <TableCell align="right">{material.currency}</TableCell>
                     <TableCell align="right">
-                      <FormModal title={"Purchase"} currency={material.currency} material_type={material.material_type} />
-                      <FormModal title={"Sell"} currency={material.currency} material_type={material.material_type} />
+                      <FormModal title={"Purchase Materials"} currency={material.currency} material_type={material.material_type} />
+                      <FormModal title={"Sell Materials"} currency={material.currency} material_type={material.material_type} />
                     </TableCell>
                   </TableRow>
                 ))}

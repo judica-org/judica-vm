@@ -9,11 +9,8 @@ use super::lockup::CoinLockup;
 
 #[derive(Serialize, Clone)]
 pub enum PlantType {
-    Coal,
     Solar,
     Hydro,
-    Nuclear,
-    Geothermal,
     Flare,
 }
 #[derive(Serialize, Clone)]

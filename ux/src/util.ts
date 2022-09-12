@@ -3,4 +3,10 @@ export const material_type_color_map = {
   'Steel': 'grey'
 }
 
-export type RawMaterialsActions = 'Purchase' | 'Sell';
+export type RawMaterialsActions = 'Purchase Materials' | 'Sell Materials';
+
+export const plant_type_color_map = {
+  'Solar': 'yellow',
+  'Flare': 'orange',
+  'Hydro': 'blue'
+}

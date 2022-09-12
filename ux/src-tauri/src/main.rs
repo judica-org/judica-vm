@@ -9,7 +9,7 @@ use attest_database::{
 };
 use mine_with_friends_board::{
     entity::EntityID,
-    game::{game_move::{GameMove, PurchaseNFT}, GameBoard}, nfts::{UXNFTRegistry, sale::UXForSaleList},
+    game::{game_move::{GameMove, PurchaseNFT, Trade, Init}, GameBoard}, nfts::{UXNFTRegistry, sale::UXForSaleList},
     tokens::{
         token_swap::{TradingPairID, UXMaterialsPriceData},
         TokenPointer,

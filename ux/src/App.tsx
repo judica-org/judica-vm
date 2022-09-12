@@ -11,7 +11,7 @@ import { SwitchToDB } from './SwitchToDB';
 import { invoke } from '@tauri-apps/api';
 import PurchaseOfferForm from './purchase-offer';
 
-export type PlantType = 'Coal'|'Solar'|'Hydro'|'Nuclear'|'Geothermal'|'Flare';
+export type PlantType = 'Solar'|'Hydro'|'Flare';
 export type PowerPlant = {
   id: number,
   plant_type: PlantType //how does PlantType enum show up
