@@ -35,22 +35,22 @@ const stub_plant_data = [{
     for_sale: true
 }]
 
-// eslint-disable-next-line import/no-anonymous-default-export
 export default () => {
+    ;
     const [power_plants, set_power_plants] = useState([]); // use empty list for now so it will render
     const [countries, setCountries] = useState([]);
     useEffect(() => {
         setCountries(countries_data);
-      const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
-        console.log(['game-board-event'], ev);
-        set_power_plants(JSON.parse(ev.payload))
-      });
-  
-      return () => {
-        (async () => {
-          (await unlisten_power_plants)();
-        })();
-      }
+        const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
+            console.log(['game-board-event'], ev);
+            set_power_plants(JSON.parse(ev.payload))
+        });
+
+        return () => {
+            (async () => {
+                (await unlisten_power_plants)();
+            })();
+        }
     }, [power_plants]);
 
     return <div className='globe-container'>
