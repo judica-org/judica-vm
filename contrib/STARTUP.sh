@@ -25,13 +25,13 @@ Linux)
   ;;
 esac
 
-pushd ..
-cargo build --release
-popd
-
-if tmux attach -tMySession; then
+if tmux attach -t MySession; then
   echo "Exiting"
 else
+
+  pushd ..
+  cargo build --release
+  popd
   # create a session with five panes
   tmux new-session -d -s MySession -n "www" -d "$PWD/start_tauri_front.sh; /usr/bin/env $SHELL -i"
   tmux split-window -t MySession:0 "$PWD/start_host_www.sh; /usr/bin/env $SHELL -i"
@@ -54,5 +54,5 @@ else
   tmux select-layout -t MySession:2 tiled
   tmux select-layout -t MySession:3 tiled
 
-  tmux attach -tMySession
+  tmux attach -t MySession
 fi
