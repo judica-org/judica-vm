@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 tmux start-server
 BTCPORT=${BTCPORT:-"18443"}
+export BTCPORT
 SCRIPT_LOCATION=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 cd $SCRIPT_LOCATION
 export RUST_LOG=debug

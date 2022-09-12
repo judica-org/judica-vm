@@ -1,6 +1,6 @@
 {
     "bitcoin": {
-        "url": "http://127.0.0.1:18443",
+        "url": "http://127.0.0.1:$BTCPORT",
         "auth": {
             "CookieFile": "$BITCOIN_DIR/signet/.cookie"
         }
