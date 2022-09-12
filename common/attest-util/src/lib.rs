@@ -28,15 +28,22 @@ pub fn now() -> i64 {
 pub const INFER_UNIT: Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> = Ok(());
 pub type AbstractResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
+use std::fs::Permissions;
 #[cfg(feature = "tokio")]
 use std::{error::Error, path::PathBuf};
 #[cfg(feature = "tokio")]
-pub async fn ensure_dir(data_dir: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+pub async fn ensure_dir(
+    data_dir: PathBuf,
+    perms: Option<Permissions>,
+) -> Result<PathBuf, Box<dyn Error>> {
     let dir = tokio::fs::create_dir_all(&data_dir).await;
     match dir.as_ref().map_err(std::io::Error::kind) {
         Err(std::io::ErrorKind::AlreadyExists) => (),
         _e => dir?,
     };
+    if let Some(perms) = perms {
+        let metadata = tokio::fs::set_permissions(&data_dir, perms).await?;
+    }
     Ok(data_dir)
 }
 

@@ -28,9 +28,6 @@ pushd ..
 cargo build --release
 popd
 
-echo "Using Config"
-echo $ATTEST_CONFIG_JSON | envsubst | jq
-echo $GAME_HOST_CONFIG_JSON | envsubst | jq
 if tmux attach -tMySession; then
   echo "Exiting"
 else
@@ -39,7 +36,7 @@ else
   tmux split-window -t MySession:0 "$PWD/start_host_www.sh; /usr/bin/env $SHELL -i"
   tmux split-window -t MySession:0 "export PORTS=\"15532\n15533\n15534\"; $PWD/start_attest_www.sh; /usr/bin/env $SHELL -i"
 
-  tmux new-window -t MySession: -n "host" "$PWD/start_host.sh; /usr/bin/env $SHELL -i"
+  tmux new-window -t MySession: -n "host" "export PLAYER=\"host\"; $PWD/start_host.sh; /usr/bin/env $SHELL -i"
   tmux split-window -t MySession:1 "export PLAYER=\"host\" SOCKS_PORT=14457 APP_PORT=13328 CONTROL_PORT=15532; $PWD/start_attest.sh; /usr/bin/env $SHELL -i"
 
   # Player 1

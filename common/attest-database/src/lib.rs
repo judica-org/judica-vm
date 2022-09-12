@@ -1,4 +1,4 @@
-use std::{error::Error, path::PathBuf, sync::Arc};
+use std::{error::Error, fs::Permissions, path::PathBuf, sync::Arc};
 
 use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
 use attest_util::ensure_dir;
@@ -10,6 +10,7 @@ use sapio_bitcoin::{
     KeyPair,
 };
 use serde::Serialize;
+use std::os::unix::fs::PermissionsExt;
 
 pub mod connection;
 pub mod db_handle;
@@ -25,7 +26,7 @@ pub async fn setup_db_at(dir: PathBuf, name: &str) -> Result<MsgDB, Box<dyn Erro
         dir.display(),
         name
     );
-    let dir: PathBuf = ensure_dir(dir).await?;
+    let dir: PathBuf = ensure_dir(dir, Some(Permissions::from_mode(0o700))).await?;
     let mut db_file = dir.clone();
     db_file.push(name);
     db_file.set_extension("sqlite3");
