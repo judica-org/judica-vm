@@ -4,7 +4,6 @@ import { appWindow } from '@tauri-apps/api/window';
 import { useState, useEffect } from 'react';
 import { PlantType } from '../App';
 import FormModal from '../form-modal';
-import { UserPowerPlant } from '../my-plants';
 import { plant_type_color_map } from '../util';
 
 export type NFTSale = {
@@ -48,7 +47,6 @@ export const EnergyExchange = () => {
       })();
     }
   }, [listings]);
-  // const classes = useStyles();
   return (
     <div>
       <div className='energy-exchange-container'>

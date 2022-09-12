@@ -2,6 +2,7 @@ import { Card, CardHeader, CardContent } from "@mui/material";
 import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
 import { useState, useEffect, useMemo, useRef } from "react";
+import { tauri_host } from "../tauri_host";
 
 export default function MoveForm() {
   const [schema, set_schema] = useState<null | any>(null);
@@ -15,7 +16,8 @@ export default function MoveForm() {
   console.log("move schema:",schema);
   const handle_submit = (data: FormSubmit) => {
     // TODO: Submit from correct user
-    invoke("make_move_inner", { nextMove: data.formData, from: uid.current?.valueAsNumber })
+    if (uid.current?.valueAsNumber)
+      tauri_host.make_move_inner(data.formData, uid.current?.valueAsNumber)
   };
 
   const schema_form = useMemo<JSX.Element>(() => {

@@ -2,6 +2,7 @@ import { Card, CardHeader, CardContent } from "@mui/material";
 import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { tauri_host } from "../tauri_host";
 
 const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
   const [schema, setSchema] = useState<null | any>(null);
@@ -14,13 +15,11 @@ const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
   console.log("listing schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
-    invoke("list_power_plant_for_sale", {
-      purchase_data: data.formData,
-      from: "who?" // get user ID from tauri State inside command?
-    });
+    if (uid.current?.valueAsNumber)
+      tauri_host.make_move_inner(data.formData, uid.current?.valueAsNumber)
   };
 
-  // for creater should be extracted out into a form util
+  // form creater should be extracted out into a form util
   const schema_form = useMemo<JSX.Element>(() => {
     const customFormats = { "uint128": (s: string) => { return true; } };
     if (schema)

@@ -2,6 +2,7 @@ import { Card, CardHeader, CardContent } from "@mui/material";
 import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { tauri_host } from "../tauri_host";
 
 const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: number }) => {
   const [schema, setSchema] = useState<null | any>(null);
@@ -14,10 +15,8 @@ const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: nu
   console.log("purchase schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
-    invoke("make_purchase_offer", {
-      purchase_data: data.formData,
-      from: "who?" // get user ID from tauri State inside command?
-    });
+    if (uid.current?.valueAsNumber)
+      tauri_host.make_move_inner(data.formData, uid.current?.valueAsNumber)
   };
 
   const formData = {

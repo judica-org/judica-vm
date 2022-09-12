@@ -9,7 +9,6 @@ import { tauri_host } from './tauri_host';
 import { SwitchToGame } from './SwitchToGame';
 import { SwitchToDB } from './SwitchToDB';
 import { invoke } from '@tauri-apps/api';
-import PurchaseOfferForm from './purchase-offer';
 
 export type PlantType = 'Solar'|'Hydro'|'Flare';
 export type PowerPlant = {
@@ -145,11 +144,11 @@ function App() {
 
   return (
     <div className="App">
-      {game_board && <GameBoard g={game_board}></GameBoard>}
-      <RawMaterialsMarket></RawMaterialsMarket>
       <WorkingGlobe></WorkingGlobe>
       {<EnergyExchange></EnergyExchange>}
+      <RawMaterialsMarket></RawMaterialsMarket>
       <MoveForm></MoveForm>
+      {game_board && <GameBoard g={game_board}></GameBoard>}
       <SwitchToGame></SwitchToGame>
       <SwitchToDB></SwitchToDB>
     </div>

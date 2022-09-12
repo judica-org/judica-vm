@@ -9,7 +9,7 @@ use attest_database::{
 };
 use mine_with_friends_board::{
     entity::EntityID,
-    game::{game_move::{GameMove, PurchaseNFT, Trade, Init}, GameBoard}, nfts::{UXNFTRegistry, sale::UXForSaleList},
+    game::{game_move::{GameMove, PurchaseNFT, Trade, Init}, GameBoard}, nfts::{UXPlantData, UXNFTRegistry, sale::UXForSaleList, NftPtr},
     tokens::{
         token_swap::{TradingPairID, UXMaterialsPriceData},
         TokenPointer,
@@ -77,8 +77,8 @@ async fn game_synchronizer(
 
         let power_plants = {
             let mut game = s.inner().lock().await;
-            let plants = game.as_mut().map(|g| g.board.get_all_power_plants())
-            .unwrap_or(Ok(UXNFTRegistry{ power_plant_data: BTreeMap::new()})).unwrap();
+            let plants: Vec<(NftPtr, UXPlantData)> = game.as_mut().map(|g| g.board.get_ux_power_plant_data())
+            .unwrap_or_else(||Vec::new());
             plants
         };
 
@@ -96,7 +96,7 @@ async fn game_synchronizer(
         window.emit("db-connection", (appName, prefix)).unwrap();
         window.emit("game-board", gamestring).unwrap();
         window.emit("materials-price-data", raw_price_data).unwrap();
-        window.emit("power-plants",  power_plants.power_plant_data).unwrap();
+        window.emit("power-plants",  power_plants).unwrap();
         window.emit("energy-exchange", listings.listings).unwrap();
         if let Some(w) = wait_on {
             w.await;

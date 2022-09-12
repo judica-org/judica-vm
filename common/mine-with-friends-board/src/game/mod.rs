@@ -379,7 +379,7 @@ impl GameBoard {
     }
 
     // where does miner status come from
-    fn get_ux_power_plant_data(&mut self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
+    pub fn get_ux_power_plant_data(&mut self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
         let mut power_plant_data = Vec::new();
         let plants = &self.nfts.power_plants.clone();
         plants.iter().for_each(|(pointer, power_plant)| {
