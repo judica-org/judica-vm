@@ -390,7 +390,6 @@ impl GameBoard {
             // unwrap should be safe here - we have problems if we have a pointer and cant find the NFT.
             let owner = &self.nfts.nfts.get(pointer).unwrap().owner();
 
-
             power_plant_data.push((
                 *pointer,
                 UXPlantData {
@@ -433,19 +432,16 @@ impl GameBoard {
     pub fn get_ux_energy_market(&self) -> Result<UXForSaleList, ()> {
         let mut listings = Vec::new();
         self.nft_sales.nfts.iter().for_each(|(pointer, listing)| {
-            listings.push(
-                UXNFTSale {
-                    nft_id: *pointer,
-                    price: listing.price.clone(),
-                    currency: listing.currency,
-                    seller: listing.seller,
-                    transfer_count: listing.transfer_count,
-                },
-            );
+            listings.push(UXNFTSale {
+                nft_id: *pointer,
+                price: listing.price.clone(),
+                currency: listing.currency,
+                seller: listing.seller,
+                transfer_count: listing.transfer_count,
+            });
         });
         return Ok(UXForSaleList { listings });
     }
 }
 
 pub mod game_move;
-

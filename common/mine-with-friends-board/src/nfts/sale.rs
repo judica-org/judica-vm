@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 // Listings formatted for UX consumption
 #[derive(Serialize, Clone)]
 pub struct UXForSaleList {
-    pub listings: Vec<UXNFTSale>
+    pub listings: Vec<UXNFTSale>,
 }
 #[derive(Serialize, Clone)]
 pub struct UXNFTSale {
