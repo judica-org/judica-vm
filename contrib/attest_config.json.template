@@ -2,12 +2,12 @@
     "bitcoin": {
         "url": "http://127.0.0.1:18443",
         "auth": {
-            "CookieFile": "/Users/jr/Library/Application Support/Bitcoin/signet/.cookie"
+            "CookieFile": "$BITCOIN_DIR/signet/.cookie"
         }
     },
     "subname": "testing-$PLAYER",
     "tor": {
-        "directory": "/Users/jr/demo-app-dir/$PLAYER/attest/tor",
+        "directory": "$TOR_DIR/$PLAYER/attest/tor",
         "socks_port": $SOCKS_PORT
     },
     "attestation_port": $APP_PORT,
