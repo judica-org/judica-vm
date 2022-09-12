@@ -8,7 +8,6 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::mpsc::channel;
-use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 mod attestations;
 mod configuration;
@@ -111,22 +110,6 @@ async fn init_main(g: Arc<Globals>) -> Result<(), Box<dyn Error + Send + Sync>> 
 
     tracing::debug!("Exiting");
     INFER_UNIT
-}
-
-impl Config {
-    async fn setup_db(&self) -> Result<MsgDB, Box<dyn Error + Send + Sync>> {
-        if self.test_db {
-            let db = MsgDB::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())));
-            db.get_handle().await.setup_tables();
-            Ok(db)
-        } else {
-            let application = format!("attestations.{}", self.subname);
-            let mdb = setup_db(&application, self.prefix.clone())
-                .await
-                .map_err(|e| format!("{}", e))?;
-            Ok(mdb)
-        }
-    }
 }
 
 #[cfg(test)]
