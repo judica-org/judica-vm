@@ -35,10 +35,9 @@ export const EnergyExchange = () => {
   const [listings, setListings] = useState<NFTSale[] | null>(null);
 
   useEffect(() => {
-    setListings(stub_listings)
     const unlisten_energy_exchange = appWindow.listen("energy-exchange", (ev) => {
       console.log(['energy-exchange'], ev);
-      // setListings(JSON.parse(ev.payload as string) as NFTSale[]);
+      setListings(JSON.parse(ev.payload as string) as NFTSale[]);
     });
 
     return () => {

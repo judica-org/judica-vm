@@ -6,7 +6,7 @@ import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent } from '@mui/material';
 const { useState, useEffect } = React;
 
-const plant_data = [{
+const stub_plant_data = [{
     id: 45637,
     lat: 46.818188,
     lng: 8.227512,

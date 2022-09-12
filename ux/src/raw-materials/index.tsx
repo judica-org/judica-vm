@@ -24,7 +24,7 @@ type MaterialPriceDisplay = {
     asset_b: number;
   },
   material_type: MaterialType;
-  price: number;
+  price: number | 'not available';
   currency: string;
 }
 
