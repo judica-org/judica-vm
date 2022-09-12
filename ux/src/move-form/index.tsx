@@ -9,11 +9,11 @@ export default function MoveForm() {
 
   useEffect(() => {
     (async () => {
-      set_schema(await invoke("get_move_schema"));
+      set_schema(await tauri_host.get_move_schema());
     })()
 
   }, []);
-  console.log("move schema:",schema);
+  console.log("move schema:", schema);
   const handle_submit = (data: FormSubmit) => {
     // TODO: Submit from correct user
     if (uid.current?.valueAsNumber)

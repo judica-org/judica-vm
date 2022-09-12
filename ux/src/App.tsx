@@ -119,13 +119,6 @@ function GameBoard(props: { g: game_board }) {
   </ul>;
 }
 
-let invoked = false;
-export const invoke_once = () => {
-  if (invoked) return;
-  invoked = true;
-  invoke("game_synchronizer")
-}
-
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
 
