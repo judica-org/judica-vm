@@ -19,7 +19,7 @@ use mine_with_friends_board::{
     },
 };
 use sapio_bitcoin::{
-    secp256k1::{All, Secp256k1},
+    secp256k1::{All, Secp256k1, SecretKey},
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
@@ -141,7 +141,6 @@ async fn make_new_user(
 async fn make_move_inner(
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
-    user: XOnlyPublicKey,
     nextMove: GameMove,
     from: EntityID,
 ) -> Result<(), ()> {
@@ -149,8 +148,9 @@ async fn make_move_inner(
     let v = ruma_serde::to_canonical_value(nextMove).map_err(|_| ())?;
     let mut handle = msgdb.get_handle().await;
     let keys = handle.get_keymap().map_err(|_| ())?;
-    let sk = keys.get(&user).ok_or(())?;
-    let keypair = KeyPair::from_secret_key(secp.inner(), sk);
+    // For now, assume that keymap has one entry.
+    let sks:Vec<SecretKey> = keys.values().cloned().collect();
+    let keypair = KeyPair::from_secret_key(secp.inner(), &sks[0]);
     // TODO: Runa tipcache
     let msg = handle
         .wrap_message_in_envelope_for_user_by_key(
