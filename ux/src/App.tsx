@@ -1,23 +1,25 @@
-import { invoke } from '@tauri-apps/api';
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import './App.css';
 import Form, { FormSubmit } from "@rjsf/core";
 import RawMaterialsMarket from './raw-materials';
-
+import { tauri_host } from './tauri_host';
+import { SwitchToGame } from './SwitchToGame';
+import { SwitchToDB } from './SwitchToDB';
 
 function MoveForm() {
   const [schema, set_schema] = React.useState<null | any>(null);
   React.useEffect(() => {
     (async () => {
-      set_schema(await invoke("get_move_schema"));
+      set_schema(await tauri_host.get_move_schema());
     })()
   }, []);
   console.log(schema);
   const handle_submit = (data: FormSubmit) => {
     // TODO: Submit from correct user
-    invoke("make_move_inner", { nextMove: data.formData, from: uid.current?.valueAsNumber })
-
+    const uid_n = uid.current?.valueAsNumber;
+    if (uid_n)
+      tauri_host.make_move_inner(data.formData, uid_n)
   };
   const schema_form = React.useMemo<JSX.Element>(() => {
     const customFormats = { "uint128": (s: string) => { return true; } };
@@ -91,12 +93,6 @@ function GameBoard(props: { g: game_board }) {
 
   </ul>;
 }
-let invoked = false;
-const invoke_once = () => {
-  if (invoked) return;
-  invoked = true;
-  invoke("game_synchronizer")
-}
 function App() {
   const [game_board, set_game_board] = React.useState<game_board | null>(null);
   React.useEffect(() => {
@@ -104,7 +100,7 @@ function App() {
       console.log(ev);
       set_game_board(JSON.parse(ev.payload as string) as game_board)
     });
-    invoke_once()
+    tauri_host.game_synchronizer()
     return () => {
       (async () => {
         (await unlisten)()
@@ -117,6 +113,8 @@ function App() {
       {game_board && <GameBoard g={game_board}></GameBoard>}
       <RawMaterialsMarket></RawMaterialsMarket>
       <MoveForm></MoveForm>
+      <SwitchToGame></SwitchToGame>
+      <SwitchToDB></SwitchToDB>
     </div>
   );
 }
