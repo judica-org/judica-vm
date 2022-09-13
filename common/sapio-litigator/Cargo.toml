@@ -1,0 +1,68 @@
+[package]
+name = "sapio-litigator"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+schemars = "0.8.0"
+serde_json = "1.0"
+serde = "1.0"
+serde_derive = "1.0"
+clap = "=3.0.0-beta.2"
+base64 = "0.13.0"
+lazy_static = "1.4.0"
+bitcoincore-rpc-async = "4.0.1-alpha.1"
+tokio = { version = "1", features = ["full"] }
+directories = "3.0.1"
+rand="^0.6"
+jsonschema-valid = "0.4.0"
+
+[dependencies.sapio-psbt]
+path = "../../submodule/sapio/sapio-psbt"
+version = "0.1.0"
+
+[dependencies.wasmer]
+version = "2.2.1"
+
+[dependencies.wasmer-cache]
+version = "2.2.1"
+
+[dependencies.bitcoin]
+package = "sapio-bitcoin"
+version = "0.28.0"
+features = ['use-serde', 'rand', 'base64']
+
+[dependencies.miniscript]
+package = "sapio-miniscript"
+version = "^7.0.0"
+features = ['compiler', 'use-serde', 'rand', 'use-schemars', 'serde']
+
+[dependencies.sapio]
+path = "../../submodule/sapio/sapio"
+version = "0.2.0"
+
+[dependencies.sapio-base]
+path = "../../submodule/sapio/sapio-base"
+version = "0.2.0"
+
+[dependencies.ctv_emulators]
+path = "../../submodule/sapio/ctv_emulators"
+version = "0.2.0"
+
+
+[dependencies.sapio-contrib]
+path = "../../submodule/sapio/sapio-contrib"
+version = "0.2.0"
+
+[dependencies.simp-pack]
+path = "../../submodule/sapio/simp-pack"
+version = "0.1.0"
+
+
+
+[dependencies.sapio-wasm-plugin]
+path = "../../submodule/sapio/plugins"
+version = "0.2.0"
+features = ["host"]

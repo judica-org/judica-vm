@@ -9,6 +9,7 @@ members = [
     "common/game-host",
     "common/game-host-messages",
     "common/game-sequencer",
+    "common/sapio-litigator",
 ]
 
 exclude=["ux/src-tauri/"]
