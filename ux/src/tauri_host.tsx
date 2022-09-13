@@ -23,7 +23,10 @@ export const tauri_host = {
   switch_to_db: async (appName: string, prefix: string | null) => {
     return invoke("switch_to_db", { appName, prefix });
   },
-  set_signing_key: async (selected: string|null) => {
-    return invoke("set_signing_key", {selected});
+  set_signing_key: async (selected: string | null) => {
+    return invoke("set_signing_key", { selected });
+  },
+  send_chat: async (chat: string) => {
+    return invoke("send_chat", { chat })
   }
 };

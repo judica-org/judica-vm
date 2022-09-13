@@ -35,6 +35,8 @@ pub enum GameMove {
     RegisterUser(RegisterUser),
     /// # Send Coins
     SendTokens(SendTokens),
+    /// # Send a logged Chat Message to All Players
+    Chat(Chat),
 }
 
 impl GameMove {
@@ -48,7 +50,8 @@ impl GameMove {
             GameMove::Trade(_)
             | GameMove::PurchaseNFT(_)
             | GameMove::ListNFTForSale(_)
-            | GameMove::SendTokens(_) => false,
+            | GameMove::SendTokens(_)
+            | GameMove::Chat(_) => false,
             GameMove::Init(_) | GameMove::RegisterUser(_) | GameMove::NoNewUsers(_) => true,
         }
     }
@@ -71,6 +74,7 @@ derive_from!(PurchaseNFT);
 derive_from!(ListNFTForSale);
 derive_from!(RegisterUser);
 derive_from!(SendTokens);
+derive_from!(Chat);
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Init();
@@ -111,10 +115,19 @@ pub struct SendTokens {
     pub currency: Currency,
 }
 
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Chat(pub String);
+
 impl MoveEnvelope {
-    pub fn create(g: GameMove, sequence: u64, _sig: String, from: EntityID, time: u64) -> Self {
+    pub fn create<G: Into<GameMove>>(
+        g: G,
+        sequence: u64,
+        _sig: String,
+        from: EntityID,
+        time: u64,
+    ) -> Self {
         MoveEnvelope {
-            d: sanitize::Unsanitized(g),
+            d: sanitize::Unsanitized(g.into()),
             sequence,
             from,
             time,
