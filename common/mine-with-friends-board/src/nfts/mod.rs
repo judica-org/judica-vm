@@ -1,4 +1,5 @@
-use self::instances::powerplant::PowerPlant;
+use self::instances::powerplant::{PlantType, PowerPlant};
+use crate::util::{ForSale, HasMiners, Location, Watts};
 
 use super::entity::EntityID;
 use schemars::JsonSchema;
@@ -105,4 +106,19 @@ impl NFT for BaseNFT {
     fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap()
     }
+}
+
+#[derive(Serialize, Clone)]
+pub struct UXPlantData {
+    pub coordinates: Location,
+    pub for_sale: ForSale,
+    pub has_miners: HasMiners,
+    pub owner: EntityID,
+    pub plant_type: PlantType,
+    pub watts: Watts,
+    pub hashrate: u128,
+}
+#[derive(Serialize, Clone)]
+pub struct UXNFTRegistry {
+    pub power_plant_data: BTreeMap<NftPtr, UXPlantData>,
 }

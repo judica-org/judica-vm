@@ -13,7 +13,11 @@ use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::BaseNFT;
 use crate::nfts::NFTRegistry;
+use crate::nfts::UXNFTRegistry;
+use crate::nfts::UXPlantData;
 
+use crate::nfts::sale::UXForSaleList;
+use crate::nfts::sale::UXNFTSale;
 use crate::sanitize::Sanitizable;
 use crate::tokens;
 use crate::tokens::instances::asics::ASICProducer;
@@ -371,6 +375,71 @@ impl GameBoard {
         });
 
         Ok(price_data)
+    }
+
+    // where does miner status come from
+    pub fn get_ux_power_plant_data(&mut self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
+        let mut power_plant_data = Vec::new();
+        let plants = &self.nfts.power_plants.clone();
+        plants.iter().for_each(|(pointer, power_plant)| {
+            let mut for_sale = false;
+            if let Some(_nft_sale) = &self.nft_sales.nfts.get(&pointer) {
+                for_sale = true;
+            }
+            // unwrap should be safe here - we have problems if we have a pointer and cant find the NFT.
+            let owner = &self.nfts.nfts.get(pointer).unwrap().owner();
+
+            power_plant_data.push((
+                *pointer,
+                UXPlantData {
+                    coordinates: power_plant.coordinates,
+                    for_sale,
+                    has_miners: false,
+                    owner: owner.clone(),
+                    plant_type: power_plant.plant_type.clone(),
+                    watts: power_plant.watts,
+                    hashrate: power_plant.compute_hashrate(self),
+                },
+            ));
+        });
+        power_plant_data
+    }
+    // how do we tell whether hashbox is colocated?
+    pub fn get_all_power_plants(&mut self) -> Result<UXNFTRegistry, ()> {
+        let mut power_plant_data = BTreeMap::new();
+
+        let power_plant_vec = self.get_ux_power_plant_data();
+        power_plant_vec.iter().for_each(|(ptr, plant)| {
+            power_plant_data.insert(*ptr, plant.clone());
+        });
+
+        return Ok(UXNFTRegistry { power_plant_data });
+    }
+
+    pub fn get_user_power_plants(&mut self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
+        let mut power_plant_data = BTreeMap::new();
+        let mut power_plant_vec = self.get_ux_power_plant_data();
+        // should use something other than drain_filter?
+        power_plant_vec.retain(|(_ptr, plant)| plant.owner.eq(&user_id));
+        power_plant_vec.iter().for_each(|(ptr, plant)| {
+            power_plant_data.insert(*ptr, plant.clone());
+        });
+        // return shape?
+        return Ok(UXNFTRegistry { power_plant_data });
+    }
+
+    pub fn get_ux_energy_market(&self) -> Result<UXForSaleList, ()> {
+        let mut listings = Vec::new();
+        self.nft_sales.nfts.iter().for_each(|(pointer, listing)| {
+            listings.push(UXNFTSale {
+                nft_id: *pointer,
+                price: listing.price.clone(),
+                currency: listing.currency,
+                seller: listing.seller,
+                transfer_count: listing.transfer_count,
+            });
+        });
+        return Ok(UXForSaleList { listings });
     }
 }
 

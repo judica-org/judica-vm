@@ -1,18 +1,34 @@
 import { appWindow } from '@tauri-apps/api/window';
-import React from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import './App.css';
 import Form, { FormSubmit } from "@rjsf/core";
+import EnergyExchange, { NFTSale } from './energy-exchange';
+import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials';
 import { tauri_host } from './tauri_host';
 import { SwitchToGame } from './SwitchToGame';
 import { SwitchToDB } from './SwitchToDB';
+import { invoke } from '@tauri-apps/api';
+
+export type PlantType = 'Solar'|'Hydro'|'Flare';
+export type PowerPlant = {
+  id: number,
+  plant_type: PlantType //how does PlantType enum show up
+  watts: number,
+  coordinates: number[],
+  owner: number,
+  has_miners: boolean,
+  for_sale: boolean,
+}
 
 function MoveForm() {
-  const [schema, set_schema] = React.useState<null | any>(null);
-  React.useEffect(() => {
+  const [schema, set_schema] = useState<null | any>(null);
+
+  useEffect(() => {
     (async () => {
       set_schema(await tauri_host.get_move_schema());
     })()
+
   }, []);
   console.log(schema);
   const handle_submit = (data: FormSubmit) => {
@@ -21,7 +37,7 @@ function MoveForm() {
     if (uid_n)
       tauri_host.make_move_inner(data.formData, uid_n)
   };
-  const schema_form = React.useMemo<JSX.Element>(() => {
+  const schema_form = useMemo<JSX.Element>(() => {
     const customFormats = { "uint128": (s: string) => { return true; } };
     if (schema)
       return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
@@ -32,7 +48,7 @@ function MoveForm() {
   }
     , [schema]
   )
-  const uid = React.useRef<null | HTMLInputElement>(null);
+  const uid = useRef<null | HTMLInputElement>(null);
   return schema && <div className='MoveForm'>
     <div>
       <label>Player ID:</label>
@@ -42,14 +58,24 @@ function MoveForm() {
   </div>;
 }
 
+type NFTs = {
+  nfts: { nft_id: number, owner: number, transfer_count: number }[],
+  power_plants: {
+    id: number,
+    plant_type: string //how does PlantType enum show up
+    watts: number,
+    coordinates: number[]
+  }[]
+}
+
 type game_board = {
   erc20s: any,
-  swap: any,
+  swap: any, // determine TS swap shape
   turn_count: number,
   alloc: any,
   users: Record<string, string>,
-  nfts: any,
-  nft_sales: any,
+  nfts: NFTs,
+  nft_sales: { nfts: NFTSale },
   player_move_sequences: Record<string, number>,
   init: boolean,
   new_users_allowed: boolean,
@@ -57,6 +83,7 @@ type game_board = {
   dollar_token_id: null | string,
   root_user: null | string,
 };
+
 function GameBoard(props: { g: game_board }) {
   return <ul>
     <li>
@@ -89,30 +116,32 @@ function GameBoard(props: { g: game_board }) {
     <li>
       NFT Sales: {JSON.stringify(props.g.nft_sales)}
     </li>
-
-
   </ul>;
 }
+
 function App() {
-  const [game_board, set_game_board] = React.useState<game_board | null>(null);
-  React.useEffect(() => {
-    const unlisten = appWindow.listen("game-board", (ev) => {
-      console.log(ev);
+  const [game_board, set_game_board] = useState<game_board | null>(null);
+
+  useEffect(() => {
+    const unlisten_game_board = appWindow.listen("game-board", (ev) => {
+      console.log(['game-board-event'], ev);
       set_game_board(JSON.parse(ev.payload as string) as game_board)
     });
     tauri_host.game_synchronizer()
     return () => {
       (async () => {
-        (await unlisten)()
+        (await unlisten_game_board)();
       })();
     }
   }, [game_board]);
 
   return (
     <div className="App">
-      {game_board && <GameBoard g={game_board}></GameBoard>}
+      <WorkingGlobe></WorkingGlobe>
+      {<EnergyExchange></EnergyExchange>}
       <RawMaterialsMarket></RawMaterialsMarket>
       <MoveForm></MoveForm>
+      {game_board && <GameBoard g={game_board}></GameBoard>}
       <SwitchToGame></SwitchToGame>
       <SwitchToDB></SwitchToDB>
     </div>

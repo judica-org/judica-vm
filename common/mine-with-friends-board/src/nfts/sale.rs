@@ -7,17 +7,31 @@ use crate::util::Currency;
 use crate::util::Price;
 use serde::Serialize;
 use std::collections::BTreeMap;
+
+// Listings formatted for UX consumption
+#[derive(Serialize, Clone)]
+pub struct UXForSaleList {
+    pub listings: Vec<UXNFTSale>,
+}
+#[derive(Serialize, Clone)]
+pub struct UXNFTSale {
+    pub nft_id: NftPtr,
+    pub price: Price,
+    pub currency: Currency,
+    pub seller: EntityID,
+    pub transfer_count: u128,
+}
 /// Represents an offer to sell an NFT
 #[derive(Serialize)]
 pub struct NFTSale {
     /// The Price the owner will accept
-    price: Price,
+    pub price: Price,
     /// The Currency the owner will be paid in
-    currency: Currency,
+    pub currency: Currency,
     /// The seller's ID _at the time the sale was opened_, for replay protection
-    seller: EntityID,
-    /// The transfer_coint of the NFT _at the time the sale was opened_, for replay protection
-    transfer_count: u128,
+    pub seller: EntityID,
+    /// The transfer_count of the NFT _at the time the sale was opened_, for replay protection
+    pub transfer_count: u128,
 }
 /// A Registry of all pending sales
 #[derive(Serialize, Default)]

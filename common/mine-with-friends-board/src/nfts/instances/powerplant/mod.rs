@@ -9,11 +9,8 @@ use super::lockup::CoinLockup;
 
 #[derive(Serialize, Clone)]
 pub enum PlantType {
-    Coal,
     Solar,
     Hydro,
-    Nuclear,
-    Geothermal,
     Flare,
 }
 #[derive(Serialize, Clone)]
@@ -26,10 +23,11 @@ pub(crate) struct PowerPlant {
 
 impl PowerPlant {
     /// Compute the total hashes per second of this powerplant at this game state
-    fn compute_hashrate(&self, game: &mut GameBoard) -> u128 {
+    pub(crate) fn compute_hashrate(&self, game: &mut GameBoard) -> u128 {
         // TODO: Some algo that uses watts / coordinates / plant_type to compute a scalar?
         let _scale = 1000;
-        let mut hash = Vec::with_capacity(game.tokens.hashboards.len());
+        let len = game.tokens.hashboards.len();
+        let mut hash = Vec::with_capacity(len);
         let hashers: Vec<_> = game.tokens.hashboards.keys().cloned().collect();
         for token in hashers {
             if let Some(hbd) = game.tokens.hashboards.get(&token) {

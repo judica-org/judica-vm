@@ -9,10 +9,7 @@ use attest_database::{
 };
 use mine_with_friends_board::{
     entity::EntityID,
-    game::{
-        game_move::{GameMove, Init, Trade},
-        GameBoard,
-    },
+    game::{game_move::{GameMove, PurchaseNFT, Trade, Init}, GameBoard}, nfts::{UXPlantData, UXNFTRegistry, sale::UXForSaleList, NftPtr},
     tokens::{
         token_swap::{TradingPairID, UXMaterialsPriceData},
         TokenPointer,
@@ -23,7 +20,7 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
-use std::{error::Error, path::PathBuf, sync::Arc};
+use std::{error::Error, path::PathBuf, sync::Arc, collections::BTreeMap};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::{
@@ -77,12 +74,30 @@ async fn game_synchronizer(
             p
         };
 
+
+        let power_plants = {
+            let mut game = s.inner().lock().await;
+            let plants: Vec<(NftPtr, UXPlantData)> = game.as_mut().map(|g| g.board.get_ux_power_plant_data())
+            .unwrap_or_else(||Vec::new());
+            plants
+        };
+
+        let listings = {
+            let game = s.inner().lock().await;
+            let listings = game.as_ref().map(|g| g.board.get_ux_energy_market()).unwrap_or(Ok(UXForSaleList{
+                listings: Vec::new()
+            })).unwrap();
+            listings
+        };
+
         println!("Emitting!");
         window.emit("available-sequencers", list_of_chains);
         window.emit("host-key", key).unwrap();
         window.emit("db-connection", (appName, prefix)).unwrap();
         window.emit("game-board", gamestring).unwrap();
         window.emit("materials-price-data", raw_price_data).unwrap();
+        window.emit("power-plants",  power_plants).unwrap();
+        window.emit("energy-exchange", listings.listings).unwrap();
         if let Some(w) = wait_on {
             w.await;
         } else {
@@ -95,6 +110,15 @@ async fn game_synchronizer(
 fn get_move_schema() -> RootSchema {
     schema_for!(GameMove)
 }
+
+#[tauri::command]
+fn get_purchase_schema() -> RootSchema {
+    schema_for!(PurchaseNFT)
+}
+
+// get transfer_token schema, get list of tokens, and make individual components around each
+// make sure everything is consistent state wise.
+// wrap in game move when you handleSubmit
 
 #[tauri::command]
 fn get_materials_schema() -> RootSchema {
@@ -271,6 +295,7 @@ fn main() {
             game_synchronizer,
             get_move_schema,
             get_materials_schema,
+            get_purchase_schema,
             make_move_inner,
             switch_to_game,
             switch_to_db,

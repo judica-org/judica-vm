@@ -2,10 +2,32 @@ import { useState } from 'react';
 import { Modal, Button, Paper, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PurchaseMaterialForm from '../purchase-material';
+import PurchaseOfferForm from '../purchase-offer';
 import { RawMaterialsActions } from '../util';
+import SaleListingForm from '../sale-listing';
 
-function FormModal({ title, currency, material_type }: { readonly title: RawMaterialsActions; readonly currency: string; material_type: string }) {
+type FormModalProps = {
+  readonly title: RawMaterialsActions | 'Purchase Plant' | 'Sell Plant';
+  readonly currency: string;
+  readonly material_type?: string;
+  readonly nft_id?: number
+};
+
+function FormModal({ title, currency, material_type, nft_id }: FormModalProps) {
   const [open, setOpen] = useState(false);
+
+  const pickForm = (title: string) => {
+    switch (title) {
+      case 'Purchase Materials':
+        return <PurchaseMaterialForm action={title} subtitle={`Purchase ${material_type as string} from the market?`} currency={currency} />;
+      case 'Sell Materials':
+        return <PurchaseMaterialForm action={title} subtitle={`Sell some of your ${material_type as string}?`} currency={currency} />;
+      case 'Purchase Plant':
+        return <PurchaseOfferForm subtitle={`Purchase plant ${nft_id as number}`} />;
+      case 'Sell Plant':
+        return <SaleListingForm subtitle={'Sell'} />
+    }
+  }
 
   const CustomModal = () => {
     return (
@@ -27,7 +49,8 @@ function FormModal({ title, currency, material_type }: { readonly title: RawMate
           }} onClick={handleClose}>
             <CloseIcon />
           </IconButton>
-          {title === 'Purchase' ? <PurchaseMaterialForm action={title} subtitle={`Purchase ${material_type} from the market?`} currency={currency} /> : <PurchaseMaterialForm action={title} subtitle={`Sell some of your ${material_type}?`} currency={currency} />}
+          {
+            pickForm(title)}
         </Paper>
       </Modal>
     )
