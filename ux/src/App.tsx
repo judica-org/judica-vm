@@ -6,11 +6,10 @@ import EnergyExchange, { NFTSale } from './energy-exchange';
 import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials';
 import { tauri_host } from './tauri_host';
-import { SwitchToGame } from './SwitchToGame';
-import { SwitchToDB } from './SwitchToDB';
-import { invoke } from '@tauri-apps/api';
-import { KeySelector } from './select-key';
+import { SwitchToDB } from './header/SwitchToDB';
 import { Chat } from './chat/Chat';
+import { SwitchToGame } from './header/SwitchToGame';
+import { KeySelector } from './header/KeySelector';
 
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {

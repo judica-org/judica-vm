@@ -1,6 +1,6 @@
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
-import { tauri_host } from './tauri_host';
+import { tauri_host } from '../tauri_host';
 
 let lastId = 0;
 function unique_id(prefix = 'switch-to-db-id') {
