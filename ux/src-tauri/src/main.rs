@@ -167,15 +167,16 @@ async fn make_new_user(
 async fn make_move_inner(
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
-    user: XOnlyPublicKey,
+    sk: State<'_, SigningKeyInner>,
     nextMove: GameMove,
     from: EntityID,
 ) -> Result<(), ()> {
+    let xpubkey = sk.inner().lock().await.unwrap();
     let msgdb = db.get().await.map_err(|e| ())?;
     let v = ruma_serde::to_canonical_value(nextMove).map_err(|_| ())?;
     let mut handle = msgdb.get_handle().await;
     let keys = handle.get_keymap().map_err(|_| ())?;
-    let sk = keys.get(&user).ok_or(())?;
+    let sk = keys.get(&xpubkey).ok_or(())?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
     // TODO: Runa tipcache
     let msg = handle
