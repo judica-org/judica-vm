@@ -114,7 +114,7 @@ where
 async fn connect_and_test_nodes() {
     const NODES: u8 = 5;
     test_context(NODES, |ports| async move {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
         // TODO: Guarantee all clients are started?
         let base = Client::new();
         let client = AttestationClient::new(base.clone());
@@ -237,7 +237,7 @@ async fn connect_and_test_nodes() {
         check_synched(2, true).await;
 
         // wait twice the time for our attach_tips to get called (TODO: have a non-race condition?)
-        tokio::time::sleep(Duration::from_millis(2000)).await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
 
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
@@ -261,7 +261,7 @@ async fn connect_and_test_nodes() {
         )
         .await;
         check_synched(11, true).await;
-        tokio::time::sleep(Duration::from_millis(2000)).await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
         ()
