@@ -1,3 +1,4 @@
+use self::game_move::AddNewPlayer;
 use self::game_move::Chat;
 use self::game_move::GameMove;
 use self::game_move::Init;
@@ -129,7 +130,7 @@ impl GameBoard {
         MoveEnvelope {
             d,
             sequence,
-            from,
+            mut from,
             time,
         }: MoveEnvelope,
         signed_by: String,
@@ -144,13 +145,19 @@ impl GameBoard {
         } else {
             *current_move = sequence;
         }
-        let mv = d.sanitize(())?;
+        let mut mv = d.sanitize(())?;
         if !self.user_is_admin(from) && mv.is_priviledged() {
             return Ok(());
         }
 
         self.update_current_time(Some((from, time)));
         self.process_ticks();
+        if let GameMove::AddNewPlayer(_) = mv {
+            mv = GameMove::RegisterUser(RegisterUser {
+                hex_user_key: signed_by,
+            });
+            from = self.root_user().unwrap();
+        }
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         self.play_inner(mv, from)
@@ -272,6 +279,7 @@ impl GameBoard {
                     }));
                 }
             }
+            GameMove::AddNewPlayer(AddNewPlayer()) => {}
             GameMove::RegisterUser(RegisterUser { hex_user_key }) => {
                 if self.new_users_allowed {
                     self.users

@@ -10,7 +10,7 @@ use attest_database::{
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
-        game_move::{GameMove, Init, Chat, PurchaseNFT, Trade},
+        game_move::{AddNewPlayer, Chat, GameMove, Init, PurchaseNFT, Trade},
         GameBoard,
     },
     nfts::{sale::UXForSaleList, NftPtr, UXNFTRegistry, UXPlantData},
@@ -20,6 +20,7 @@ use mine_with_friends_board::{
     },
 };
 use sapio_bitcoin::{
+    hashes::hex::ToHex,
     secp256k1::{All, Secp256k1},
     KeyPair, XOnlyPublicKey,
 };
@@ -174,20 +175,36 @@ async fn list_my_users(
         .collect();
     Ok(ret)
 }
+
+trait ErrToString<E> {
+    fn err_to_string(self) -> Result<E, String>;
+}
+impl<E, T: std::fmt::Debug> ErrToString<E> for Result<E, T> {
+    fn err_to_string(self) -> Result<E, String> {
+        self.map_err(|e| format!("{:?}", e))
+    }
+}
+
 #[tauri::command]
-async fn make_new_user(
+async fn make_new_chain(
     nickname: String,
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
-) -> Result<XOnlyPublicKey, Box<dyn Error>> {
-    let (kp, next_nonce, genesis) = generate_new_user(secp.inner(), None::<()>)?;
-    let msgdb = db.get().await?;
+) -> Result<String, String> {
+    let (kp, next_nonce, genesis) =
+        generate_new_user(secp.inner(), Some(GameMove::AddNewPlayer(AddNewPlayer())))
+            .err_to_string()?;
+    let msgdb = db.get().await.err_to_string()?;
     let mut handle = msgdb.get_handle().await;
     // TODO: Transaction?
-    handle.insert_user_by_genesis_envelope(nickname, genesis.self_authenticate(secp.inner())?);
+    handle.save_keypair(kp).err_to_string()?;
     let k = kp.public_key().x_only_public_key().0;
     handle.save_nonce_for_user_by_key(next_nonce, secp.inner(), k);
-    Ok(k)
+    handle.insert_user_by_genesis_envelope(
+        nickname,
+        genesis.self_authenticate(secp.inner()).err_to_string()?,
+    );
+    Ok(k.to_hex())
 }
 
 #[tauri::command]
@@ -362,6 +379,7 @@ fn main() {
             switch_to_db,
             set_signing_key,
             send_chat,
+            make_new_chain
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

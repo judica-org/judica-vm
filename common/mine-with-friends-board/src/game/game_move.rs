@@ -24,6 +24,8 @@ pub enum GameMove {
     /// # Stop Inviting New Users
     #[schemars(skip)]
     NoNewUsers(NoNewUsers),
+    #[schemars(skip)]
+    AddNewPlayer(AddNewPlayer),
     /// # Trade Coins
     Trade(Trade),
     /// # Buy NFTs
@@ -51,7 +53,8 @@ impl GameMove {
             | GameMove::PurchaseNFT(_)
             | GameMove::ListNFTForSale(_)
             | GameMove::SendTokens(_)
-            | GameMove::Chat(_) => false,
+            | GameMove::Chat(_)
+            | GameMove::AddNewPlayer(_) => false,
             GameMove::Init(_) | GameMove::RegisterUser(_) | GameMove::NoNewUsers(_) => true,
         }
     }
@@ -69,6 +72,7 @@ macro_rules! derive_from {
 }
 derive_from!(Init);
 derive_from!(NoNewUsers);
+derive_from!(AddNewPlayer);
 derive_from!(Trade);
 derive_from!(PurchaseNFT);
 derive_from!(ListNFTForSale);
@@ -81,6 +85,9 @@ pub struct Init();
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct NoNewUsers();
+
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AddNewPlayer();
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Trade {
