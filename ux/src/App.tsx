@@ -10,8 +10,9 @@ import { SwitchToGame } from './SwitchToGame';
 import { SwitchToDB } from './SwitchToDB';
 import { invoke } from '@tauri-apps/api';
 import { KeySelector } from './select-key';
+import { Chat } from './chat/Chat';
 
-export type PlantType = 'Solar'|'Hydro'|'Flare';
+export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
   id: number,
   plant_type: PlantType //how does PlantType enum show up
@@ -138,18 +139,19 @@ function App() {
 
   return (
     <div>
-      <div className="App-header"> 
-      <SwitchToGame></SwitchToGame>
-      <SwitchToDB></SwitchToDB>
-      <KeySelector></KeySelector>
+      <div className="App-header">
+        <SwitchToGame></SwitchToGame>
+        <SwitchToDB></SwitchToDB>
+        <KeySelector></KeySelector>
       </div>
-    <div className="App">
-      <WorkingGlobe></WorkingGlobe>
-      {<EnergyExchange></EnergyExchange>}
-      <RawMaterialsMarket></RawMaterialsMarket>
-      <MoveForm></MoveForm>
-      {game_board && <GameBoard g={game_board}></GameBoard>}
-    </div>
+      <div className="App">
+        <WorkingGlobe></WorkingGlobe>
+        {<EnergyExchange></EnergyExchange>}
+        <RawMaterialsMarket></RawMaterialsMarket>
+        <MoveForm></MoveForm>
+        <Chat></Chat>
+        {game_board && <GameBoard g={game_board}></GameBoard>}
+      </div>
     </div>
   );
 }

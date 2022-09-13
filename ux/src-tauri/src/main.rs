@@ -10,7 +10,7 @@ use attest_database::{
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
-        game_move::{GameMove, Init, PurchaseNFT, Trade},
+        game_move::{GameMove, Init, Chat, PurchaseNFT, Trade},
         GameBoard,
     },
     nfts::{sale::UXForSaleList, NftPtr, UXNFTRegistry, UXPlantData},
@@ -56,7 +56,7 @@ async fn game_synchronizer(
         // that the lifetime is 'static and we can successfully wait on it outside
         // the lock.
         let mut arc_cheat = None;
-        let (gamestring, wait_on, key) = {
+        let (gamestring, wait_on, key, chat_log) = {
             let game = s.inner().lock().await;
             let s = game
                 .as_ref()
@@ -64,7 +64,11 @@ async fn game_synchronizer(
                 .unwrap_or("null".into());
             arc_cheat = game.as_ref().map(|g: &Game| g.should_notify.clone());
             let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
-            (s, w, game.as_ref().map(|g| g.host_key))
+            let chat_log = game
+                .as_ref()
+                .map(|g| g.board.get_ux_chat_log())
+                .unwrap_or_default();
+            (s, w, game.as_ref().map(|g| g.host_key), chat_log)
         };
         let (appName, prefix, list_of_chains, user_keys) = {
             let l = d.inner().state.lock().await;
@@ -78,6 +82,7 @@ async fn game_synchronizer(
             }
         };
 
+        // TODO: move these under a single held game lock
         // Attempt to get data to show prices
         let raw_price_data = {
             let mut game = s.inner().lock().await;
@@ -113,6 +118,7 @@ async fn game_synchronizer(
         println!("Emitting!");
         window.emit("available-sequencers", list_of_chains);
         let signing_key: Option<_> = *signing_key.inner().lock().await;
+        window.emit("chat-log", chat_log);
         window.emit("signing-key", signing_key);
         window.emit("host-key", key).unwrap();
         window.emit("user-keys", user_keys).unwrap();
@@ -182,6 +188,16 @@ async fn make_new_user(
     let k = kp.public_key().x_only_public_key().0;
     handle.save_nonce_for_user_by_key(next_nonce, secp.inner(), k);
     Ok(k)
+}
+
+#[tauri::command]
+async fn send_chat(
+    secp: State<'_, Secp256k1<All>>,
+    db: State<'_, Database>,
+    sk: State<'_, SigningKeyInner>,
+    chat: String,
+) -> Result<(), ()> {
+    make_move_inner(secp, db, sk, GameMove::from(Chat(chat)), EntityID(0)).await
 }
 
 #[tauri::command]
@@ -344,7 +360,8 @@ fn main() {
             make_move_inner,
             switch_to_game,
             switch_to_db,
-            set_signing_key
+            set_signing_key,
+            send_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,3 +1,4 @@
+use self::game_move::Chat;
 use self::game_move::GameMove;
 use self::game_move::Init;
 use self::game_move::ListNFTForSale;
@@ -34,6 +35,7 @@ use crate::MoveEnvelope;
 use serde::Serialize;
 use std::cmp::max;
 use std::collections::BTreeMap;
+use std::collections::VecDeque;
 use std::ops::Index;
 
 use tokens::TokenBase;
@@ -73,6 +75,8 @@ pub struct GameBoard {
     pub(crate) current_time: u64,
     pub(crate) mining_subsidy: u128,
     pub ticks: BTreeMap<EntityID, u64>,
+    pub chat: VecDeque<(u64, EntityID, String)>,
+    pub chat_counter: u64,
 }
 
 pub struct CallContext {
@@ -102,6 +106,8 @@ impl GameBoard {
             current_time: 0,
             mining_subsidy: 100_000_000_000 * 50,
             ticks: Default::default(),
+            chat: VecDeque::with_capacity(1000),
+            chat_counter: 0,
         }
     }
     /// Creates a new EntityID
@@ -310,8 +316,21 @@ impl GameBoard {
                 let _ = self.tokens[currency].transfer(&from, &to, amount);
                 self.tokens[currency].end_transaction();
             }
+            GameMove::Chat(Chat(s)) => {
+                self.chat_counter += 1;
+                // only log the last 1000 messages
+                // TODO: Configurable? Ignorable?
+                if self.chat.len() >= 1000 {
+                    self.chat.pop_front();
+                }
+                self.chat.push_back((self.chat_counter, from, s));
+            }
         }
         return Ok(());
+    }
+
+    pub fn get_ux_chat_log(&self) -> VecDeque<(u64, EntityID, String)> {
+        self.chat.clone()
     }
 
     pub fn get_ux_materials_prices(&mut self) -> Result<Vec<UXMaterialsPriceData>, ()> {

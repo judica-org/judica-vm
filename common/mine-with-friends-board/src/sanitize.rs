@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     game::game_move::{
-        GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens, Trade,
+        Chat, GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser, SendTokens,
+        Trade,
     },
     nfts::NftPtr,
     tokens::token_swap::TradingPairID,
@@ -77,6 +78,7 @@ impl Sanitizable for GameMove {
             GameMove::ListNFTForSale(x) => x.sanitize(())?.into(),
             GameMove::RegisterUser(x) => x.sanitize(())?.into(),
             GameMove::SendTokens(x) => x.sanitize(())?.into(),
+            GameMove::Chat(x) => x.sanitize(())?.into(),
         })
     }
 }
@@ -114,6 +116,16 @@ impl Sanitizable for Trade {
             amount_a,
             amount_b,
         })
+    }
+}
+
+impl Sanitizable for Chat {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
+
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        Ok(self)
     }
 }
 
