@@ -53,16 +53,18 @@ async fn game_synchronizer(
             let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
             (s, w, game.as_ref().map(|g| g.host_key))
         };
-        let (appName, prefix, list_of_chains) = {
+        let (appName, prefix, list_of_chains, user_keys) = {
             let l = d.inner().state.lock().await;
             if let Some(g) = l.as_ref() {
                 let mut handle = g.db.get_handle().await;
                 let v = handle.get_all_users().map_err(|_| ())?;
-                (g.name.clone(), g.prefix.clone(), v)
+                let keys: Vec<XOnlyPublicKey> = handle.get_keymap().unwrap().into_keys().collect();
+                (g.name.clone(), g.prefix.clone(), v, keys)
             } else {
-                ("".into(), None, vec![])
+                ("".into(), None, vec![], vec![])
             }
         };
+
         // Attempt to get data to show prices
         let raw_price_data = {
             let mut game = s.inner().lock().await;
@@ -73,7 +75,6 @@ async fn game_synchronizer(
                 .unwrap();
             p
         };
-
 
         let power_plants = {
             let mut game = s.inner().lock().await;
@@ -93,6 +94,7 @@ async fn game_synchronizer(
         println!("Emitting!");
         window.emit("available-sequencers", list_of_chains);
         window.emit("host-key", key).unwrap();
+        window.emit("user-keys", user_keys).unwrap();
         window.emit("db-connection", (appName, prefix)).unwrap();
         window.emit("game-board", gamestring).unwrap();
         window.emit("materials-price-data", raw_price_data).unwrap();
