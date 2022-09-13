@@ -9,7 +9,11 @@ use attest_database::{
 };
 use mine_with_friends_board::{
     entity::EntityID,
-    game::{game_move::{GameMove, PurchaseNFT, Trade, Init}, GameBoard}, nfts::{UXPlantData, UXNFTRegistry, sale::UXForSaleList, NftPtr},
+    game::{
+        game_move::{GameMove, Init, PurchaseNFT, Trade},
+        GameBoard,
+    },
+    nfts::{sale::UXForSaleList, NftPtr, UXNFTRegistry, UXPlantData},
     tokens::{
         token_swap::{TradingPairID, UXMaterialsPriceData},
         TokenPointer,
@@ -20,7 +24,7 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
-use std::{error::Error, path::PathBuf, sync::Arc, collections::BTreeMap};
+use std::{collections::BTreeMap, error::Error, path::PathBuf, sync::Arc};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::{
@@ -29,14 +33,22 @@ use tokio::{
 };
 mod tasks;
 
+struct PrintOnDrop(String);
+impl Drop for PrintOnDrop {
+    fn drop(&mut self) {
+        println!("{}", self.0);
+    }
+}
+
 #[tauri::command]
 async fn game_synchronizer(
     window: Window,
     s: GameState<'_>,
     d: State<'_, Database>,
-    signing_key: State<'_, SigningKeyInner>
+    signing_key: State<'_, SigningKeyInner>,
 ) -> Result<(), ()> {
     println!("Registering");
+    let p = PrintOnDrop("Registration Canceled".into());
     loop {
         // No Idea why the borrow checker likes this, but it seems to be the case
         // that because the notified needs to live inside the async state machine
@@ -79,29 +91,35 @@ async fn game_synchronizer(
 
         let power_plants = {
             let mut game = s.inner().lock().await;
-            let plants: Vec<(NftPtr, UXPlantData)> = game.as_mut().map(|g| g.board.get_ux_power_plant_data())
-            .unwrap_or_else(||Vec::new());
+            let plants: Vec<(NftPtr, UXPlantData)> = game
+                .as_mut()
+                .map(|g| g.board.get_ux_power_plant_data())
+                .unwrap_or_else(|| Vec::new());
             plants
         };
 
         let listings = {
             let game = s.inner().lock().await;
-            let listings = game.as_ref().map(|g| g.board.get_ux_energy_market()).unwrap_or(Ok(UXForSaleList{
-                listings: Vec::new()
-            })).unwrap();
+            let listings = game
+                .as_ref()
+                .map(|g| g.board.get_ux_energy_market())
+                .unwrap_or(Ok(UXForSaleList {
+                    listings: Vec::new(),
+                }))
+                .unwrap();
             listings
         };
 
         println!("Emitting!");
         window.emit("available-sequencers", list_of_chains);
-        let signing_key : Option<_> = *signing_key.inner().lock().await;
+        let signing_key: Option<_> = *signing_key.inner().lock().await;
         window.emit("signing-key", signing_key);
         window.emit("host-key", key).unwrap();
         window.emit("user-keys", user_keys).unwrap();
         window.emit("db-connection", (appName, prefix)).unwrap();
         window.emit("game-board", gamestring).unwrap();
         window.emit("materials-price-data", raw_price_data).unwrap();
-        window.emit("power-plants",  power_plants).unwrap();
+        window.emit("power-plants", power_plants).unwrap();
         window.emit("energy-exchange", listings.listings).unwrap();
         if let Some(w) = wait_on {
             w.await;
@@ -246,11 +264,19 @@ async fn switch_to_db(
 
 #[tauri::command]
 async fn set_signing_key(
+    s: GameState<'_>,
     selected: Option<XOnlyPublicKey>,
-    sk: State<'_, SigningKeyInner>
-) -> Result<(),()> {
-    let mut l = sk.inner().lock().await;
-    *l = selected;
+    sk: State<'_, SigningKeyInner>,
+) -> Result<(), ()> {
+    {
+        let mut l = sk.inner().lock().await;
+        *l = selected;
+    }
+    {
+        let mut l = s.lock().await;
+        l.as_ref().map(|g| g.should_notify.notify_one());
+    }
+
     Ok(())
 }
 
@@ -303,7 +329,7 @@ fn main() {
     let db = Database {
         state: Arc::new(Mutex::new(None)),
     };
-    let sk= SigningKeyInner::new(Mutex::new(None));
+    let sk = SigningKeyInner::new(Mutex::new(None));
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(Secp256k1::new())
