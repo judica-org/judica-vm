@@ -53,16 +53,18 @@ async fn game_synchronizer(
             let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
             (s, w, game.as_ref().map(|g| g.host_key))
         };
-        let (appName, prefix, list_of_chains) = {
+        let (appName, prefix, list_of_chains, user_keys) = {
             let l = d.inner().state.lock().await;
             if let Some(g) = l.as_ref() {
                 let mut handle = g.db.get_handle().await;
                 let v = handle.get_all_users().map_err(|_| ())?;
-                (g.name.clone(), g.prefix.clone(), v)
+                let keys: Vec<XOnlyPublicKey> = handle.get_keymap().unwrap().into_keys().collect();
+                (g.name.clone(), g.prefix.clone(), v, keys)
             } else {
-                ("".into(), None, vec![])
+                ("".into(), None, vec![], vec![])
             }
         };
+
         // Attempt to get data to show prices
         let raw_price_data = {
             let mut game = s.inner().lock().await;
@@ -73,7 +75,6 @@ async fn game_synchronizer(
                 .unwrap();
             p
         };
-
 
         let power_plants = {
             let mut game = s.inner().lock().await;
@@ -93,6 +94,7 @@ async fn game_synchronizer(
         println!("Emitting!");
         window.emit("available-sequencers", list_of_chains);
         window.emit("host-key", key).unwrap();
+        window.emit("user-keys", user_keys).unwrap();
         window.emit("db-connection", (appName, prefix)).unwrap();
         window.emit("game-board", gamestring).unwrap();
         window.emit("materials-price-data", raw_price_data).unwrap();
@@ -165,15 +167,16 @@ async fn make_new_user(
 async fn make_move_inner(
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
-    user: XOnlyPublicKey,
+    sk: State<'_, SigningKeyInner>,
     nextMove: GameMove,
     from: EntityID,
 ) -> Result<(), ()> {
+    let xpubkey = sk.inner().lock().await.unwrap();
     let msgdb = db.get().await.map_err(|e| ())?;
     let v = ruma_serde::to_canonical_value(nextMove).map_err(|_| ())?;
     let mut handle = msgdb.get_handle().await;
     let keys = handle.get_keymap().map_err(|_| ())?;
-    let sk = keys.get(&user).ok_or(())?;
+    let sk = keys.get(&xpubkey).ok_or(())?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
     // TODO: Runa tipcache
     let msg = handle
@@ -235,8 +238,16 @@ async fn switch_to_db(
     prefix: Option<PathBuf>,
 ) -> Result<(), ()> {
     let res = db.connect(&appName, prefix.clone()).await.map_err(|_| ());
-
     res
+}
+
+#[tauri::command]
+async fn set_signing_key(
+    selected: XOnlyPublicKey,
+    sk: State<'_, SigningKeyInner>
+) -> Result<(),()> {
+    let _ = sk.inner().lock().await.insert(selected);
+    Ok(())
 }
 
 pub struct Game {
@@ -248,6 +259,8 @@ pub struct Game {
 
 type GameStateInner = Arc<Mutex<Option<Game>>>;
 type GameState<'a> = State<'a, GameStateInner>;
+
+type SigningKeyInner = Arc<Mutex<Option<XOnlyPublicKey>>>;
 
 // Safe to clone because MsgDB has Clone
 #[derive(Clone)]
@@ -286,11 +299,13 @@ fn main() {
     let db = Database {
         state: Arc::new(Mutex::new(None)),
     };
+    let sk= SigningKeyInner::new(Mutex::new(None));
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(Secp256k1::new())
         .manage(game.clone())
         .manage(db)
+        .manage(sk)
         .invoke_handler(tauri::generate_handler![
             game_synchronizer,
             get_move_schema,
@@ -299,6 +314,7 @@ fn main() {
             make_move_inner,
             switch_to_game,
             switch_to_db,
+            set_signing_key
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
