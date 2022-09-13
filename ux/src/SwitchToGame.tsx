@@ -39,7 +39,6 @@ export function SwitchToGame() {
     </option>;
   });
   return <div>
-
     <h4>Connected To: {which_game_loaded}</h4>
     <form onSubmit={handle_submit}>
       <label>Game Key</label>
