@@ -34,6 +34,7 @@ async fn game_synchronizer(
     window: Window,
     s: GameState<'_>,
     d: State<'_, Database>,
+    signing_key: State<'_, SigningKeyInner>
 ) -> Result<(), ()> {
     println!("Registering");
     loop {
@@ -93,6 +94,8 @@ async fn game_synchronizer(
 
         println!("Emitting!");
         window.emit("available-sequencers", list_of_chains);
+        let signing_key : Option<_> = *signing_key.inner().lock().await;
+        window.emit("signing-key", signing_key);
         window.emit("host-key", key).unwrap();
         window.emit("user-keys", user_keys).unwrap();
         window.emit("db-connection", (appName, prefix)).unwrap();
@@ -243,10 +246,11 @@ async fn switch_to_db(
 
 #[tauri::command]
 async fn set_signing_key(
-    selected: XOnlyPublicKey,
+    selected: Option<XOnlyPublicKey>,
     sk: State<'_, SigningKeyInner>
 ) -> Result<(),()> {
-    let _ = sk.inner().lock().await.insert(selected);
+    let mut l = sk.inner().lock().await;
+    *l = selected;
     Ok(())
 }
 
