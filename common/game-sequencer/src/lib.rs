@@ -619,28 +619,20 @@ mod test {
     }
     struct TestDBFetcher {
         to_seq: Vec<VecDeque<Authenticated<Envelope>>>,
-        poll_sequencer_period: Duration,
         schedule_batches_to_sequence: UnboundedSender<VecDeque<CanonicalEnvelopeHash>>,
         batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
         msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>,
-        rebuild_db_period: Duration,
         new_msgs_in_cache: Arc<Notify>,
     }
     impl TestDBFetcher {
-        pub fn new(
-            to_seq: Vec<VecDeque<Authenticated<Envelope>>>,
-            poll_sequencer_period: Duration,
-            rebuild_db_period: Duration,
-        ) -> Arc<Self> {
+        pub fn new(to_seq: Vec<VecDeque<Authenticated<Envelope>>>) -> Arc<Self> {
             let (schedule_batches_to_sequence, batches_to_sequence) = unbounded_channel();
             let batches_to_sequence = Arc::new(Mutex::new(batches_to_sequence));
             Arc::new(Self {
-                poll_sequencer_period,
                 schedule_batches_to_sequence,
                 batches_to_sequence,
                 msg_cache: Default::default(),
                 new_msgs_in_cache: Default::default(),
-                rebuild_db_period,
                 to_seq,
             })
         }
@@ -651,7 +643,7 @@ mod test {
                     for batch in &me.to_seq {
                         me.schedule_batches_to_sequence
                             .send(batch.iter().map(|e| e.canonicalized_hash_ref()).collect());
-                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        tokio::task::yield_now().await;
                     }
                 }
             });
@@ -684,7 +676,7 @@ mod test {
                     let cache = Arc::clone(&cache);
                     let me = me.clone();
                     async move {
-                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        tokio::task::yield_now().await;
                         {
                             let mut cache = cache.lock().await;
                             for (k, v) in send_later {
@@ -694,7 +686,7 @@ mod test {
                         me.new_msgs_in_cache.notify_waiters();
                     }
                 });
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                tokio::task::yield_now().await;
 
                 if quit {
                     break;
@@ -720,11 +712,7 @@ mod test {
     #[tokio::test]
     async fn test_periodic_seqeuencer() {
         let envelopes = make_random_moves();
-        let db_fetcher = TestDBFetcher::new(
-            envelopes.clone(),
-            Duration::from_secs(1),
-            Duration::from_secs(1),
-        );
+        let db_fetcher = TestDBFetcher::new(envelopes.clone());
         spawn(db_fetcher.clone().run());
         let s = Sequencer::new(Default::default(), db_fetcher);
         {
