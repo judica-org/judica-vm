@@ -237,8 +237,16 @@ async fn switch_to_db(
     prefix: Option<PathBuf>,
 ) -> Result<(), ()> {
     let res = db.connect(&appName, prefix.clone()).await.map_err(|_| ());
-
     res
+}
+
+#[tauri::command]
+async fn set_signing_key(
+    selected: XOnlyPublicKey,
+    sk: State<'_, SigningKeyInner>
+) -> Result<(),()> {
+    let _ = sk.inner().lock().await.insert(selected);
+    Ok(())
 }
 
 pub struct Game {
@@ -250,6 +258,8 @@ pub struct Game {
 
 type GameStateInner = Arc<Mutex<Option<Game>>>;
 type GameState<'a> = State<'a, GameStateInner>;
+
+type SigningKeyInner = Arc<Mutex<Option<XOnlyPublicKey>>>;
 
 // Safe to clone because MsgDB has Clone
 #[derive(Clone)]
@@ -288,11 +298,13 @@ fn main() {
     let db = Database {
         state: Arc::new(Mutex::new(None)),
     };
+    let sk= SigningKeyInner::new(Mutex::new(None));
     tauri::Builder::default()
         .setup(|app| Ok(()))
         .manage(Secp256k1::new())
         .manage(game.clone())
         .manage(db)
+        .manage(sk)
         .invoke_handler(tauri::generate_handler![
             game_synchronizer,
             get_move_schema,
@@ -301,6 +313,7 @@ fn main() {
             make_move_inner,
             switch_to_game,
             switch_to_db,
+            set_signing_key
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
