@@ -151,6 +151,7 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
                     BroadcastByHost::Sequence(s) => batches_to_sequence.push(s),
                     BroadcastByHost::NewPeer(_) => {}
                     BroadcastByHost::Heartbeat => {}
+                    BroadcastByHost::GameSetup(_) => {}
                 },
                 Err(_) => {
                     return Err(SequencerError::BadMessageType);
@@ -341,6 +342,7 @@ impl OnlineDBFetcher {
                                                 )
                                                 .ok();
                                         }
+                                        BroadcastByHost::GameSetup(_) => {}
                                     }
                                     count += 1;
                                 }
@@ -519,7 +521,7 @@ mod test {
     use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
     use mine_with_friends_board::{
         entity::EntityID,
-        game::game_move::{Heartbeat, GameMove},
+        game::game_move::{GameMove, Heartbeat},
         sanitize::Unsanitized,
     };
     use sapio_bitcoin::{

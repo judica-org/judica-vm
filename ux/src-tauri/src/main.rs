@@ -7,10 +7,11 @@ use attest_database::{
     db_handle::{create::TipControl, MsgDBHandle},
     generate_new_user, setup_db,
 };
+use game_host_messages::{BroadcastByHost, Channelized};
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
-        game_move::{AddNewPlayer, Chat, GameMove, PurchaseNFT, Trade},
+        game_move::{Chat, GameMove, Heartbeat, PurchaseNFT, Trade},
         GameBoard,
     },
     nfts::{sale::UXForSaleList, NftPtr, UXNFTRegistry, UXPlantData},
@@ -192,8 +193,7 @@ async fn make_new_chain(
     db: State<'_, Database>,
 ) -> Result<String, String> {
     let (kp, next_nonce, genesis) =
-        generate_new_user(secp.inner(), Some(GameMove::AddNewPlayer(AddNewPlayer())))
-            .err_to_string()?;
+        generate_new_user(secp.inner(), Some(GameMove::Heartbeat(Heartbeat()))).err_to_string()?;
     let msgdb = db.get().await.err_to_string()?;
     let mut handle = msgdb.get_handle().await;
     // TODO: Transaction?
@@ -263,12 +263,30 @@ async fn switch_to_game(
     let db = db.inner().clone();
     let game = game.inner().clone();
     spawn(async move {
+        let game_setup = {
+            let db = db.state.lock().await;
+            let db: &DatabaseInner = db.as_ref().ok_or("No Database Set Up")?;
+            let handle = db.db.get_handle().await;
+            let genesis = handle
+                .get_message_at_height_for_user(key, 0)
+                .map_err(|_| "No Genesis found for selected Key")?;
+            if let Ok(Channelized {
+                data: BroadcastByHost::GameSetup(g),
+                channel: _,
+            }) = serde_json::from_value(genesis.msg().to_owned().into())
+            {
+                g
+            } else {
+                return Err("First Message was not a GameSetup");
+            }
+        };
+
         let game2 = game.clone();
         let mut g = game2.lock().await;
         g.as_mut()
             .map(|game| game.server.as_ref().map(|s| s.shutdown()));
         let mut new_game = Game {
-            board: GameBoard::new(),
+            board: GameBoard::new(game_setup),
             should_notify: Arc::new(Notify::new()),
             host_key: key,
             server: None,
