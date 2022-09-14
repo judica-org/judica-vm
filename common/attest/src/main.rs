@@ -44,8 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 }
 async fn init_main(g: Arc<Globals>) -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::debug!("Config Loaded");
-    let bitcoin_client =
-        Arc::new(Client::new(g.config.bitcoin.url.clone(), g.config.bitcoin.auth.clone()).await?);
+    let bitcoin_client = g.config.bitcoin.get_new_client().await?;
     tracing::debug!("Bitcoin Client Loaded");
     let bitcoin_checkpoints = Arc::new(
         BitcoinCheckPointCache::new(bitcoin_client, None, (*g.shutdown.clone()).clone()).await,

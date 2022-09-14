@@ -1,5 +1,9 @@
+use attest_database::connection::MsgDB;
+use attest_database::setup_db;
+use attest_util::bitcoin::BitcoinConfig;
 use bitcoin::psbt::PartiallySignedTransaction;
 use bitcoin::{OutPoint, Transaction, Txid};
+use bitcoincore_rpc_async::Client;
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
@@ -15,7 +19,9 @@ use serde_json::Value;
 use simps::AutoBroadcast;
 use std::collections::btree_map::Values;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
@@ -107,8 +113,24 @@ impl PSBTDatabase {
     }
 }
 
+async fn get_db_from_env() -> Result<MsgDB, Box<dyn std::error::Error>> {
+    let app_name = std::env::var("APP_DB_NAME")?;
+    let prefix = std::env::var("APP_DB_PREFIX")
+        .ok()
+        .map(|m| PathBuf::from_str(&m))
+        .transpose()?;
+    let db = setup_db(&app_name, prefix).await?;
+    Ok(db)
+}
+
+async fn get_bitcoin_rpc() -> Result<Arc<Client>, Box<dyn std::error::Error>> {
+    let cfg: BitcoinConfig = serde_json::from_str(&std::env::var("APP_BTC_RPC_JSON")?)?;
+    Ok(cfg.get_new_client().await?)
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _db = get_db_from_env().await?;
+    let _rpc = get_bitcoin_rpc().await?;
     do_main().await
 }
 

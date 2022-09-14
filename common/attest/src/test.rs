@@ -1,6 +1,5 @@
 use crate::{
     attestations::client::AttestationClient,
-    configuration::BitcoinConfig,
     configuration::{Config, PeerServicesTimers},
     configuration::{ControlConfig, PeerServiceConfig},
     control::{
@@ -11,6 +10,7 @@ use crate::{
     init_main, AppShutdown,
 };
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use attest_util::bitcoin::BitcoinConfig;
 use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;

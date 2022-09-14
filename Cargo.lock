@@ -142,6 +142,8 @@ dependencies = [
 name = "attest-util"
 version = "0.1.0"
 dependencies = [
+ "bitcoincore-rpc-async",
+ "serde",
  "tokio",
  "tracing",
 ]
@@ -2417,6 +2419,8 @@ dependencies = [
 name = "sapio-litigator"
 version = "0.1.0"
 dependencies = [
+ "attest-database",
+ "attest-util",
  "base64",
  "bitcoincore-rpc-async",
  "clap",
