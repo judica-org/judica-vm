@@ -18,44 +18,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum GameMove {
-    /// # Stop Inviting New Users
-    #[schemars(skip)]
-    NoNewUsers(NoNewUsers),
-    #[schemars(skip)]
-    AddNewPlayer(AddNewPlayer),
+    Heartbeat(Heartbeat),
     /// # Trade Coins
     Trade(Trade),
     /// # Buy NFTs
     PurchaseNFT(PurchaseNFT),
     /// # Sell NFTs
     ListNFTForSale(ListNFTForSale),
-    /// # Register User
-    #[schemars(skip)]
-    RegisterUser(RegisterUser),
     /// # Send Coins
     SendTokens(SendTokens),
     /// # Send a logged Chat Message to All Players
     Chat(Chat),
 }
 
-impl GameMove {
-    /// These moves should only be made by the root user / system if true.
-    /// TODO: Maybe have 3 rings for:
-    /// - 0 system
-    /// - 1 host
-    /// - 2 player
-    pub fn is_priviledged(&self) -> bool {
-        match self {
-            GameMove::Trade(_)
-            | GameMove::PurchaseNFT(_)
-            | GameMove::ListNFTForSale(_)
-            | GameMove::SendTokens(_)
-            | GameMove::Chat(_)
-            | GameMove::AddNewPlayer(_) => false,
-            GameMove::RegisterUser(_) | GameMove::NoNewUsers(_) => true,
-        }
-    }
-}
 
 // Convenience to marshall a move into a GameMove
 macro_rules! derive_from {
@@ -67,20 +42,15 @@ macro_rules! derive_from {
         }
     };
 }
-derive_from!(NoNewUsers);
-derive_from!(AddNewPlayer);
+derive_from!(Heartbeat);
 derive_from!(Trade);
 derive_from!(PurchaseNFT);
 derive_from!(ListNFTForSale);
-derive_from!(RegisterUser);
 derive_from!(SendTokens);
 derive_from!(Chat);
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct NoNewUsers();
-
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct AddNewPlayer();
+pub struct Heartbeat();
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Trade {
@@ -101,11 +71,6 @@ pub struct ListNFTForSale {
     pub nft_id: NftPtr,
     pub price: Price,
     pub currency: Currency,
-}
-
-#[derive(Eq, PartialEq, Serialize, Deserialize, JsonSchema, Debug)]
-pub struct RegisterUser {
-    pub hex_user_key: String,
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

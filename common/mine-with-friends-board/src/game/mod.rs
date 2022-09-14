@@ -1,10 +1,8 @@
-use self::game_move::AddNewPlayer;
 use self::game_move::Chat;
 use self::game_move::GameMove;
+use self::game_move::Heartbeat;
 use self::game_move::ListNFTForSale;
-use self::game_move::NoNewUsers;
 use self::game_move::PurchaseNFT;
-use self::game_move::RegisterUser;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
 use crate::callbacks::CallbackRegistry;
@@ -31,6 +29,7 @@ use crate::tokens::token_swap::ConstantFunctionMarketMaker;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::token_swap::UXMaterialsPriceData;
 use crate::MoveEnvelope;
+use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::max;
 use std::collections::BTreeMap;
@@ -56,7 +55,6 @@ pub struct GameBoard {
     pub(crate) nfts: NFTRegistry,
     pub(crate) nft_sales: NFTSaleRegistry,
     pub(crate) player_move_sequence: BTreeMap<EntityID, u64>,
-    pub(crate) new_users_allowed: bool,
     /// If init = true, must be Some
     pub(crate) bitcoin_token_id: TokenPointer,
     /// If init = true, must be Some
@@ -80,9 +78,29 @@ pub struct CallContext {
     pub sender: EntityID,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct GameSetup {
+    players: Vec<String>,
+    start_amount: u64,
+}
+impl GameSetup {
+    fn setup_game(&self, g: &mut GameBoard) {
+        for player in self.players.iter() {
+            let id = g.alloc();
+            g.users.insert(
+                id,
+                UserData {
+                    key: player.clone(),
+                },
+            );
+            g.tokens[g.dollar_token_id].mint(&id, self.start_amount as u128);
+        }
+    }
+}
+
 impl GameBoard {
     /// Creates a new GameBoard
-    pub fn new() -> GameBoard {
+    pub fn new(setup: GameSetup) -> GameBoard {
         let mut alloc = EntityIDAllocator::new();
 
         let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Bitcoin".into()));
@@ -130,7 +148,6 @@ impl GameBoard {
             nfts: Default::default(),
             nft_sales: Default::default(),
             player_move_sequence: Default::default(),
-            new_users_allowed: true,
             callbacks: Default::default(),
             current_time: 0,
             mining_subsidy: 100_000_000_000 * 50,
@@ -139,6 +156,7 @@ impl GameBoard {
             chat_counter: 0,
         };
         g.post_init();
+        setup.setup_game(&mut g);
         g
     }
 
@@ -221,7 +239,7 @@ impl GameBoard {
         MoveEnvelope {
             d,
             sequence,
-            mut from,
+            from,
             time,
         }: MoveEnvelope,
         signed_by: String,
@@ -236,19 +254,9 @@ impl GameBoard {
         } else {
             *current_move = sequence;
         }
-        let mut mv = d.sanitize(())?;
-        if !self.user_is_admin(from) && mv.is_priviledged() {
-            return Ok(());
-        }
-
+        let mv = d.sanitize(())?;
         self.update_current_time(Some((from, time)));
         self.process_ticks();
-        if let GameMove::AddNewPlayer(_) = mv {
-            mv = GameMove::RegisterUser(RegisterUser {
-                hex_user_key: signed_by,
-            });
-            from = self.root_user;
-        }
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         self.play_inner(mv, from)
@@ -274,16 +282,7 @@ impl GameBoard {
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         let context = CallContext { sender: from };
         match d {
-            GameMove::AddNewPlayer(AddNewPlayer()) => {}
-            GameMove::RegisterUser(RegisterUser { hex_user_key }) => {
-                if self.new_users_allowed {
-                    self.users
-                        .insert(self.alloc.make(), UserData { key: hex_user_key });
-                }
-            }
-            GameMove::NoNewUsers(NoNewUsers {}) => {
-                self.new_users_allowed = false;
-            }
+            GameMove::Heartbeat(Heartbeat()) => {}
             GameMove::Trade(Trade {
                 pair,
                 amount_a,
