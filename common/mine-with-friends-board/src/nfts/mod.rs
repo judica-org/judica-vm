@@ -10,9 +10,13 @@ use std::collections::BTreeMap;
 use std::ops::Index;
 use std::ops::IndexMut;
 pub mod instances;
+<<<<<<< HEAD
 pub mod mint;
 pub mod sale;
+=======
+>>>>>>> af10827 (formatting fixes)
 pub mod mint;
+pub mod sale;
 /// All NFTs must implement these behaviors
 pub(crate) trait NFT: Send + Sync {
     /// Return the EntityID of the current Owner

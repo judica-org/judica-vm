@@ -2,11 +2,15 @@ use std::cmp::min;
 
 pub mod events;
 use crate::{game::GameBoard, nfts::NftPtr, tokens::TokenPointer, util::Price};
+<<<<<<< HEAD
 use super::BaseNFT;
 use crate::entity::EntityID;
 use crate::game::GameBoard;
 use crate::util::Currency;
 use crate::util::Price;
+=======
+
+>>>>>>> af10827 (formatting fixes)
 use super::lockup::CoinLockup;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -33,6 +37,7 @@ impl PowerPlant {
             plant_type,
             watts: 1000, // this should probably change
             coordinates,
+<<<<<<< HEAD
         }
     }
     /// Mint a new PowerPlant NFT
@@ -77,6 +82,8 @@ impl PowerPlant {
             token.transaction();
             let _ = token.transfer(&owner, &plant_ptr.0, price);
             token.end_transaction();
+=======
+>>>>>>> af10827 (formatting fixes)
         }
     }
     /// Compute the total hashes per second of this powerplant at this game state
