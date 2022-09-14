@@ -1,5 +1,5 @@
-use crate::nfts::NftPtr;
 use crate::nfts::instances::powerplant::PlantType;
+use crate::nfts::NftPtr;
 use crate::util::Currency;
 use crate::{entity::EntityID, util::Price};
 
@@ -31,7 +31,7 @@ pub enum GameMove {
     /// # Send a logged Chat Message to All Players
     Chat(Chat),
     /// # Mint NFT
-    MintPowerPlant(MintPowerPlant)
+    MintPowerPlant(MintPowerPlant),
 }
 
 // Convenience to marshall a move into a GameMove
@@ -66,8 +66,8 @@ pub struct Trade {
 pub struct MintPowerPlant {
     /// The token(s) and quantities required to mint the NFT
     pub resources: Vec<(Currency, Price)>,
-    pub location: (u64,u64),
-    pub plant_type: PlantType
+    pub location: (u64, u64),
+    pub plant_type: PlantType,
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

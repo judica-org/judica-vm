@@ -5,9 +5,9 @@ use serde::Serialize;
 pub mod events;
 use crate::{game::GameBoard, nfts::NftPtr, tokens::TokenPointer, util::Price};
 
+use super::lockup::CoinLockup;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use super::lockup::CoinLockup;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub enum PlantType {
@@ -27,10 +27,10 @@ impl PowerPlant {
     /// Create a new PowerPlant NFT
     pub(crate) fn new(id: NftPtr, plant_type: PlantType, coordinates: (u64, u64)) -> Self {
         Self {
-            id, 
+            id,
             plant_type,
             watts: 1000, // this should probably change
-            coordinates
+            coordinates,
         }
     }
     /// Compute the total hashes per second of this powerplant at this game state
