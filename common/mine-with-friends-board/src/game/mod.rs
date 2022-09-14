@@ -4,6 +4,7 @@ use self::game_move::Heartbeat;
 use self::game_move::ListNFTForSale;
 use self::game_move::MintPowerPlant;
 use self::game_move::NoNewUsers;
+use self::game_move::MintPowerPlant;
 use self::game_move::PurchaseNFT;
 use self::game_move::SendTokens;
 use self::game_move::Trade;

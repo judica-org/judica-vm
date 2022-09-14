@@ -1,5 +1,6 @@
 use crate::nfts::instances::powerplant::PlantType;
 use crate::nfts::NftPtr;
+use crate::nfts::instances::powerplant::PlantType;
 use crate::util::Currency;
 use crate::{entity::EntityID, util::Price};
 
