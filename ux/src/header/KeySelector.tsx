@@ -1,6 +1,6 @@
 import { appWindow } from '@tauri-apps/api/window';
 import { FormEvent, useEffect, useState } from "react";
-import { tauri_host } from './tauri_host';
+import { tauri_host } from '../tauri_host';
 
 export const KeySelector = () => {
   const [selected_key, set_selected_key] = useState<string | null>(null);

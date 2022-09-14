@@ -1,6 +1,6 @@
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
-import { tauri_host } from './tauri_host';
+import { tauri_host } from '../tauri_host';
 
 export function SwitchToGame() {
   const [which_game, set_which_game] = React.useState<string | null>(null);

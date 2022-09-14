@@ -28,5 +28,8 @@ export const tauri_host = {
   },
   send_chat: async (chat: string) => {
     return invoke("send_chat", { chat })
+  },
+  make_new_chain: async (nickname: string) => {
+    return invoke("make_new_chain", { nickname });
   }
 };
