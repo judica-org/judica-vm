@@ -1,3 +1,4 @@
+import { Button, FormControl, TextField } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
@@ -8,7 +9,9 @@ export function MakeNewChain() {
 
   return <div>
     <h6> Create New Chain</h6>
-    <input type="text" placeholder='Nickname' onChange={(ev) => set_nick(ev.target.value)}></input>
-    <button onClick={() => { nick && tauri_host.make_new_chain(nick) }}>Create New Chain</button>
+    <FormControl >
+      <TextField label='Nickname' onChange={(ev) => set_nick(ev.target.value)}></TextField>
+      <Button type="submit" onClick={(ev) => { ev.preventDefault(); nick && tauri_host.make_new_chain(nick) }}>Create New Chain</Button>
+    </FormControl>
   </div>;
 }
