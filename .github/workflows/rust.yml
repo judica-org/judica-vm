@@ -11,9 +11,7 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v3
       with:
@@ -23,6 +21,27 @@ jobs:
         profile: minimal
         toolchain: nightly
         override: true
+    steps:
+    - name: Cache
+    uses: actions/cache@v3
+    id: cache-build
+    with:
+      path: |
+        ~/.cargo/bin/
+        ~/.cargo/registry/index/
+        ~/.cargo/registry/cache/
+        ~/.cargo/git/db/
+        target_cache/
+      key: ${{ runner.os }}-cargo-${{ hashFiles('submodules/**/Cargo.lock') }}
+    - if: steps.cache-build.cache-hit != 'true'
+        name: Build Sapio Deps (builds most deps)
+        run: |
+          cargo build --manifest-path submodule/sapio/Cargo.toml --target-dir target_cache --lib
+          cp -r target_cache target
+    - if: steps.cache-build.cache-hit == 'true'
+        name: Copy Sapio Deps (builds most deps)
+        run: |
+          cp -r target_cache target
     - name: Build
       run: cargo build --verbose
     - name: Run tests
