@@ -1,6 +1,10 @@
 #!/usr/bin/env sh
 tmux start-server
 BTCPORT=${BTCPORT:-"18443"}
+
+# dev, debug, release
+export USE_RELEASE_TAURI=${USE_RELEASE_TAURI:-"dev"}
+
 export BTCPORT
 SCRIPT_LOCATION=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 cd $SCRIPT_LOCATION
@@ -32,9 +36,36 @@ else
   pushd ..
   cargo build --release
   popd
+
+  case "$USE_RELEASE_TAURI" in
+  dev) ;;
+
+  debug)
+    pushd ../ux
+    yarn tauri build --debug
+    popd
+    ;;
+  release)
+    pushd ../ux
+    yarn tauri build
+    popd
+    ;;
+  esac
   # create a session with five panes
-  tmux new-session -d -s MySession -n "www" -d "$PWD/start_tauri_front.sh; /usr/bin/env $SHELL -i"
-  tmux split-window -t MySession:0 "$PWD/start_host_www.sh; /usr/bin/env $SHELL -i"
+  tmux new-session -d -s MySession -n "www" -d "$PWD/start_host_www.sh; /usr/bin/env $SHELL -i"
+  case "$USE_RELEASE_TAURI" in
+  dev)
+    tmux split-window -t MySession:0 "$PWD/start_tauri_front.sh; /usr/bin/env $SHELL -i"
+    ;;
+
+  debug)
+    echo "Not Starting Tauri Frontend, Debug Mode"
+    ;;
+
+  release)
+    echo "Not Starting Tauri Frontend, Release Mode"
+    ;;
+  esac
   tmux split-window -t MySession:0 "export PORTS=\"15532\n15533\n15534\"; $PWD/start_attest_www.sh; /usr/bin/env $SHELL -i"
 
   tmux new-window -t MySession: -n "host" "export PLAYER=\"host\"; $PWD/start_host.sh; /usr/bin/env $SHELL -i"
