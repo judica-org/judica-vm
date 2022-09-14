@@ -1,6 +1,6 @@
 use attest_database::connection::MsgDB;
 use attest_database::setup_db;
-use bitcoincore_rpc_async as rpc;
+use attest_util::bitcoin::BitcoinConfig;
 use rusqlite::Connection;
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
@@ -15,22 +15,6 @@ use tokio::time::{Interval, MissedTickBehavior};
 
 pub(crate) const fn default_port() -> u16 {
     46789
-}
-
-/// The different authentication methods for the client.
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "rpc::Auth")]
-pub enum Auth {
-    None,
-    UserPass(String, String),
-    CookieFile(PathBuf),
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct BitcoinConfig {
-    pub url: String,
-    #[serde(with = "Auth")]
-    pub auth: rpc::Auth,
 }
 
 pub(crate) fn default_socks_port() -> u16 {

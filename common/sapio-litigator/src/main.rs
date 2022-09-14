@@ -1,21 +1,15 @@
-use std::collections::btree_map::Values;
-use std::collections::BTreeMap;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::time::Duration;
-
-use bitcoin::blockdata::witness::Iter;
+use attest_database::connection::MsgDB;
+use attest_database::setup_db;
+use attest_util::bitcoin::BitcoinConfig;
 use bitcoin::psbt::PartiallySignedTransaction;
 use bitcoin::{OutPoint, Transaction, Txid};
+use bitcoincore_rpc_async::Client;
 use emulator_connect::{CTVAvailable, CTVEmulator};
-use jsonschema_valid::validate;
-use miniscript::psbt::PsbtExt;
 use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::{CompilationError, Compiled};
-use sapio_base::effects::{EditableMapEffectDB, EffectPath, MapEffectDB, PathFragment};
+use sapio_base::effects::{EditableMapEffectDB, EffectPath, PathFragment};
 use sapio_base::serialization_helpers::SArc;
-use sapio_base::simp::{self, SIMP};
 use sapio_base::txindex::TxIndexLogger;
 use sapio_wasm_plugin::host::PluginHandle;
 use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
@@ -23,9 +17,15 @@ use sapio_wasm_plugin::CreateArgs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use simps::AutoBroadcast;
+use std::collections::btree_map::Values;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::rc::Rc;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
-use tokio::select;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Notify;
 mod simps;
 
@@ -113,21 +113,48 @@ impl PSBTDatabase {
     }
 }
 
+#[derive(Deserialize)]
+struct Config {
+    db_app_name: String,
+    #[serde(default)]
+    db_prefix: Option<PathBuf>,
+    bitcoin: BitcoinConfig,
+    app_instance: String,
+    logfile: PathBuf,
+}
+
+impl Config {
+    fn from_env() -> Result<Config, Box<dyn std::error::Error>> {
+        let j = std::env::var("LITIGATOR_CONFIG_JSON")?;
+        Ok(serde_json::from_str(&j)?)
+    }
+    async fn get_db(&self) -> Result<MsgDB, Box<dyn std::error::Error>> {
+        let db = setup_db(&self.db_app_name, self.db_prefix.clone()).await?;
+        Ok(db)
+    }
+    async fn get_bitcoin_rpc(&self) -> Result<Arc<Client>, Box<dyn std::error::Error>> {
+        Ok(self.bitcoin.get_new_client().await?)
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     do_main().await
 }
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::from_env()?;
+    let db = config.get_db().await?;
+    let bitcoin = config.get_bitcoin_rpc().await?;
     let typ = "org";
     let org = "judica";
-    let proj = "sapio-litigator";
+    let proj = format!("sapio-litigator.{}", config.app_instance);
     let proj =
-        directories::ProjectDirs::from(typ, org, proj).expect("Failed to find config directory");
+        directories::ProjectDirs::from(typ, org, &proj).expect("Failed to find config directory");
     let mut data_dir = proj.data_dir().to_owned();
     data_dir.push("modules");
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
-    let logfile = std::env::var("SAPIO_LITIGATOR_EVLOG")?;
+    let logfile = config.logfile;
     let mut opened = OpenOptions::default();
     opened.append(true).create(true).open(&logfile).await?;
     let fi = File::open(logfile).await?;

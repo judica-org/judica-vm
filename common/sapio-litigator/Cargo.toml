@@ -13,11 +13,11 @@ serde_derive = "1.0"
 clap = "=3.0.0-beta.2"
 base64 = "0.13.0"
 lazy_static = "1.4.0"
-bitcoincore-rpc-async = "4.0.1-alpha.1"
 tokio = { version = "1", features = ["full"] }
 directories = "3.0.1"
 rand="^0.6"
 jsonschema-valid = "0.4.0"
+bitcoincore-rpc-async = "4.0.1-alpha.1"
 
 [dependencies.sapio-psbt]
 path = "../../submodule/sapio/sapio-psbt"
@@ -66,3 +66,10 @@ version = "0.1.0"
 path = "../../submodule/sapio/plugins"
 version = "0.2.0"
 features = ["host"]
+
+[dependencies.attest-database]
+path = "../attest-database"
+
+[dependencies.attest-util]
+path = "../attest-util"
+features=["bitcoin"]

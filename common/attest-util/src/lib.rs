@@ -75,3 +75,33 @@ pub async fn get_hidden_service_hostname(
         }
     }
 }
+
+#[cfg(feature = "bitcoin")]
+pub mod bitcoin {
+    use bitcoincore_rpc_async as rpc;
+    use rpc::Client;
+    use serde::{Deserialize, Serialize};
+    use std::{path::PathBuf, sync::Arc};
+    /// The different authentication methods for the client.
+    #[derive(Serialize, Deserialize)]
+    #[serde(remote = "rpc::Auth")]
+    pub enum Auth {
+        None,
+        UserPass(String, String),
+        CookieFile(PathBuf),
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    pub struct BitcoinConfig {
+        pub url: String,
+        #[serde(with = "Auth")]
+        pub auth: rpc::Auth,
+    }
+    impl BitcoinConfig {
+        pub async fn get_new_client(&self) -> rpc::Result<Arc<Client>> {
+            Ok(Arc::new(
+                Client::new(self.url.clone(), self.auth.clone()).await?,
+            ))
+        }
+    }
+}

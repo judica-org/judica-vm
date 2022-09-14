@@ -1,8 +1,7 @@
-use std::collections::VecDeque;
-
 use attest_messages::CanonicalEnvelopeHash;
 use mine_with_friends_board::game::{game_move::GameMove, GameSetup};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Peer {

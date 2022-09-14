@@ -1,0 +1,11 @@
+{
+    "bitcoin": {
+        "url": "http://127.0.0.1:$BTCPORT",
+        "auth": {
+            "CookieFile": "$BITCOIN_DIR/signet/.cookie"
+        }
+    },
+    "db_app_name": "testing-$PLAYER",
+    "app_instance": "testing-$PLAYER",
+    "logfile": "$LITIGATOR_LOGFILE"
+}
