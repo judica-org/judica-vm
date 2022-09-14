@@ -3,15 +3,15 @@ use self::game_move::GameMove;
 use self::game_move::Heartbeat;
 use self::game_move::ListNFTForSale;
 use self::game_move::MintPowerPlant;
-use self::game_move::NoNewUsers;
 use self::game_move::PurchaseNFT;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
 use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
-use crate::nfts::instances::powerplant::PowerPlant;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
+use crate::nfts::instances::powerplant::PowerPlant;
+use crate::nfts::instances::powerplant::PowerPlantProducer;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::sale::UXForSaleList;
 use crate::nfts::sale::UXNFTSale;
@@ -298,7 +298,13 @@ impl GameBoard {
                 location,
                 plant_type,
             }) => {
-                PowerPlant::mint_power_plant(self, resources, location, plant_type, context.sender);
+                PowerPlantProducer::mint_power_plant(
+                    self,
+                    resources,
+                    location,
+                    plant_type,
+                    context.sender,
+                );
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,

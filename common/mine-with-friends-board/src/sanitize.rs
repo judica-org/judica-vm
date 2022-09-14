@@ -5,7 +5,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    game::game_move::{Chat, GameMove, Heartbeat, ListNFTForSale, PurchaseNFT, SendTokens, Trade},
+    game::game_move::{
+        Chat, GameMove, Heartbeat, ListNFTForSale, MintPowerPlant, PurchaseNFT, SendTokens, Trade,
+    },
     nfts::NftPtr,
     tokens::token_swap::TradingPairID,
     tokens::TokenPointer,
@@ -49,6 +51,7 @@ impl Sanitizable for NftPtr {
         Ok(self)
     }
 }
+
 impl Sanitizable for TradingPairID {
     type Output = TradingPairID;
     type Context = <TokenPointer as Sanitizable>::Context;
@@ -70,6 +73,7 @@ impl Sanitizable for GameMove {
         Ok(match self {
             GameMove::Heartbeat(x) => x.sanitize(())?.into(),
             GameMove::Trade(x) => x.sanitize(())?.into(),
+            GameMove::MintPowerPlant(x) => x.sanitize(())?.into(),
             GameMove::PurchaseNFT(x) => x.sanitize(())?.into(),
             GameMove::ListNFTForSale(x) => x.sanitize(())?.into(),
             GameMove::SendTokens(x) => x.sanitize(())?.into(),
@@ -110,6 +114,16 @@ impl Sanitizable for Chat {
     type Context = ();
     type Error = ();
 
+    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+        Ok(self)
+    }
+}
+
+// because resources is Vec<(TokenPointer, u128)> may need make Resources a type and sanitize.
+impl Sanitizable for MintPowerPlant {
+    type Output = Self;
+    type Context = ();
+    type Error = ();
     fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
