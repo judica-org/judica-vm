@@ -6,11 +6,8 @@ import EnergyExchange, { NFTSale } from './energy-exchange';
 import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials';
 import { tauri_host } from './tauri_host';
-import { SwitchToDB } from './header/SwitchToDB';
 import { Chat } from './chat/Chat';
-import { SwitchToGame } from './header/SwitchToGame';
-import { KeySelector } from './header/KeySelector';
-import { MakeNewChain } from './header/MakeNewChain';
+import { AppHeader } from './header/AppHeader';
 
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
@@ -139,12 +136,7 @@ function App() {
 
   return (
     <div>
-      <div className="App-header">
-        <SwitchToGame></SwitchToGame>
-        <SwitchToDB></SwitchToDB>
-        <KeySelector></KeySelector>
-        <MakeNewChain></MakeNewChain>
-      </div>
+      <AppHeader></AppHeader>
       <div className="App">
         <WorkingGlobe></WorkingGlobe>
         {<EnergyExchange></EnergyExchange>}
@@ -158,3 +150,4 @@ function App() {
 }
 
 export default App;
+

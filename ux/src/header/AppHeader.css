@@ -1,0 +1,12 @@
+.App-header {
+    background-color: #282c34;
+    min-height: 10vh;
+    font-size: calc(10px + 1vmin);
+    color: white;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+
+.App-header>* {
+    text-align: center;
+}

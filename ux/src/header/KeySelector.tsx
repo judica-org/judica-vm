@@ -1,3 +1,4 @@
+import { Button, FormControl, MenuItem, Select } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import { FormEvent, useEffect, useState } from "react";
 import { tauri_host } from '../tauri_host';
@@ -37,7 +38,7 @@ export const KeySelector = () => {
     }
   });
 
-  const handle_submit = (ev: FormEvent<HTMLFormElement>): void => {
+  const handle_submit = (ev: FormEvent<HTMLButtonElement>): void => {
     ev.preventDefault();
     console.log(["selected_key"], selected_key);
     // redundant but more clear to check both
@@ -46,18 +47,17 @@ export const KeySelector = () => {
   };
 
   let key_options = available_keys.map((key) => {
-    return <option value={key} selected={key === selected_key}>{key}</option>;
+    return <MenuItem value={key} selected={key === selected_key}>{key}</MenuItem>;
   })
 
   return <div>
     <h4>Signing With: {signing_key}</h4>
-    <form onSubmit={handle_submit}>
-      <label>Pub Key</label>
-      <select onChange={(ev) => set_selected_key(ev.target.value)}>
-        <option value={""} selected={selected_key == null}>No Key</option>
+    <FormControl >
+      <Select label="Public Key" onChange={(ev) => set_selected_key(ev.target.value as string)}>
+        <MenuItem value={""} selected={selected_key == null}>No Key</MenuItem>
         {key_options}
-      </select>
-      <button type="submit">Select This Key</button>
-    </form>
+      </Select>
+      <Button type="submit" onClick={handle_submit}>Select This Key</Button>
+    </FormControl>
   </div>
 }

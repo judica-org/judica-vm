@@ -1,3 +1,4 @@
+import { Button, FormControl, InputLabel, MenuItem, Select } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
@@ -29,23 +30,25 @@ export function SwitchToGame() {
       })();
     }
   });
-  const handle_submit = (ev: React.FormEvent<HTMLFormElement>): void => {
+  let options = available_sequencers.map(([pkey, name]) => {
+    return <MenuItem value={pkey}>
+      {name}
+    </MenuItem>;
+  });
+  const handle_submit = (ev: React.FormEvent<HTMLButtonElement>): void => {
     ev.preventDefault();
     which_game && tauri_host.switch_to_game(which_game);
   };
-  let options = available_sequencers.map(([pkey, name]) => {
-    return <option value={pkey}>
-      {name}
-    </option>;
-  });
   return <div>
-    <h4>Connected To: {which_game_loaded}</h4>
-    <form onSubmit={handle_submit}>
-      <label>Game Key</label>
-      <select onChange={(ev) => set_which_game(ev.target.value)}>
+    <h6>Sequencer: {which_game_loaded}</h6>
+    <FormControl fullWidth>
+      <InputLabel>Game Key</InputLabel>
+      <Select onChange={(ev) => set_which_game(ev.target.value as string)}>
         {options}
-      </select>
-      <button type="submit">Switch</button>
-    </form>
+      </Select>
+      <Button type="submit"
+        onClick={handle_submit}
+      >Switch</Button>
+    </FormControl>
   </div>;
 }
