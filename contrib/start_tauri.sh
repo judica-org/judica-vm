@@ -2,12 +2,21 @@
 
 export CONF=$(cat disable_tauri_front.json)
 cd ../ux
-if [[ $USE_RELEASE_TAURI -eq 1 ]]; then
-    echo "Using Release Tauri"
-    ./src-tauri/target/release/mine-with-friends
-else
+case "$USE_RELEASE_TAURI" in
+dev)
     echo "Building Tauri"
     echo $CONF | jq
     sleep 10
     yarn tauri dev -c "$CONF"
-fi
+    ;;
+
+debug)
+    echo "Using Debug Tauri"
+    ./src-tauri/target/debug/mine-with-friends
+    ;;
+
+release)
+    echo "Using Release Tauri"
+    ./src-tauri/target/release/mine-with-friends
+    ;;
+esac
