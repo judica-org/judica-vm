@@ -12,7 +12,6 @@ use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::PowerPlant;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
-use crate::nfts::mint::NFTMinter;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::sale::UXForSaleList;
 use crate::nfts::sale::UXNFTSale;

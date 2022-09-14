@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 use crate::nfts::instances::powerplant::PlantType;
 use crate::nfts::NftPtr;
-=======
->>>>>>> af10827 (formatting fixes)
 use crate::nfts::instances::powerplant::PlantType;
 use crate::nfts::NftPtr;
 use crate::util::Currency;
@@ -33,33 +30,10 @@ pub enum GameMove {
     ListNFTForSale(ListNFTForSale),
     /// # Send Coins
     SendTokens(SendTokens),
-<<<<<<< HEAD
     /// # Send a logged Chat Message to All Players
     Chat(Chat),
     /// # Mint Power Plant NFT
     MintPowerPlant(MintPowerPlant),
-=======
-    /// # Mint NFT
-    MintPowerPlant(MintPowerPlant),
-}
-
-impl GameMove {
-    /// These moves should only be made by the root user / system if true.
-    /// TODO: Maybe have 3 rings for:
-    /// - 0 system
-    /// - 1 host
-    /// - 2 player
-    pub fn is_priviledged(&self) -> bool {
-        match self {
-            GameMove::Trade(_)
-            | GameMove::MintPowerPlant(_)
-            | GameMove::PurchaseNFT(_)
-            | GameMove::ListNFTForSale(_)
-            | GameMove::SendTokens(_) => false,
-            GameMove::Init(_) | GameMove::RegisterUser(_) | GameMove::NoNewUsers(_) => true,
-        }
-    }
->>>>>>> af10827 (formatting fixes)
 }
 
 // Convenience to marshall a move into a GameMove
