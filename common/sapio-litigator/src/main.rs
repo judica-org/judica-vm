@@ -1,21 +1,11 @@
-use std::collections::btree_map::Values;
-use std::collections::BTreeMap;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::time::Duration;
-
-use bitcoin::blockdata::witness::Iter;
 use bitcoin::psbt::PartiallySignedTransaction;
 use bitcoin::{OutPoint, Transaction, Txid};
 use emulator_connect::{CTVAvailable, CTVEmulator};
-use jsonschema_valid::validate;
-use miniscript::psbt::PsbtExt;
 use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::{CompilationError, Compiled};
-use sapio_base::effects::{EditableMapEffectDB, EffectPath, MapEffectDB, PathFragment};
+use sapio_base::effects::{EditableMapEffectDB, EffectPath, PathFragment};
 use sapio_base::serialization_helpers::SArc;
-use sapio_base::simp::{self, SIMP};
 use sapio_base::txindex::TxIndexLogger;
 use sapio_wasm_plugin::host::PluginHandle;
 use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
@@ -23,9 +13,13 @@ use sapio_wasm_plugin::CreateArgs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use simps::AutoBroadcast;
+use std::collections::btree_map::Values;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
-use tokio::select;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Notify;
 mod simps;
 

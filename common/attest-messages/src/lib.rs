@@ -1,6 +1,5 @@
 use self::checkpoints::BitcoinCheckPoints;
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
-
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
@@ -12,7 +11,6 @@ use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-
 use std::error::Error;
 use std::fmt::Display;
 pub mod authenticated;

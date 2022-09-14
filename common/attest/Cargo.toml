@@ -12,11 +12,8 @@ tracing = "0.1.35"
 reqwest = {version="=0.11.10", features=["socks", "json"]}
 serde_json = "1.0.79"
 serde = "1.0.136"
-serde_derive = "1.0.136"
-directories = "3.0.1"
 futures = "0.3.21"
 bitcoincore-rpc-async = "4.0.1-alpha.1"
-tower-layer = "0.3.1"
 ruma-serde = "0.6.0"
 [dependencies.tower-http]
 version = "0.3.4"
@@ -40,10 +37,6 @@ features = ["rusqlite"]
 
 [dependencies.bitcoin-header-checkpoints]
 path = "../bitcoin-header-checkpoints"
-
-[dependencies.ed25519-dalek]
-version= "1.0.1"
-features=['serde']
 
 [dependencies.rusqlite]
 version = "0.27.0"

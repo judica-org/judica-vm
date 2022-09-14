@@ -3,6 +3,7 @@ use attest_util::INFER_UNIT;
 use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use bitcoincore_rpc_async as rpc;
 use globals::{AppShutdown, Globals};
+use openssl_sys as _;
 use rpc::Client;
 use sapio_bitcoin::secp256k1::{Secp256k1, Verification};
 use serde::{Deserialize, Serialize};
