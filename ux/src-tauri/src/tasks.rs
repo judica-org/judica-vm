@@ -72,9 +72,7 @@ impl GameServer {
                 let game_sequencer = game_sequencer::Sequencer::new(shutdown.clone(), db_fetcher);
                 spawn({
                     let game_sequencer = game_sequencer.clone();
-                    async move {
-                        game_sequencer.run();
-                    }
+                    game_sequencer.run()
                 });
                 let game_task = {
                     let g = g;
