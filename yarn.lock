@@ -7047,11 +7047,15 @@ __metadata:
     "@types/node": ^16.7.13
     "@types/react": ^18.0.0
     "@types/react-dom": ^18.0.0
+    cross-env: ^7.0.3
     react: ^18.2.0
     react-dom: ^18.2.0
     react-scripts: 5.0.1
     typescript: ^4.4.2
     web-vitals: ^2.1.0
+  peerDependencies:
+    "@babel/plugin-syntax-flow": "*"
+    "@testing-library/dom": "*"
   languageName: unknown
   linkType: soft
 
@@ -9339,6 +9343,9 @@ __metadata:
     react-scripts: 5.0.1
     typescript: ^4.4.2
     web-vitals: ^2.1.0
+  peerDependencies:
+    "@babel/plugin-syntax-flow": "*"
+    "@testing-library/dom": "*"
   languageName: unknown
   linkType: soft
 
@@ -13183,6 +13190,9 @@ __metadata:
     react-scripts: 5.0.1
     typescript: ^4.4.2
     web-vitals: ^2.1.0
+  peerDependencies:
+    "@babel/plugin-syntax-flow": "*"
+    "@testing-library/dom": "*"
   languageName: unknown
   linkType: soft
 
