@@ -11,14 +11,14 @@ use axum::{
     Extension, Json, Router,
 };
 use game_host_messages::{BroadcastByHost, Channelized, Peer};
+use mine_with_friends_board::game::GameSetup;
+use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
-use sapio_bitcoin::{hashes::hex::ToHex};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 use tower_http::cors::{Any, CorsLayer};
-use mine_with_friends_board::game::GameSetup;
 
 #[derive(Deserialize, Serialize)]
 pub struct Tips {

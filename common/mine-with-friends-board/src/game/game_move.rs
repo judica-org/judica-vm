@@ -31,7 +31,6 @@ pub enum GameMove {
     Chat(Chat),
 }
 
-
 // Convenience to marshall a move into a GameMove
 macro_rules! derive_from {
     ($y:ident) => {

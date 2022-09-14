@@ -128,7 +128,7 @@ async fn game(
                     BroadcastByHost::Sequence(l) => already_sequenced.extend(l.iter()),
                     BroadcastByHost::NewPeer(_) => {}
                     BroadcastByHost::Heartbeat => {}
-                    BroadcastByHost::GameSetup(_) => {},
+                    BroadcastByHost::GameSetup(_) => {}
                 }
             }
         }
