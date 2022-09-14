@@ -30,7 +30,7 @@ pub enum GameMove {
     SendTokens(SendTokens),
     /// # Send a logged Chat Message to All Players
     Chat(Chat),
-    /// # Mint NFT
+    /// # Mint Power Plant NFT
     MintPowerPlant(MintPowerPlant),
 }
 
