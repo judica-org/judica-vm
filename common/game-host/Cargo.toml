@@ -42,3 +42,6 @@ features = ["vendored"]
 [dependencies.attest-util]
 path = "../attest-util"
 features = ["tokio", "tracing"]
+
+[dependencies.mine-with-friends-board]
+path = "../mine-with-friends-board"

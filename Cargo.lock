@@ -1029,6 +1029,7 @@ dependencies = [
  "directories",
  "game-host-messages",
  "libtor",
+ "mine-with-friends-board",
  "openssl-sys",
  "ruma-serde",
  "sapio-bitcoin",

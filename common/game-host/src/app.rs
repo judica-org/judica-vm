@@ -11,14 +11,14 @@ use axum::{
     Extension, Json, Router,
 };
 use game_host_messages::{BroadcastByHost, Channelized, Peer};
-use sapio_bitcoin::hashes::hex::ToHex;
-
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
+use sapio_bitcoin::{hashes::hex::ToHex};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 use tower_http::cors::{Any, CorsLayer};
+use mine_with_friends_board::game::GameSetup;
 
 #[derive(Deserialize, Serialize)]
 pub struct Tips {
@@ -106,6 +106,7 @@ trait Apply {
 impl<T> Apply for T {}
 
 pub async fn create_new_attestation_chain(
+    Json((args, setup)): Json<(Vec<CanonicalEnvelopeHash>, GameSetup)>,
     Extension(db): Extension<MsgDB>,
     Extension(ref secp): Extension<Secp256k1<All>>,
 ) -> Result<(Response<()>, Json<CreatedNewChain>), (StatusCode, &'static str)> {
@@ -113,7 +114,7 @@ pub async fn create_new_attestation_chain(
     let (kp, n, e) = generate_new_user(
         secp,
         Some(Channelized {
-            data: BroadcastByHost::Heartbeat,
+            data: BroadcastByHost::GameSetup(setup),
             channel: "default".into(),
         }),
     )
@@ -134,6 +135,9 @@ pub async fn create_new_attestation_chain(
             .and_then(|_| handle.new_chain_commit_group(None))
             .and_then(|(name, group_id)| {
                 handle.add_subscriber_to_chain_commit_group(group_id, genesis_hash)?;
+                for genesis_hash in args {
+                    handle.add_member_to_chain_commit_group(group_id, genesis_hash)?;
+                }
                 Ok(name)
             })
     }

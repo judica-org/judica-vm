@@ -80,8 +80,8 @@ pub struct CallContext {
 
 #[derive(Serialize, Deserialize)]
 pub struct GameSetup {
-    players: Vec<String>,
-    start_amount: u64,
+    pub players: Vec<String>,
+    pub start_amount: u64,
 }
 impl GameSetup {
     fn setup_game(&self, g: &mut GameBoard) {
