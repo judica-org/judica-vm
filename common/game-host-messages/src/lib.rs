@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use attest_messages::CanonicalEnvelopeHash;
-use mine_with_friends_board::game::game_move::GameMove;
+use mine_with_friends_board::game::{game_move::GameMove, GameSetup};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -11,6 +11,7 @@ pub struct Peer {
 }
 #[derive(Serialize, Deserialize)]
 pub enum BroadcastByHost {
+    GameSetup(GameSetup),
     Sequence(VecDeque<CanonicalEnvelopeHash>),
     NewPeer(Peer),
     Heartbeat,

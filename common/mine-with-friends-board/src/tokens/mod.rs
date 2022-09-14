@@ -1,7 +1,7 @@
 //! This module defines components for managing and issuing tokens
 use self::instances::{asics::HashBoardData, silicon::Silicon, steel::Steel};
 use super::entity::EntityID;
-use crate::{game::GameBoard, util::Price};
+use crate::{entity::EntityIDAllocator, game::GameBoard, util::Price};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -74,6 +74,16 @@ impl TokenBase {
     }
 }
 impl TokenBase {
+    pub fn new_from_alloc(allocator: &mut EntityIDAllocator, nickname: String) -> Self {
+        Self {
+            balances: Default::default(),
+            total: Default::default(),
+            this: allocator.make(),
+            #[cfg(test)]
+            in_transaction: None,
+            nickname: Some(nickname),
+        }
+    }
     /// Create a new token
     pub fn new(game: &mut GameBoard, nickname: String) -> Self {
         Self {

@@ -5,10 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    game::game_move::{
-        AddNewPlayer, Chat, GameMove, Init, ListNFTForSale, NoNewUsers, PurchaseNFT, RegisterUser,
-        SendTokens, Trade,
-    },
+    game::game_move::{Chat, GameMove, Heartbeat, ListNFTForSale, PurchaseNFT, SendTokens, Trade},
     nfts::NftPtr,
     tokens::token_swap::TradingPairID,
     tokens::TokenPointer,
@@ -71,37 +68,17 @@ impl Sanitizable for GameMove {
     type Error = ();
     fn sanitize(self, _context: ()) -> Result<Self, Self::Error> {
         Ok(match self {
-            GameMove::Init(x) => x.sanitize(())?.into(),
-            GameMove::NoNewUsers(x) => x.sanitize(())?.into(),
-            GameMove::AddNewPlayer(x) => x.sanitize(())?.into(),
+            GameMove::Heartbeat(x) => x.sanitize(())?.into(),
             GameMove::Trade(x) => x.sanitize(())?.into(),
             GameMove::PurchaseNFT(x) => x.sanitize(())?.into(),
             GameMove::ListNFTForSale(x) => x.sanitize(())?.into(),
-            GameMove::RegisterUser(x) => x.sanitize(())?.into(),
             GameMove::SendTokens(x) => x.sanitize(())?.into(),
             GameMove::Chat(x) => x.sanitize(())?.into(),
         })
     }
 }
 
-impl Sanitizable for Init {
-    type Output = Self;
-    type Context = ();
-    type Error = ();
-    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
-        Ok(self)
-    }
-}
-
-impl Sanitizable for NoNewUsers {
-    type Output = Self;
-    type Context = ();
-    type Error = ();
-    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
-        Ok(self)
-    }
-}
-impl Sanitizable for AddNewPlayer {
+impl Sanitizable for Heartbeat {
     type Output = Self;
     type Context = ();
     type Error = ();
@@ -170,14 +147,6 @@ impl Sanitizable for ListNFTForSale {
             price,
             currency: currency.sanitize(())?,
         })
-    }
-}
-impl Sanitizable for RegisterUser {
-    type Output = Self;
-    type Context = ();
-    type Error = ();
-    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
-        Ok(self)
     }
 }
 

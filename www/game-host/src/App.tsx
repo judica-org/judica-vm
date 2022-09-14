@@ -16,11 +16,15 @@ class Client {
     if (this.base_url === "")
       throw "Service URL Required";
   }
-  async create_new_chain(): Promise<CreatedNewChain> {
+  async create_new_chain(obj: [Array<string>, { players: Array<string>, start_amount: number }]): Promise<CreatedNewChain> {
 
     let res = await fetch(`${this.base_url}/attestation_chain/new`,
       {
-        method: "POST"
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(obj)
       });
 
     let js = await res.json() as CreatedNewChain;
@@ -91,11 +95,65 @@ type CreatedNewChain = {
   group_name: string,
 };
 function NewGame() {
+  const [amount, set_amount] = React.useState(0);
+  const [ct, set_ct] = React.useState(1);
+  const [values, set_values] = React.useState<Record<number, [string, string]>>({});
+  const [view_flash, flash] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    view_flash && setTimeout(() => flash(null), 3000);
+  }, [view_flash])
   async function handle_click() {
-    const js = await client.create_new_chain();
+    console.log(values);
+    let obj: [Array<string>, { players: Array<string>, start_amount: number }] = [[], { players: [], start_amount: amount }]
+    let reg = /^([0-9]|[a-f]|[A-F]){64}$/;
+    for (const [id, [genesis, key]] of Object.entries(values)) {
+      if (!genesis.match(reg)) {
+        flash(`${genesis} not a valid hex string`)
+        return;
+      }
+      if (!key.match(reg)) {
+        flash(`${key} not a valid hex string`)
+        return;
+      }
+      obj[0].push(genesis);
+      obj[1].players.push(key);
+    }
+    console.log(obj);
+    const js = await client.create_new_chain(obj);
     console.log(js);
   }
-  return <button onClick={handle_click}>New Game</button>
+  const smart_set_values = (idx: number, h?: string, k?: string) => {
+    if (h === undefined || k === undefined) {
+      delete values[idx];
+    } else {
+      values[idx] = [h, k];
+      set_values(values);
+    }
+  };
+  let elts = Array.from({ length: ct }, (_, i) => <NewGameInput key={i} idx={i} set={smart_set_values}></NewGameInput>);
+  return <div>
+    {view_flash && <h4>{view_flash}</h4>}
+    {elts}
+    <input type="number" min={0} onChange={(ev) => set_amount(ev.target.valueAsNumber)}></input>
+    <button onClick={(ev) => set_ct(ct + 1)}>+</button>
+    <button onClick={(ev) => set_ct(Math.max(ct - 1, 1))}>-</button>
+    <button onClick={handle_click}>New Game</button>
+  </div>
+}
+function NewGameInput({ idx, set }: { idx: number, set: (a: number, h?: string, k?: string) => void }) {
+  const [text, set_text] = React.useState("");
+  const [key, set_key] = React.useState("");
+  React.useEffect(() => {
+    set(idx, text, key)
+    return () => {
+      set(idx)
+    }
+  }, [text, key]);
+  return (<div>
+    <input placeholder="genesis" onChange={(e) => set_text(e.target.value)}></input>
+    <input placeholder="key" onChange={(e) => set_key(e.target.value)}></input>
+  </div>
+  );
 }
 
 function AddPeerToNode() {

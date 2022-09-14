@@ -128,29 +128,46 @@ function Users(props: { users: Array<[String, String, boolean]>, url: String }) 
     </tbody>
   </table>
 }
-function Tips(props: { tips: Array<{ envelope: { header: { ancestors?: { genesis: string }, height: string }, msg: any }, hash: string }> }) {
-
-  const rows = props.tips.map((x) => <tr key={x.hash}>
-    <td>{x.envelope.header.ancestors?.genesis.substring(0, 16) ?? ""}</td>
-    <td>{x.hash.substring(0, 16)}</td>
-    <td>{x.envelope.header.height}</td>
-    <td>{JSON.stringify(x.envelope.msg).substring(0, 20)}</td>
-    <td><button onClick={() => console.log(x.envelope)}>log msg</button></td>
-  </tr>);
-  return <table>
-    <thead>
-      <tr>
-        <th>Genesis</th>
-        <th>Msg Hash</th>
-        <th>Height</th>
-        <th>Msg</th>
-        <th>To Console</th>
-      </tr>
-    </thead>
-    <tbody>
-      {rows}
-    </tbody>
-  </table>
+function Tips(props: { tips: Array<{ envelope: { header: { key: string, ancestors?: { genesis: string }, height: string }, msg: any }, hash: string }> }) {
+  const [view_flash, flash] = React.useState<null | string>(null);
+  React.useEffect(() => {
+    const t = setTimeout(() => view_flash && flash(null), 1000);
+  }, [view_flash])
+  const copy_on_click = (s: string) => {
+    return (ev: React.MouseEvent<HTMLTableDataCellElement, MouseEvent>) => {
+      flash(`Copied ${s}`);
+      navigator.clipboard.writeText(s);
+    }
+  }
+  const rows = props.tips.map((x) => {
+    const genesis = x.envelope.header.ancestors?.genesis ?? x.hash;
+    const msg = JSON.stringify(x.envelope.msg);
+    return <tr key={x.hash}>
+      <td onClick={copy_on_click(genesis)} title="Click to Copy Genesis Hash">{genesis.substring(0, 16)}...</td>
+      <td onClick={copy_on_click(x.envelope.header.key)} title="Click to Copy Key">{x.envelope.header.key.substring(0, 16)}...</td>
+      <td onClick={copy_on_click(x.hash)} title="Click to Copy Message Hash">{x.hash.substring(0, 16)}...</td>
+      <td>{x.envelope.header.height}</td>
+      <td onClick={copy_on_click(msg)} title="Click to Copy Message">{msg.substring(0, 20)}{msg.length > 20 && <span>...</span>}</td>
+      <td><button onClick={() => console.log(x.envelope)}>log msg</button></td>
+    </tr>
+  });
+  return <div>
+    <h4>{view_flash || "Click Field Below to Copy"}</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Genesis</th>
+          <th>Key</th>
+          <th>Msg Hash</th>
+          <th>Height</th>
+          <th>Msg</th>
+          <th>To Console</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows}
+      </tbody>
+    </table></div>
 }
 
 function ExpensiveMsgDB(props: { url: string }) {

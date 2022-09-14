@@ -1,11 +1,8 @@
-use self::game_move::AddNewPlayer;
 use self::game_move::Chat;
 use self::game_move::GameMove;
-use self::game_move::Init;
+use self::game_move::Heartbeat;
 use self::game_move::ListNFTForSale;
-use self::game_move::NoNewUsers;
 use self::game_move::PurchaseNFT;
-use self::game_move::RegisterUser;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
 use crate::callbacks::CallbackRegistry;
@@ -13,13 +10,12 @@ use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::sale::NFTSaleRegistry;
+use crate::nfts::sale::UXForSaleList;
+use crate::nfts::sale::UXNFTSale;
 use crate::nfts::BaseNFT;
 use crate::nfts::NFTRegistry;
 use crate::nfts::UXNFTRegistry;
 use crate::nfts::UXPlantData;
-
-use crate::nfts::sale::UXForSaleList;
-use crate::nfts::sale::UXNFTSale;
 use crate::sanitize::Sanitizable;
 use crate::tokens;
 use crate::tokens::instances::asics::ASICProducer;
@@ -33,12 +29,12 @@ use crate::tokens::token_swap::ConstantFunctionMarketMaker;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::token_swap::UXMaterialsPriceData;
 use crate::MoveEnvelope;
+use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::ops::Index;
-
 use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
@@ -59,19 +55,17 @@ pub struct GameBoard {
     pub(crate) nfts: NFTRegistry,
     pub(crate) nft_sales: NFTSaleRegistry,
     pub(crate) player_move_sequence: BTreeMap<EntityID, u64>,
-    pub(crate) new_users_allowed: bool,
-    pub(crate) init: bool,
     /// If init = true, must be Some
-    pub(crate) bitcoin_token_id: Option<TokenPointer>,
+    pub(crate) bitcoin_token_id: TokenPointer,
     /// If init = true, must be Some
-    pub(crate) dollar_token_id: Option<TokenPointer>,
+    pub(crate) dollar_token_id: TokenPointer,
     /// If init = true, must be Some
-    pub(crate) steel_token_id: Option<TokenPointer>,
+    pub(crate) steel_token_id: TokenPointer,
     /// If init = true, must be Some
-    pub(crate) silicon_token_id: Option<TokenPointer>,
+    pub(crate) silicon_token_id: TokenPointer,
 
     /// If init = true, must be Some
-    pub(crate) root_user: Option<EntityID>,
+    pub(crate) root_user: EntityID,
     pub(crate) callbacks: CallbackRegistry,
     pub(crate) current_time: u64,
     pub(crate) mining_subsidy: u128,
@@ -84,43 +78,158 @@ pub struct CallContext {
     pub sender: EntityID,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct GameSetup {
+    pub players: Vec<String>,
+    pub start_amount: u64,
+}
+impl GameSetup {
+    fn setup_game(&self, g: &mut GameBoard) {
+        for player in self.players.iter() {
+            let id = g.alloc();
+            g.users.insert(
+                id,
+                UserData {
+                    key: player.clone(),
+                },
+            );
+            g.tokens[g.dollar_token_id].mint(&id, self.start_amount as u128);
+        }
+    }
+}
+
 impl GameBoard {
     /// Creates a new GameBoard
-    pub fn new() -> GameBoard {
-        GameBoard {
-            tokens: TokenRegistry::default(),
+    pub fn new(setup: GameSetup) -> GameBoard {
+        let mut alloc = EntityIDAllocator::new();
+
+        let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Bitcoin".into()));
+        let dollar = Box::new(TokenBase::new_from_alloc(&mut alloc, "US Dollar".into()));
+        let asic = Box::new(TokenBase::new_from_alloc(&mut alloc, "ASIC Gen 1".into()));
+        let steel = Box::new(TokenBase::new_from_alloc(&mut alloc, "Steel".into()));
+        let silicon = Box::new(TokenBase::new_from_alloc(&mut alloc, "Silicon".into()));
+        let mut tokens = TokenRegistry::default();
+        let bitcoin_token_id = tokens.new_token(btc);
+        let dollar_token_id = tokens.new_token(dollar);
+        let steel_token_id = tokens.new_token(steel);
+        let silicon_token_id = tokens.new_token(silicon);
+        let asic_token_id = tokens.new_token(asic);
+        tokens.hashboards.insert(
+            asic_token_id,
+            HashBoardData {
+                hash_per_watt: (3.0 * 10e12) as u128,
+                reliability: 100,
+            },
+        );
+        tokens.steel.insert(
+            steel_token_id,
+            Steel {
+                variety: tokens::instances::steel::SteelVariety::Structural,
+                weight_in_kg: 1,
+            },
+        );
+        tokens
+            .silicon
+            .insert(silicon_token_id, Silicon { weight_in_kg: 1 });
+
+        let root_user = alloc.make();
+
+        let mut g = GameBoard {
+            tokens,
             swap: Default::default(),
             turn_count: 0,
-            alloc: EntityIDAllocator::new(),
+            bitcoin_token_id,
+            dollar_token_id,
+            steel_token_id,
+            silicon_token_id,
+            root_user,
+            alloc,
             users: Default::default(),
             nfts: Default::default(),
             nft_sales: Default::default(),
             player_move_sequence: Default::default(),
-            new_users_allowed: true,
-            init: false,
-            bitcoin_token_id: None,
-            dollar_token_id: None,
-            steel_token_id: None,
-            silicon_token_id: None,
-            root_user: None,
             callbacks: Default::default(),
             current_time: 0,
             mining_subsidy: 100_000_000_000 * 50,
             ticks: Default::default(),
             chat: VecDeque::with_capacity(1000),
             chat_counter: 0,
-        }
+        };
+        g.post_init();
+        setup.setup_game(&mut g);
+        g
+    }
+
+    fn post_init(&mut self) {
+        // DEMO CODE:
+        // REMOVE BEFORE FLIGHT
+        self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10000000);
+        self.tokens[self.dollar_token_id].mint(&self.root_user, 30000);
+        //
+        let id = self.alloc();
+        self.callbacks.schedule(Box::new(ASICProducer {
+            id,
+            total_units: 100_000,
+            base_price: 20,
+            price_asset: self.bitcoin_token_id,
+            hash_asset: *self.tokens.hashboards.iter().next().unwrap().0,
+            adjusts_every: 100, // what units?
+            current_time: 0,
+            first: true,
+        }));
+        let id = self.alloc();
+        self.callbacks.schedule(Box::new(SteelSmelter {
+            id,
+            total_units: 100_000,
+            base_price: 1,
+            price_asset: self.bitcoin_token_id,
+            hash_asset: self.steel_token_id,
+            adjusts_every: 100, // what units?
+            current_time: 0,
+            first: true,
+        }));
+        let id = self.alloc();
+        self.callbacks.schedule(Box::new(SiliconRefinery {
+            id,
+            total_units: 100_000,
+            base_price: 38,
+            price_asset: self.bitcoin_token_id,
+            hash_asset: self.silicon_token_id,
+            adjusts_every: 100, // what units?
+            current_time: 0,
+            first: true,
+        }));
+        // TODO: Initialize Power Plants?
+        let nft_id = self.alloc();
+        let demo_nft = self.nfts.add(Box::new(BaseNFT {
+            owner: self.root_user,
+            nft_id,
+            transfer_count: 0,
+        }));
+        self.nft_sales.list_nft(
+            &CallContext {
+                sender: self.root_user,
+            },
+            demo_nft,
+            1000,
+            self.bitcoin_token_id,
+            &self.nfts,
+        );
+        self.callbacks.schedule(Box::new(PowerPlantEvent {
+            time: self.current_time + 100,
+            period: 100,
+        }));
     }
     /// Creates a new EntityID
     pub fn alloc(&mut self) -> EntityID {
         self.alloc.make()
     }
-    pub fn root_user(&self) -> Option<EntityID> {
+    pub fn root_user(&self) -> EntityID {
         self.root_user
     }
     /// Check if a given user is the root_user
     pub fn user_is_admin(&self, user: EntityID) -> bool {
-        Some(user) == self.root_user
+        user == self.root_user
     }
 
     /// Processes a GameMove against the board after verifying it's integrity
@@ -130,7 +239,7 @@ impl GameBoard {
         MoveEnvelope {
             d,
             sequence,
-            mut from,
+            from,
             time,
         }: MoveEnvelope,
         signed_by: String,
@@ -145,19 +254,9 @@ impl GameBoard {
         } else {
             *current_move = sequence;
         }
-        let mut mv = d.sanitize(())?;
-        if !self.user_is_admin(from) && mv.is_priviledged() {
-            return Ok(());
-        }
-
+        let mv = d.sanitize(())?;
         self.update_current_time(Some((from, time)));
         self.process_ticks();
-        if let GameMove::AddNewPlayer(_) = mv {
-            mv = GameMove::RegisterUser(RegisterUser {
-                hex_user_key: signed_by,
-            });
-            from = self.root_user().unwrap();
-        }
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         self.play_inner(mv, from)
@@ -183,112 +282,7 @@ impl GameBoard {
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         let context = CallContext { sender: from };
         match d {
-            GameMove::Init(Init {}) => {
-                if self.init == false {
-                    self.init = true;
-                    let btc = Box::new(TokenBase::new(self, "Bitcoin".into()));
-                    let dollar = Box::new(TokenBase::new(self, "US Dollar".into()));
-                    let asic = Box::new(TokenBase::new(self, "ASIC Gen 1".into()));
-                    let steel = Box::new(TokenBase::new(self, "Steel".into()));
-                    let silicon = Box::new(TokenBase::new(self, "Silicon".into()));
-                    let _ = self.bitcoin_token_id.insert(self.tokens.new_token(btc));
-                    let _ = self.dollar_token_id.insert(self.tokens.new_token(dollar));
-                    let steel = self.tokens.new_token(steel);
-                    let _ = self.steel_token_id.insert(steel);
-                    let _ = self.tokens.steel.insert(
-                        steel,
-                        Steel {
-                            variety: tokens::instances::steel::SteelVariety::Structural,
-                            weight_in_kg: 1,
-                        },
-                    );
-                    let silicon = self.tokens.new_token(silicon);
-                    let _ = self.silicon_token_id.insert(silicon);
-                    let _ = self
-                        .tokens
-                        .silicon
-                        .insert(silicon, Silicon { weight_in_kg: 1 });
-
-                    let asic = self.tokens.new_token(asic);
-                    let _ = self.tokens.hashboards.insert(
-                        asic,
-                        HashBoardData {
-                            hash_per_watt: (3.0 * 10e12) as u128,
-                            reliability: 100,
-                        },
-                    );
-                    self.callbacks.schedule(Box::new(ASICProducer {
-                        id: self.alloc.make(),
-                        total_units: 100_000,
-                        base_price: 20,
-                        price_asset: self.bitcoin_token_id.unwrap(),
-                        hash_asset: asic,
-                        adjusts_every: 100, // what units?
-                        current_time: self.current_time,
-                        first: true,
-                    }));
-
-                    self.callbacks.schedule(Box::new(SteelSmelter {
-                        id: self.alloc.make(),
-                        total_units: 100_000,
-                        base_price: 1,
-                        price_asset: self.bitcoin_token_id.unwrap(),
-                        hash_asset: steel,
-                        adjusts_every: 100, // what units?
-                        current_time: self.current_time,
-                        first: true,
-                    }));
-
-                    self.callbacks.schedule(Box::new(SiliconRefinery {
-                        id: self.alloc.make(),
-                        total_units: 100_000,
-                        base_price: 38,
-                        price_asset: self.bitcoin_token_id.unwrap(),
-                        hash_asset: steel,
-                        adjusts_every: 100, // what units?
-                        current_time: self.current_time,
-                        first: true,
-                    }));
-
-                    let root = self.alloc.make();
-                    let _ = self.root_user.insert(root);
-
-                    // DEMO CODE:
-                    // REMOVE BEFORE FLIGHT
-                    self.tokens[self.bitcoin_token_id.unwrap()].mint(&root, 10000000);
-                    self.tokens[self.dollar_token_id.unwrap()].mint(&root, 30000);
-                    // TODO: Initialize Power Plants?
-                    let demo_nft = self.nfts.add(Box::new(BaseNFT {
-                        owner: self.root_user.unwrap(),
-                        nft_id: self.alloc.make(),
-                        transfer_count: 0,
-                    }));
-                    self.nft_sales.list_nft(
-                        &CallContext {
-                            sender: self.root_user().unwrap(),
-                        },
-                        demo_nft,
-                        1000,
-                        self.bitcoin_token_id.unwrap(),
-                        &self.nfts,
-                    );
-
-                    self.callbacks.schedule(Box::new(PowerPlantEvent {
-                        time: self.current_time + 100,
-                        period: 100,
-                    }));
-                }
-            }
-            GameMove::AddNewPlayer(AddNewPlayer()) => {}
-            GameMove::RegisterUser(RegisterUser { hex_user_key }) => {
-                if self.new_users_allowed {
-                    self.users
-                        .insert(self.alloc.make(), UserData { key: hex_user_key });
-                }
-            }
-            GameMove::NoNewUsers(NoNewUsers {}) => {
-                self.new_users_allowed = false;
-            }
+            GameMove::Heartbeat(Heartbeat()) => {}
             GameMove::Trade(Trade {
                 pair,
                 amount_a,
@@ -344,9 +338,9 @@ impl GameBoard {
     pub fn get_ux_materials_prices(&mut self) -> Result<Vec<UXMaterialsPriceData>, ()> {
         let mut price_data = Vec::new();
         // get pointer and human name for materials and
-        let bitcoin_token_id = self.bitcoin_token_id.unwrap();
-        let steel_token_id = self.steel_token_id.unwrap();
-        let silicon_token_id = self.silicon_token_id.unwrap();
+        let bitcoin_token_id = self.bitcoin_token_id;
+        let steel_token_id = self.steel_token_id;
+        let silicon_token_id = self.silicon_token_id;
         // get ux names
         let registry = &self.tokens;
         let human_name_bitcoin = registry
