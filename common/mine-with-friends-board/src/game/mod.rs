@@ -2,11 +2,6 @@ use self::game_move::Chat;
 use self::game_move::GameMove;
 use self::game_move::Heartbeat;
 use self::game_move::ListNFTForSale;
-<<<<<<< HEAD
-use self::game_move::MintPowerPlant;
-use self::game_move::NoNewUsers;
-=======
->>>>>>> af10827 (formatting fixes)
 use self::game_move::MintPowerPlant;
 use self::game_move::NoNewUsers;
 use self::game_move::PurchaseNFT;
@@ -304,11 +299,7 @@ impl GameBoard {
                 location,
                 plant_type,
             }) => {
-<<<<<<< HEAD
                 PowerPlant::mint_power_plant(self, resources, location, plant_type, context.sender);
-=======
-                NFTMinter::mint_power_plant(self, resources, location, plant_type, context.sender);
->>>>>>> af10827 (formatting fixes)
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,
