@@ -113,39 +113,48 @@ impl PSBTDatabase {
     }
 }
 
-async fn get_db_from_env() -> Result<MsgDB, Box<dyn std::error::Error>> {
-    let app_name = std::env::var("APP_DB_NAME")?;
-    let prefix = std::env::var("APP_DB_PREFIX")
-        .ok()
-        .map(|m| PathBuf::from_str(&m))
-        .transpose()?;
-    let db = setup_db(&app_name, prefix).await?;
-    Ok(db)
+#[derive(Deserialize)]
+struct Config {
+    db_app_name: String,
+    #[serde(default)]
+    db_prefix: Option<PathBuf>,
+    bitcoin: BitcoinConfig,
+    app_instance: String,
+    logfile: PathBuf,
 }
 
-async fn get_bitcoin_rpc() -> Result<Arc<Client>, Box<dyn std::error::Error>> {
-    let cfg: BitcoinConfig = serde_json::from_str(&std::env::var("APP_BTC_RPC_JSON")?)?;
-    Ok(cfg.get_new_client().await?)
+impl Config {
+    fn from_env() -> Result<Config, Box<dyn std::error::Error>> {
+        let j = std::env::var("LITIGATOR_CONFIG_JSON")?;
+        Ok(serde_json::from_str(&j)?)
+    }
+    async fn get_db(&self) -> Result<MsgDB, Box<dyn std::error::Error>> {
+        let db = setup_db(&self.db_app_name, self.db_prefix.clone()).await?;
+        Ok(db)
+    }
+    async fn get_bitcoin_rpc(&self) -> Result<Arc<Client>, Box<dyn std::error::Error>> {
+        Ok(self.bitcoin.get_new_client().await?)
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let _db = get_db_from_env().await?;
-    let _rpc = get_bitcoin_rpc().await?;
-    let instance = std::env::var("APP_SUB_INSTANCE")?;
-    do_main(instance).await
+    do_main().await
 }
 
-async fn do_main(instance: String) -> Result<(), Box<dyn std::error::Error>> {
+async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::from_env()?;
+    let db = config.get_db().await?;
+    let bitcoin = config.get_bitcoin_rpc().await?;
     let typ = "org";
     let org = "judica";
-    let proj = format!("sapio-litigator.{}", instance);
+    let proj = format!("sapio-litigator.{}", config.app_instance);
     let proj =
         directories::ProjectDirs::from(typ, org, &proj).expect("Failed to find config directory");
     let mut data_dir = proj.data_dir().to_owned();
     data_dir.push("modules");
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
-    let logfile = std::env::var("SAPIO_LITIGATOR_EVLOG")?;
+    let logfile = config.logfile;
     let mut opened = OpenOptions::default();
     opened.append(true).create(true).open(&logfile).await?;
     let fi = File::open(logfile).await?;
