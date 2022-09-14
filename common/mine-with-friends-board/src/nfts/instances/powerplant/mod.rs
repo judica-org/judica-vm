@@ -37,7 +37,6 @@ impl PowerPlant {
     }
     /// Mint a new PowerPlant NFT
     pub(crate) fn mint_power_plant(
-        &self,
         game: &mut GameBoard,
         // need to put a power plant price map somewhere
         resources: Vec<(Currency, Price)>,

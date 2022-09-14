@@ -10,6 +10,7 @@ use self::game_move::Trade;
 use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
+use crate::nfts::instances::powerplant::PowerPlant;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::mint::NFTMinter;
 use crate::nfts::sale::NFTSaleRegistry;
@@ -298,7 +299,7 @@ impl GameBoard {
                 location,
                 plant_type,
             }) => {
-                NFTMinter::mint_power_plant(self, resources, location, plant_type, context.sender);
+                PowerPlant::mint_power_plant(self, resources, location, plant_type, context.sender);
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,
