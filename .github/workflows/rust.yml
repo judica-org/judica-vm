@@ -24,9 +24,9 @@ jobs:
         toolchain: nightly
         override: true
     - name: Build
-      run: cargo build --verbose --release
+      run: cargo build --verbose
     - name: Run tests
-      run: cargo test --verbose --release
+      run: cargo test --verbose
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
