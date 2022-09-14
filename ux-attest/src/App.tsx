@@ -128,10 +128,14 @@ function Users(props: { users: Array<[String, String, boolean]>, url: String }) 
     </tbody>
   </table>
 }
+const copy_on_click = (s: string) => {
+  return (ev: React.MouseEvent<HTMLTableDataCellElement, MouseEvent>) => {
+    navigator.clipboard.writeText(s);
+  }
+}
 function Tips(props: { tips: Array<{ envelope: { header: { ancestors?: { genesis: string }, height: string }, msg: any }, hash: string }> }) {
-
   const rows = props.tips.map((x) => <tr key={x.hash}>
-    <td>{x.envelope.header.ancestors?.genesis.substring(0, 16) ?? ""}</td>
+    <td onClick={copy_on_click(x.envelope.header.ancestors?.genesis ?? "")}>{x.envelope.header.ancestors?.genesis.substring(0, 16) ?? ""}</td>
     <td>{x.hash.substring(0, 16)}</td>
     <td>{x.envelope.header.height}</td>
     <td>{JSON.stringify(x.envelope.msg).substring(0, 20)}</td>
