@@ -2,6 +2,7 @@ use self::game_move::Chat;
 use self::game_move::GameMove;
 use self::game_move::Heartbeat;
 use self::game_move::ListNFTForSale;
+use self::game_move::MintPowerPlant;
 use self::game_move::PurchaseNFT;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
@@ -9,6 +10,7 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
+use crate::nfts::mint::NFTMinter;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::sale::UXForSaleList;
 use crate::nfts::sale::UXNFTSale;
@@ -289,6 +291,13 @@ impl GameBoard {
                 amount_b,
             }) => {
                 ConstantFunctionMarketMaker::do_trade(self, pair, amount_a, amount_b, &context);
+            }
+            GameMove::MintPowerPlant(MintPowerPlant{
+                resources,
+                location,
+                plant_type,
+            }) => {
+                NFTMinter::mint_power_plant(self, resources,location, plant_type,context.sender);
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,
