@@ -18,9 +18,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum GameMove {
-    /// # Initialize Game
-    #[schemars(skip)]
-    Init(Init),
     /// # Stop Inviting New Users
     #[schemars(skip)]
     NoNewUsers(NoNewUsers),
@@ -55,7 +52,7 @@ impl GameMove {
             | GameMove::SendTokens(_)
             | GameMove::Chat(_)
             | GameMove::AddNewPlayer(_) => false,
-            GameMove::Init(_) | GameMove::RegisterUser(_) | GameMove::NoNewUsers(_) => true,
+            GameMove::RegisterUser(_) | GameMove::NoNewUsers(_) => true,
         }
     }
 }
@@ -70,7 +67,6 @@ macro_rules! derive_from {
         }
     };
 }
-derive_from!(Init);
 derive_from!(NoNewUsers);
 derive_from!(AddNewPlayer);
 derive_from!(Trade);
@@ -79,9 +75,6 @@ derive_from!(ListNFTForSale);
 derive_from!(RegisterUser);
 derive_from!(SendTokens);
 derive_from!(Chat);
-
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Init();
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct NoNewUsers();

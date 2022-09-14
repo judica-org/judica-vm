@@ -28,7 +28,7 @@ impl Callback for PowerPlantEvent {
             .values_mut()
             .for_each(|v| *v = ((*v * 1024 * game.mining_subsidy) / total) / 1024);
 
-        let btc = &mut game.tokens[game.bitcoin_token_id.unwrap()];
+        let btc = &mut game.tokens[game.bitcoin_token_id];
         btc.transaction();
         for (to, amount) in shares {
             btc.mint(&to, amount)

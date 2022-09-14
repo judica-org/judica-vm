@@ -10,7 +10,7 @@ use attest_database::{
 use mine_with_friends_board::{
     entity::EntityID,
     game::{
-        game_move::{AddNewPlayer, Chat, GameMove, Init, PurchaseNFT, Trade},
+        game_move::{AddNewPlayer, Chat, GameMove, PurchaseNFT, Trade},
         GameBoard,
     },
     nfts::{sale::UXForSaleList, NftPtr, UXNFTRegistry, UXPlantData},
@@ -273,10 +273,6 @@ async fn switch_to_game(
             host_key: key,
             server: None,
         };
-        new_game
-            .board
-            .play_inner(GameMove::Init(Init()), EntityID(0))
-            .unwrap();
         *g = Some(new_game);
         GameServer::start(&db, g, game).await?;
         Ok::<(), &'static str>(())

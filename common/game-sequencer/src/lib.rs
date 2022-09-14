@@ -519,7 +519,7 @@ mod test {
     use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
     use mine_with_friends_board::{
         entity::EntityID,
-        game::game_move::{GameMove, Init},
+        game::game_move::{AddNewPlayer, GameMove},
         sanitize::Unsanitized,
     };
     use sapio_bitcoin::{
@@ -558,7 +558,7 @@ mod test {
                                 checkpoints,
                             ),
                             ruma_serde::to_canonical_value(MoveEnvelope::new(
-                                Unsanitized(GameMove::Init(Init())),
+                                Unsanitized(GameMove::AddNewPlayer(AddNewPlayer())),
                                 1,
                                 EntityID((j << 10) + i),
                                 sent_time_ms as u64,
