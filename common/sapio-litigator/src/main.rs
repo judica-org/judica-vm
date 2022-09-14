@@ -127,19 +127,21 @@ async fn get_bitcoin_rpc() -> Result<Arc<Client>, Box<dyn std::error::Error>> {
     let cfg: BitcoinConfig = serde_json::from_str(&std::env::var("APP_BTC_RPC_JSON")?)?;
     Ok(cfg.get_new_client().await?)
 }
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _db = get_db_from_env().await?;
     let _rpc = get_bitcoin_rpc().await?;
-    do_main().await
+    let instance = std::env::var("APP_SUB_INSTANCE")?;
+    do_main(instance).await
 }
 
-async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
+async fn do_main(instance: String) -> Result<(), Box<dyn std::error::Error>> {
     let typ = "org";
     let org = "judica";
-    let proj = "sapio-litigator";
+    let proj = format!("sapio-litigator.{}", instance);
     let proj =
-        directories::ProjectDirs::from(typ, org, proj).expect("Failed to find config directory");
+        directories::ProjectDirs::from(typ, org, &proj).expect("Failed to find config directory");
     let mut data_dir = proj.data_dir().to_owned();
     data_dir.push("modules");
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
