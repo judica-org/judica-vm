@@ -35,9 +35,9 @@ jobs:
     - if: steps.cache-build.cache-hit != 'true'
       name: Build Sapio Deps (builds most deps)
       run: |
-        cargo build --manifest-path submodule/sapio/Cargo.toml --target-dir target_cache --lib
-        cargo fetch --target-dir target_cache
-        cp -r target_cache target
+        cargo fetch
+        cargo build --manifest-path submodule/sapio/Cargo.toml --target-dir target --lib
+        cp -r target target_cache
     - if: steps.cache-build.cache-hit == 'true'
       name: Copy Sapio Deps
       run: |
