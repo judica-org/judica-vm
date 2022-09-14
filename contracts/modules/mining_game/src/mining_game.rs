@@ -19,7 +19,7 @@ use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
 use sapio::util::amountrange::AmountF64;
 use sapio::*;
-use sapio_base::simp::SIMP;
+use sapio_base::simp::{CompiledObjectLT, SIMPAttachableAt, SIMP};
 use sapio_base::timelocks::RelHeight;
 use schemars::*;
 use serde::*;
@@ -39,10 +39,17 @@ struct GameKernel {
 }
 impl GameKernel {}
 impl SIMP for GameKernel {
-    fn get_protocol_number() -> i64 {
+    fn get_protocol_number(&self) -> i64 {
         -119
     }
+    fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
+        serde_json::to_value::<Self>(self.clone())
+    }
+    fn from_json(v: serde_json::Value) -> Result<Self, serde_json::Error> {
+        serde_json::from_value(v)
+    }
 }
+impl SIMPAttachableAt<CompiledObjectLT> for GameKernel {}
 
 struct GameStarted {
     kernel: GameKernel,
@@ -335,7 +342,9 @@ fn coerce_degrade(
 ) -> Result<Option<()>, CompilationError> {
     match k {
         Some(GameEnd::Degrade) => Ok(Some(())),
-        Some(_) => Err(todo!()),
+        Some(_) => Err(CompilationError::ContinuationCoercion(
+            "Failed to coerce GameEnd into Degrade".into(),
+        )),
         None => Ok(None),
     }
 }
