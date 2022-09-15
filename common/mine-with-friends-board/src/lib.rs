@@ -14,22 +14,15 @@ pub mod util;
 /// Verified is a wrapper for a data type with sequencing and signature data
 pub struct MoveEnvelope {
     /// The data
-    d: Unsanitized<GameMove>,
+    pub d: Unsanitized<GameMove>,
     /// The data should be immediately preceded by sequence - 1
-    sequence: u64,
-    /// The player who is making the move
-    from: entity::EntityID,
-    time: u64,
+    pub sequence: u64,
+    pub time: u64,
 }
 
 impl MoveEnvelope {
-    pub fn new(d: Unsanitized<GameMove>, sequence: u64, from: entity::EntityID, time: u64) -> Self {
-        Self {
-            d,
-            sequence,
-            from,
-            time,
-        }
+    pub fn new(d: Unsanitized<GameMove>, sequence: u64, time: u64) -> Self {
+        Self { d, sequence, time }
     }
 }
 

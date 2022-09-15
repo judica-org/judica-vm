@@ -8,7 +8,7 @@ export USE_RELEASE_TAURI=${USE_RELEASE_TAURI:-"dev"}
 export BTCPORT
 SCRIPT_LOCATION=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
 cd $SCRIPT_LOCATION
-export RUST_LOG=debug
+export RUST_LOG=${RUST_LOG:-"debug"}
 ROOTPATH=${ROOTPATH:-"$HOME/demo-app-dir"}
 export TOR_DIR="$HOME/demo-app-dir"
 

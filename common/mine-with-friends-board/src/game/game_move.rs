@@ -87,13 +87,12 @@ impl MoveEnvelope {
         g: G,
         sequence: u64,
         _sig: String,
-        from: EntityID,
+        _from: EntityID,
         time: u64,
     ) -> Self {
         MoveEnvelope {
             d: sanitize::Unsanitized(g.into()),
             sequence,
-            from,
             time,
         }
     }

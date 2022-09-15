@@ -110,7 +110,7 @@ impl Sanitizable for Chat {
     type Context = ();
     type Error = ();
 
-    fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error> {
+    fn sanitize(self, _context: Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
 }

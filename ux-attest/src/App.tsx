@@ -172,6 +172,7 @@ function Tips(props: { tips: Array<{ envelope: { header: { key: string, ancestor
 
 function ExpensiveMsgDB(props: { url: string }) {
   const [data, set_data] = React.useState({});
+  const [text, set_text] = React.useState("");
   const handle = async () => {
     const target = `${props.url}/expensive_db_snapshot`;
     console.log("Fetching...", target);
@@ -186,25 +187,28 @@ function ExpensiveMsgDB(props: { url: string }) {
     <td>{k.substring(0, 16)}</td>
     <td>{envelope.header.ancestors?.genesis.substring(0, 16) ?? ""}</td>
     <td>{envelope.header.height}</td>
-    <td>{JSON.stringify(envelope.msg).substring(0, 20)}</td>
+    <td onMouseOver={()=>set_text(JSON.stringify(envelope.msg))}>{JSON.stringify(envelope.msg).substring(0, 20)}</td>
     <td><button onClick={() => console.log(envelope)}>log msg</button></td>
   </tr>);
   return <div>
     <button onClick={handle}>Refresh</button>
-    <table>
-      <thead>
-        <tr>
-          <th>Msg Hash</th>
-          <th>Genesis</th>
-          <th>Height</th>
-          <th>Msg</th>
-          <th>To Console</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows}
-      </tbody>
-    </table>
+    <div style={{"display":"grid", "gridTemplateColumns": "1fr 1fr"}}>
+      <table>
+        <thead>
+          <tr>
+            <th>Msg Hash</th>
+            <th>Genesis</th>
+            <th>Height</th>
+            <th>Msg</th>
+            <th>To Console</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows}
+        </tbody>
+      </table>
+      <textarea contentEditable={false} value={text}></textarea>
+    </div>
   </div>
 }
 

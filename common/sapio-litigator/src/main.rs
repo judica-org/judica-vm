@@ -21,7 +21,7 @@ use std::collections::btree_map::Values;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::str::FromStr;
+
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
@@ -107,7 +107,7 @@ impl PSBTDatabase {
             signing_services: vec![],
         }
     }
-    fn try_signing(&mut self, psbt: PartiallySignedTransaction) -> Option<Transaction> {
+    fn try_signing(&mut self, _psbt: PartiallySignedTransaction) -> Option<Transaction> {
         // logic here should be to either try pinging services and attempt to finalize a txn out of it
         todo!()
     }
@@ -144,8 +144,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env()?;
-    let db = config.get_db().await?;
-    let bitcoin = config.get_bitcoin_rpc().await?;
+    let _db = config.get_db().await?;
+    let _bitcoin = config.get_bitcoin_rpc().await?;
     let typ = "org";
     let org = "judica";
     let proj = format!("sapio-litigator.{}", config.app_instance);
@@ -217,10 +217,10 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
                 match &mut state {
                     AppState::Uninitialized => (),
                     AppState::Initialized {
-                        args,
+                        args: _,
                         contract,
                         bound_to,
-                        psbt_db,
+                        psbt_db: _,
                     } => {
                         if let Some(out) = bound_to {
                             if let Ok(program) = contract.bind_psbt(
@@ -232,13 +232,13 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
                                 for obj in program.program.values() {
                                     for tx in obj.txs.iter() {
                                         let SapioStudioFormat::LinkedPSBT {
-                                            psbt,
-                                            hex,
+                                            psbt: _,
+                                            hex: _,
                                             metadata,
-                                            output_metadata,
-                                            added_output_metadata,
+                                            output_metadata: _,
+                                            added_output_metadata: _,
                                         } = tx;
-                                        if let Some(data) =
+                                        if let Some(_data) =
                                             metadata.simp.get(&AutoBroadcast::get_protocol_number())
                                         {
                                             // TODO:
@@ -270,10 +270,7 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
             Some(Event::Rebind(o)) => match &mut state {
                 AppState::Uninitialized => todo!(),
                 AppState::Initialized {
-                    args,
-                    contract,
-                    ref mut bound_to,
-                    ..
+                    ref mut bound_to, ..
                 } => {
                     bound_to.insert(o);
                 }

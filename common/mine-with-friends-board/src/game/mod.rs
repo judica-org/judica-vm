@@ -38,6 +38,7 @@ use std::ops::Index;
 use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
+use tracing::info;
 
 #[derive(Serialize)]
 pub struct UserData {
@@ -52,6 +53,7 @@ pub struct GameBoard {
     pub(crate) turn_count: u64,
     alloc: EntityIDAllocator,
     pub(crate) users: BTreeMap<EntityID, UserData>,
+    pub(crate) users_by_key: BTreeMap<String, EntityID>,
     pub(crate) nfts: NFTRegistry,
     pub(crate) nft_sales: NFTSaleRegistry,
     pub(crate) player_move_sequence: BTreeMap<EntityID, u64>,
@@ -80,12 +82,16 @@ pub struct CallContext {
 
 #[derive(Serialize, Deserialize)]
 pub struct GameSetup {
+    // TODO: Make Set to guarantee Unique...
     pub players: Vec<String>,
     pub start_amount: u64,
 }
 impl GameSetup {
     fn setup_game(&self, g: &mut GameBoard) {
-        for player in self.players.iter() {
+        let mut p = self.players.clone();
+        p.sort();
+        p.dedup();
+        for player in p {
             let id = g.alloc();
             g.users.insert(
                 id,
@@ -93,6 +99,7 @@ impl GameSetup {
                     key: player.clone(),
                 },
             );
+            g.users_by_key.insert(player.clone(), id);
             g.tokens[g.dollar_token_id].mint(&id, self.start_amount as u128);
         }
     }
@@ -145,6 +152,7 @@ impl GameBoard {
             root_user,
             alloc,
             users: Default::default(),
+            users_by_key: Default::default(),
             nfts: Default::default(),
             nft_sales: Default::default(),
             player_move_sequence: Default::default(),
@@ -236,20 +244,14 @@ impl GameBoard {
     /// and sanitizing it.
     pub fn play(
         &mut self,
-        MoveEnvelope {
-            d,
-            sequence,
-            from,
-            time,
-        }: MoveEnvelope,
+        MoveEnvelope { d, sequence, time }: MoveEnvelope,
         signed_by: String,
     ) -> Result<(), ()> {
-        if self.users.get(&from).map(|u| &u.key) != Some(&signed_by) {
-            return Ok(());
-        }
+        let from = *self.users_by_key.get(&signed_by).ok_or(())?;
+        info!(key = signed_by, ?from, "Got Move {} From Player", sequence);
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from.clone()).or_default();
-        if (*current_move + 1) != sequence {
+        if (*current_move + 1) != sequence || *current_move == 0 && sequence == 0 {
             return Ok(());
         } else {
             *current_move = sequence;
@@ -259,7 +261,9 @@ impl GameBoard {
         self.process_ticks();
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
-        self.play_inner(mv, from)
+        self.play_inner(mv, from)?;
+        info!("Move Successfully Made");
+        Ok(())
     }
 
     pub fn process_ticks(&mut self) {
