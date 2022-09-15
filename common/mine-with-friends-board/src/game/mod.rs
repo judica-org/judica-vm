@@ -20,6 +20,7 @@ use crate::sanitize::Sanitizable;
 use crate::tokens;
 use crate::tokens::instances::asics::ASICProducer;
 use crate::tokens::instances::asics::HashBoardData;
+use crate::tokens::instances::concrete::ConcreteMiller;
 use crate::tokens::instances::silicon::Silicon;
 use crate::tokens::instances::silicon::SiliconRefinery;
 use crate::tokens::instances::steel::Steel;
@@ -63,7 +64,8 @@ pub struct GameBoard {
     pub(crate) steel_token_id: TokenPointer,
     /// If init = true, must be Some
     pub(crate) silicon_token_id: TokenPointer,
-
+    /// If init = true, must be Some
+    pub(crate) concrete_token_id: TokenPointer,
     /// If init = true, must be Some
     pub(crate) root_user: EntityID,
     pub(crate) callbacks: CallbackRegistry,
@@ -105,12 +107,14 @@ impl GameBoard {
 
         let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Bitcoin".into()));
         let dollar = Box::new(TokenBase::new_from_alloc(&mut alloc, "US Dollar".into()));
+        let concrete = Box::new(TokenBase::new_from_alloc(&mut alloc, "Concrete".into()));
         let asic = Box::new(TokenBase::new_from_alloc(&mut alloc, "ASIC Gen 1".into()));
         let steel = Box::new(TokenBase::new_from_alloc(&mut alloc, "Steel".into()));
         let silicon = Box::new(TokenBase::new_from_alloc(&mut alloc, "Silicon".into()));
         let mut tokens = TokenRegistry::default();
         let bitcoin_token_id = tokens.new_token(btc);
         let dollar_token_id = tokens.new_token(dollar);
+        let concrete_token_id = tokens.new_token(concrete);
         let steel_token_id = tokens.new_token(steel);
         let silicon_token_id = tokens.new_token(silicon);
         let asic_token_id = tokens.new_token(asic);
@@ -142,6 +146,7 @@ impl GameBoard {
             dollar_token_id,
             steel_token_id,
             silicon_token_id,
+            concrete_token_id,
             root_user,
             alloc,
             users: Default::default(),
@@ -177,9 +182,9 @@ impl GameBoard {
             current_time: 0,
             first: true,
         }));
-        let id = self.alloc();
+        let steel_id = self.alloc();
         self.callbacks.schedule(Box::new(SteelSmelter {
-            id,
+            id:steel_id,
             total_units: 100_000,
             base_price: 1,
             price_asset: self.bitcoin_token_id,
@@ -188,13 +193,24 @@ impl GameBoard {
             current_time: 0,
             first: true,
         }));
-        let id = self.alloc();
+        let silicon_id = self.alloc();
         self.callbacks.schedule(Box::new(SiliconRefinery {
-            id,
+            id:silicon_id,
             total_units: 100_000,
             base_price: 38,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.silicon_token_id,
+            adjusts_every: 100, // what units?
+            current_time: 0,
+            first: true,
+        }));
+        let concrete_id = self.alloc();
+        self.callbacks.schedule(Box::new(ConcreteMiller {
+            id:concrete_id,
+            total_units: 100_000,
+            base_price: 290,
+            price_asset: self.bitcoin_token_id,
+            hash_asset: self.concrete_token_id,
             adjusts_every: 100, // what units?
             current_time: 0,
             first: true,
@@ -341,6 +357,7 @@ impl GameBoard {
         let bitcoin_token_id = self.bitcoin_token_id;
         let steel_token_id = self.steel_token_id;
         let silicon_token_id = self.silicon_token_id;
+        let concrete_token_id = self.concrete_token_id;
         // get ux names
         let registry = &self.tokens;
         let human_name_bitcoin = registry
@@ -355,6 +372,10 @@ impl GameBoard {
             .index(silicon_token_id)
             .nickname()
             .unwrap_or_else(|| "Silicon".into());
+        let human_name_concrete = registry
+            .index(concrete_token_id)
+            .nickname()
+            .unwrap_or_else(|| "Concrete".into());
         // get steel/btc
         let (steel_qty_btc, btc_qty_steel) = ConstantFunctionMarketMaker::get_pair_price_data(
             self,
@@ -369,6 +390,15 @@ impl GameBoard {
             self,
             TradingPairID {
                 asset_a: silicon_token_id,
+                asset_b: bitcoin_token_id,
+            },
+        )
+        .unwrap();
+        // get concrete/btc
+        let (concrete_qty_btc, btc_qty_concrete) = ConstantFunctionMarketMaker::get_pair_price_data(
+            self,
+            TradingPairID {
+                asset_a: concrete_token_id,
                 asset_b: bitcoin_token_id,
             },
         )
@@ -391,8 +421,18 @@ impl GameBoard {
             },
             asset_a: human_name_silicon,
             mkt_qty_a: silicon_qty_btc,
-            asset_b: human_name_bitcoin,
+            asset_b: human_name_bitcoin.clone(),
             mkt_qty_b: btc_qty_silicon,
+        });
+        price_data.push(UXMaterialsPriceData {
+            trading_pair: TradingPairID {
+                asset_a: concrete_token_id,
+                asset_b: bitcoin_token_id,
+            },
+            asset_a: human_name_concrete,
+            mkt_qty_a: concrete_qty_btc,
+            asset_b: human_name_bitcoin,
+            mkt_qty_b: btc_qty_concrete,
         });
 
         Ok(price_data)
