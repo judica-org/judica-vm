@@ -154,9 +154,7 @@ fn get_materials_schema() -> RootSchema {
 }
 
 #[tauri::command]
-async fn list_my_users(
-    db: State<'_, Database>,
-) -> Result<Vec<(XOnlyPublicKey, String)>, ()> {
+async fn list_my_users(db: State<'_, Database>) -> Result<Vec<(XOnlyPublicKey, String)>, ()> {
     let msgdb = db.get().await.map_err(|_| ())?;
     let handle = msgdb.get_handle().await;
     let keys = handle.get_keymap().map_err(|_| ())?;
@@ -217,7 +215,7 @@ async fn send_chat(
     db: State<'_, Database>,
     sk: State<'_, SigningKeyInner>,
     chat: String,
-) -> Result<(), ()> {
+) -> Result<(), &'static str> {
     make_move_inner(secp, db, sk, GameMove::from(Chat(chat)), EntityID(0)).await
 }
 
@@ -228,20 +226,23 @@ async fn make_move_inner(
     sk: State<'_, SigningKeyInner>,
     nextMove: GameMove,
     from: EntityID,
-) -> Result<(), ()> {
-    let xpubkey = sk.inner().lock().await.ok_or(())?;
-    let msgdb = db.get().await.map_err(|_e| ())?;
+) -> Result<(), &'static str> {
+    let xpubkey = sk.inner().lock().await.ok_or("No Key Selected")?;
+    let msgdb = db.get().await.map_err(|_e| "No DB Available")?;
     let mut handle = msgdb.get_handle().await;
-    let tip = handle.get_tip_for_user_by_key(xpubkey).map_err(|_| ())?;
-    let last: MoveEnvelope = serde_json::from_value(tip.msg().to_owned().into()).map_err(|_| ())?;
+    let tip = handle
+        .get_tip_for_user_by_key(xpubkey)
+        .or(Err("No Tip Found"))?;
+    let last: MoveEnvelope = serde_json::from_value(tip.msg().to_owned().into())
+        .or(Err("Could not Deserialized Old Tip"))?;
     let mve = MoveEnvelope {
         d: Unsanitized(nextMove),
         sequence: last.sequence + 1,
         time: attest_util::now() as u64,
     };
-    let v = ruma_serde::to_canonical_value(mve).map_err(|_| ())?;
-    let keys = handle.get_keymap().map_err(|_| ())?;
-    let sk = keys.get(&xpubkey).ok_or(())?;
+    let v = ruma_serde::to_canonical_value(mve).or(Err("Could Not Canonicalize new Enveloper"))?;
+    let keys = handle.get_keymap().or(Err("Could not get keys"))?;
+    let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
     // TODO: Runa tipcache
     let msg = handle
@@ -253,16 +254,17 @@ async fn make_move_inner(
             None,
             TipControl::AllTips,
         )
+        .or(Err("Could Not Wrap Message"))?
+        .or(Err("Signing Failed"))?;
+    let authenticated = msg
+        .self_authenticate(secp.inner())
         .ok()
-        .ok_or(())?
-        .ok()
-        .ok_or(())?;
-    let authenticated = msg.self_authenticate(secp.inner()).ok().ok_or(())?;
+        .ok_or("Signature Incorrect")?;
     let _ = handle
         .try_insert_authenticated_envelope(authenticated)
         .ok()
-        .ok_or(())?;
-    Ok::<(), ()>(())
+        .ok_or("Could Not Insert Message")?;
+    Ok::<(), _>(())
 }
 
 #[tauri::command]
