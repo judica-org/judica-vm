@@ -1,6 +1,7 @@
 export const material_type_color_map = {
   'Silicon': 'lightblue',
-  'Steel': 'grey'
+  'Steel': 'grey',
+  'Concrete': 'brown'
 }
 
 export type RawMaterialsActions = 'Purchase Materials' | 'Sell Materials';

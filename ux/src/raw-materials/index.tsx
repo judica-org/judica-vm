@@ -16,8 +16,8 @@ export type MaterialPriceData = {
   readonly mkt_qty_b: number;
 }
 
-type MaterialType = 'Steel'|'Silicon';
- 
+type MaterialType = 'Steel' | 'Silicon' | 'Concrete';
+
 type MaterialPriceDisplay = {
   trading_pair: {
     asset_a: number;
@@ -35,17 +35,17 @@ export const RawMaterialsMarket = () => {
     const unlisten = appWindow.listen("materials-price-data", (ev) => {
       console.log(ev);
       const materials_data = ev.payload as MaterialPriceData[];
-      const transformed:MaterialPriceDisplay[] = materials_data.map(({trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b}) => {
+      const transformed: MaterialPriceDisplay[] = materials_data.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b }) => {
         return {
           trading_pair,
           material_type: asset_a as MaterialType,
-          price: Math.round(mkt_qty_b/mkt_qty_a),
+          price: Math.round(mkt_qty_b / mkt_qty_a),
           currency: asset_b,
         }
       })
       set_materials(transformed)
     });
-    
+
     return () => {
       (async () => {
         (await unlisten)()
