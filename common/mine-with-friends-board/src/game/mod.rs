@@ -184,7 +184,7 @@ impl GameBoard {
         }));
         let steel_id = self.alloc();
         self.callbacks.schedule(Box::new(SteelSmelter {
-            id:steel_id,
+            id: steel_id,
             total_units: 100_000,
             base_price: 1,
             price_asset: self.bitcoin_token_id,
@@ -195,7 +195,7 @@ impl GameBoard {
         }));
         let silicon_id = self.alloc();
         self.callbacks.schedule(Box::new(SiliconRefinery {
-            id:silicon_id,
+            id: silicon_id,
             total_units: 100_000,
             base_price: 38,
             price_asset: self.bitcoin_token_id,
@@ -206,7 +206,7 @@ impl GameBoard {
         }));
         let concrete_id = self.alloc();
         self.callbacks.schedule(Box::new(ConcreteMiller {
-            id:concrete_id,
+            id: concrete_id,
             total_units: 100_000,
             base_price: 290,
             price_asset: self.bitcoin_token_id,
@@ -395,14 +395,15 @@ impl GameBoard {
         )
         .unwrap();
         // get concrete/btc
-        let (concrete_qty_btc, btc_qty_concrete) = ConstantFunctionMarketMaker::get_pair_price_data(
-            self,
-            TradingPairID {
-                asset_a: concrete_token_id,
-                asset_b: bitcoin_token_id,
-            },
-        )
-        .unwrap();
+        let (concrete_qty_btc, btc_qty_concrete) =
+            ConstantFunctionMarketMaker::get_pair_price_data(
+                self,
+                TradingPairID {
+                    asset_a: concrete_token_id,
+                    asset_b: bitcoin_token_id,
+                },
+            )
+            .unwrap();
 
         price_data.push(UXMaterialsPriceData {
             trading_pair: TradingPairID {
