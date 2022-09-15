@@ -243,7 +243,7 @@ async fn make_move_inner(
     let last: MoveEnvelope = serde_json::from_value(tip.msg().to_owned().into()).map_err(|_| ())?;
     let mve = MoveEnvelope {
         d: Unsanitized(nextMove),
-        sequence: last.sequence,
+        sequence: last.sequence + 1,
         time: attest_util::now() as u64,
     };
     let v = ruma_serde::to_canonical_value(mve).map_err(|_| ())?;
