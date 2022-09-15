@@ -473,20 +473,16 @@ impl GameBoard {
             let player = reg.nfts.get(&ptr).unwrap().owner();
             match res.get_mut(&player) {
                 None => {
-                    res.insert(player, (rate, 0));
+                    res.insert(player, (rate * denominator, denominator));
                 }
                 Some(v) => {
-                    v.0 += rate;
+                    v.0 += rate * denominator;
                 }
             }
             total += rate;
         }
         // normalization step
-        res.iter_mut().for_each(|(_, v)| {
-            v.0 *= denominator;
-            v.0 /= total;
-            v.1 = denominator;
-        });
+        res.iter_mut().for_each(|(_, v)| v.0 /= total);
         res
     }
 }
