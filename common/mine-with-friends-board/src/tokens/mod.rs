@@ -33,7 +33,7 @@ pub(crate) trait Token: Send + Sync {
     fn burn(&mut self, to: &EntityID, amount: Price);
 
     /// Checks how much funds `to` has
-    fn balance_check(&mut self, to: &EntityID) -> u128;
+    fn balance_check(&self, to: &EntityID) -> u128;
     /// Checks the total amount of coins
     fn total_coins(&self) -> u128;
     /// Transfer coins from the `sender` to the `receiver`.
@@ -110,8 +110,8 @@ impl Token for TokenBase {
         self.total -= amount;
     }
 
-    fn balance_check(&mut self, to: &EntityID) -> u128 {
-        *self.balances.entry(to.clone()).or_default()
+    fn balance_check(&self, to: &EntityID) -> u128 {
+        self.balances.get(to).map_or(0, |x| x.clone())
     }
     fn total_coins(&self) -> u128 {
         self.total
