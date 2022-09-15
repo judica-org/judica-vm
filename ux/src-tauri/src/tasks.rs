@@ -8,7 +8,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio;
+
 use tokio::spawn;
 use tokio::sync::MutexGuard;
 use tokio::task::JoinHandle;
@@ -79,7 +79,7 @@ pub(crate) fn start_game(
     g: GameStateInner,
     sequencer: Arc<Sequencer>,
 ) -> JoinHandle<()> {
-    let task = spawn(async move {
+    spawn(async move {
         // TODO: Check which game the move is for?
         while let Some((game_move, s)) = sequencer.output_move().await {
             info!(move_ = ?game_move, "New Move Recieved");
@@ -92,6 +92,5 @@ pub(crate) fn start_game(
                 info!("NOTIFYING Waiters of New State");
             }
         }
-    });
-    task
+    })
 }

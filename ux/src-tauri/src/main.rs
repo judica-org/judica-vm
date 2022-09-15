@@ -98,7 +98,7 @@ async fn game_synchronizer(
             let plants: Vec<(NftPtr, UXPlantData)> = game
                 .as_mut()
                 .map(|g| g.board.get_ux_power_plant_data())
-                .unwrap_or_else(|| Vec::new());
+                .unwrap_or_else(Vec::new);
             plants
         };
 
@@ -155,7 +155,6 @@ fn get_materials_schema() -> RootSchema {
 
 #[tauri::command]
 async fn list_my_users(
-    secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
 ) -> Result<Vec<(XOnlyPublicKey, String)>, ()> {
     let msgdb = db.get().await.map_err(|_| ())?;
@@ -169,7 +168,7 @@ async fn list_my_users(
     let ret: Vec<(XOnlyPublicKey, String)> = users
         .iter()
         .zip(keys.keys())
-        .map(|((_a, b), k)| (k.clone(), b.clone()))
+        .map(|((_a, b), k)| (*k, b.clone()))
         .collect();
     Ok(ret)
 }
@@ -263,7 +262,7 @@ async fn make_move_inner(
         .try_insert_authenticated_envelope(authenticated)
         .ok()
         .ok_or(())?;
-    return Ok::<(), ()>(());
+    Ok::<(), ()>(())
 }
 
 #[tauri::command]
@@ -312,13 +311,11 @@ async fn switch_to_game(
 
 #[tauri::command]
 async fn switch_to_db(
-    window: Window,
     db: State<'_, Database>,
     appName: String,
     prefix: Option<PathBuf>,
 ) -> Result<(), ()> {
-    let res = db.connect(&appName, prefix.clone()).await.map_err(|_| ());
-    res
+    db.connect(&appName, prefix.clone()).await.map_err(|_| ())
 }
 
 #[tauri::command]
@@ -333,7 +330,9 @@ async fn set_signing_key(
     }
     {
         let l = s.lock().await;
-        l.as_ref().map(|g| g.should_notify.notify_one());
+        if let Some(g) = l.as_ref() {
+            g.should_notify.notify_one()
+        }
     }
 
     Ok(())
@@ -393,7 +392,7 @@ fn main() {
     tauri::Builder::default()
         .setup(|_app| Ok(()))
         .manage(Secp256k1::new())
-        .manage(game.clone())
+        .manage(game)
         .manage(db)
         .manage(sk)
         .invoke_handler(tauri::generate_handler![
