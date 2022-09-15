@@ -70,6 +70,7 @@ version = "0.1.0"
 dependencies = [
  "attest-database",
  "attest-messages",
+ "attest-util",
  "game-host-messages",
  "game-sequencer",
  "mine-with-friends-board",
@@ -81,6 +82,8 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -964,6 +967,8 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

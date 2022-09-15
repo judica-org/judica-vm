@@ -28,6 +28,7 @@ use tokio::sync::MutexGuard;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
+use tracing::info;
 
 /// Game Server Handle
 pub struct GameServer {
@@ -59,6 +60,7 @@ impl GameServer {
                     return Err("Game Already has a Server");
                 }
 
+                info!(key=?game.host_key, "Starting Game");
                 let db = db.get().await.unwrap();
                 let k = game.host_key;
                 let shutdown: Arc<AtomicBool> = Default::default();
@@ -69,7 +71,9 @@ impl GameServer {
                     k,
                     db,
                 );
-                let game_sequencer = game_sequencer::Sequencer::new(shutdown.clone(), db_fetcher);
+                let game_sequencer =
+                    game_sequencer::Sequencer::new(shutdown.clone(), db_fetcher.clone());
+                spawn({ db_fetcher.run() });
                 spawn({
                     let game_sequencer = game_sequencer.clone();
                     game_sequencer.run()
@@ -94,12 +98,14 @@ pub(crate) fn start_game(
     let task = spawn(async move {
         // TODO: Check which game the move is for?
         while let Some((game_move, s)) = sequencer.output_move().await {
+            info!(move_ = ?game_move, "New Move Recieved");
             let mut game = g.lock().await;
+
             if let Some(game) = game.as_mut() {
                 game.board.play(game_move, s.to_hex());
                 // TODO: Maybe notify less often?
                 game.should_notify.notify_waiters();
-                println!("NOTIFYING");
+                info!("NOTIFYING Waiters of New State");
             }
         }
     });

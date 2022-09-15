@@ -15,10 +15,12 @@ use mine_with_friends_board::{
         GameBoard,
     },
     nfts::{sale::UXForSaleList, NftPtr, UXNFTRegistry, UXPlantData},
+    sanitize::Unsanitized,
     tokens::{
         token_swap::{TradingPairID, UXMaterialsPriceData},
         TokenPointer,
     },
+    MoveEnvelope,
 };
 use sapio_bitcoin::{
     hashes::hex::ToHex,
@@ -33,12 +35,13 @@ use tokio::{
     spawn,
     sync::{futures::Notified, Notify, OnceCell},
 };
+use tracing::{info, warn};
 mod tasks;
 
 struct PrintOnDrop(String);
 impl Drop for PrintOnDrop {
     fn drop(&mut self) {
-        println!("{}", self.0);
+        warn!("{}", self.0);
     }
 }
 
@@ -49,7 +52,7 @@ async fn game_synchronizer(
     d: State<'_, Database>,
     signing_key: State<'_, SigningKeyInner>,
 ) -> Result<(), ()> {
-    println!("Registering");
+    info!("Registering Window for State Updates");
     let p = PrintOnDrop("Registration Canceled".into());
     loop {
         // No Idea why the borrow checker likes this, but it seems to be the case
@@ -117,7 +120,7 @@ async fn game_synchronizer(
             listings
         };
 
-        println!("Emitting!");
+        info!("Emitting State Updates");
         window.emit("available-sequencers", list_of_chains);
         let signing_key: Option<_> = *signing_key.inner().lock().await;
         window.emit("chat-log", chat_log);
@@ -192,8 +195,16 @@ async fn make_new_chain(
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
 ) -> Result<String, String> {
-    let (kp, next_nonce, genesis) =
-        generate_new_user(secp.inner(), Some(GameMove::Heartbeat(Heartbeat()))).err_to_string()?;
+    let (kp, next_nonce, genesis) = generate_new_user(
+        secp.inner(),
+        Some(MoveEnvelope {
+            d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+            sequence: 0,
+            /// The player who is making the move, myst be figured out somewhere...
+            time: attest_util::now() as u64,
+        }),
+    )
+    .err_to_string()?;
     let msgdb = db.get().await.err_to_string()?;
     let mut handle = msgdb.get_handle().await;
     // TODO: Transaction?
@@ -225,10 +236,17 @@ async fn make_move_inner(
     nextMove: GameMove,
     from: EntityID,
 ) -> Result<(), ()> {
-    let xpubkey = sk.inner().lock().await.unwrap();
+    let xpubkey = sk.inner().lock().await.ok_or(())?;
     let msgdb = db.get().await.map_err(|e| ())?;
-    let v = ruma_serde::to_canonical_value(nextMove).map_err(|_| ())?;
     let mut handle = msgdb.get_handle().await;
+    let tip = handle.get_tip_for_user_by_key(xpubkey).map_err(|_| ())?;
+    let last: MoveEnvelope = serde_json::from_value(tip.msg().to_owned().into()).map_err(|_| ())?;
+    let mve = MoveEnvelope {
+        d: Unsanitized(nextMove),
+        sequence: last.sequence,
+        time: attest_util::now() as u64,
+    };
+    let v = ruma_serde::to_canonical_value(mve).map_err(|_| ())?;
     let keys = handle.get_keymap().map_err(|_| ())?;
     let sk = keys.get(&xpubkey).ok_or(())?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
@@ -372,6 +390,7 @@ impl Database {
     }
 }
 fn main() {
+    tracing_subscriber::fmt::init();
     let game = GameStateInner::new(Mutex::new(None));
     let db = Database {
         state: Arc::new(Mutex::new(None)),

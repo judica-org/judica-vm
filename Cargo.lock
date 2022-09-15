@@ -1001,6 +1001,8 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

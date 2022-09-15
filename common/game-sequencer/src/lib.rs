@@ -6,6 +6,7 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
+use mine_with_friends_board::game::game_move::GameMove;
 use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::XOnlyPublicKey;
@@ -30,6 +31,10 @@ use tokio::sync::{
 };
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
+use tracing::debug;
+use tracing::info;
+use tracing::trace;
+use tracing::warn;
 
 // TODO: Examine this logic
 // async fn make_sequenceing(db: MsgDB, oracle_publickey: XOnlyPublicKey) -> Option<Vec<Envelope>> {
@@ -297,6 +302,7 @@ impl OnlineDBFetcher {
             self.is_running
                 .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst);
         if let Ok(false) = last {
+            info!(key=?self.oracle_key, "Starting OnlineDBFetcher");
             let sequencer = self.clone().start_sequencer();
             let db_fetcher = self.clone().start_envelope_db_fetcher();
             sequencer.await.ok();
@@ -325,6 +331,7 @@ impl OnlineDBFetcher {
                                     match v.data {
                                         BroadcastByHost::Heartbeat => {}
                                         BroadcastByHost::Sequence(s) => {
+                                            info!(key=?self.oracle_key, n_msg = s.len(), "Got Batch to Sequence");
                                             if self.schedule_batches_to_sequence.send(s).is_err() {
                                                 return;
                                             };
@@ -353,6 +360,7 @@ impl OnlineDBFetcher {
                             break 'check;
                         }
                         Err(_) => {
+                            debug!(key=?self.oracle_key, sleep_for = ?self.poll_sequencer_period, "No New Messages Sleeping...");
                             sleep(self.poll_sequencer_period).await;
                         }
                     }
@@ -370,12 +378,19 @@ impl OnlineDBFetcher {
                 {
                     let handle = self.db.get_handle().await;
                     let mut env = self.msg_cache.lock().await;
-                    handle.get_all_messages_collect_into_inconsistent(&mut newer, &mut env);
+                    if let Err(e) =
+                        handle.get_all_messages_collect_into_inconsistent(&mut newer, &mut env)
+                    {
+                        warn!(error=?e, "DB Fetching Failed");
+                        return;
+                    }
                 }
 
                 if newer_before != newer {
+                    info!(key=?self.oracle_key, new=newer, before=newer_before, "Got New Messages");
                     self.new_msgs_in_cache.notify_waiters();
                 }
+                debug!(key=?self.oracle_key, wait_till=?self.rebuild_db_period, "Waiting to scan DB Again");
                 sleep(self.rebuild_db_period).await;
             }
             self.new_msgs_in_cache.notify_waiters();
@@ -438,6 +453,7 @@ impl Sequencer {
             self.is_running
                 .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst);
         if let Ok(false) = last {
+            info!("Starting Sequencer");
             let batcher = self.clone().start_envelope_batcher();
             let move_deserializer = self.clone().start_move_deserializer();
             batcher.await;
@@ -460,11 +476,13 @@ impl Sequencer {
             let mut input_envelope_hashes = batches.lock().await;
             let msg_cache = self.db_fetcher.msg_cache();
             while let Some(mut envelope_hashes) = input_envelope_hashes.recv().await {
+                info!(n = envelope_hashes.len(), "Got New Batch to Sequence");
                 let mut should_wait = None;
                 'wait_for_new: while envelope_hashes.len() != 0 {
                     if let Some(n) = should_wait.take() {
                         // register for notification, then drop lock, then wait
                         n.await;
+                        trace!("Awoken from Waiting");
                         // if we got woken up because of shutdown, shut down.
                         if self.should_shutdown() {
                             return;
@@ -478,8 +496,10 @@ impl Sequencer {
                                 self.push_next_envelope.send(e.remove());
                             }
                             Vacant(k) => {
-                                envelope_hashes.push_front(k.into_key());
+                                let msg_hash = k.into_key();
+                                envelope_hashes.push_front(msg_hash);
                                 should_wait.insert(self.db_fetcher.notified());
+                                info!(?msg_hash, "Wait for Envelope");
                                 continue 'wait_for_new;
                             }
                         }
@@ -496,6 +516,7 @@ impl Sequencer {
         let task = spawn(async move {
             let mut next_envelope = self.output_envelope.lock().await;
             while let Some(envelope) = next_envelope.recv().await {
+                trace!(msg_hash=?envelope.canonicalized_hash_ref(), "Got Envelope");
                 let r_game_move = serde_json::from_value(envelope.msg().to_owned().into());
                 match r_game_move {
                     Ok(game_move) => {
@@ -507,7 +528,9 @@ impl Sequencer {
                             return;
                         }
                     }
-                    Err(_) => {}
+                    Err(_) => {
+                        warn!(bad_move=?envelope.msg(),"Invalid Move Found");
+                    }
                 }
             }
         });
@@ -562,7 +585,6 @@ mod test {
                             ruma_serde::to_canonical_value(MoveEnvelope::new(
                                 Unsanitized(GameMove::Heartbeat(Heartbeat())),
                                 1,
-                                EntityID((j << 10) + i),
                                 sent_time_ms as u64,
                             ))
                             .unwrap(),

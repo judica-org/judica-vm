@@ -93,7 +93,6 @@ impl MoveEnvelope {
         MoveEnvelope {
             d: sanitize::Unsanitized(g.into()),
             sequence,
-            from,
             time,
         }
     }
