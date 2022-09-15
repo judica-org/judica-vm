@@ -38,6 +38,7 @@ use std::ops::Index;
 use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
+use tracing::info;
 
 #[derive(Serialize)]
 pub struct UserData {
@@ -247,9 +248,10 @@ impl GameBoard {
         signed_by: String,
     ) -> Result<(), ()> {
         let from = *self.users_by_key.get(&signed_by).ok_or(())?;
+        info!(key = signed_by, ?from, "Got Move {} From Player", sequence);
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from.clone()).or_default();
-        if (*current_move + 1) != sequence {
+        if (*current_move + 1) != sequence || *current_move == 0 && sequence == 0 {
             return Ok(());
         } else {
             *current_move = sequence;
@@ -259,7 +261,9 @@ impl GameBoard {
         self.process_ticks();
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
-        self.play_inner(mv, from)
+        self.play_inner(mv, from)?;
+        info!("Move Successfully Made");
+        Ok(())
     }
 
     pub fn process_ticks(&mut self) {
