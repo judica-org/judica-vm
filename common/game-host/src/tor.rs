@@ -1,12 +1,10 @@
-use attest_database::db_handle::get::hidden_services;
 use attest_util::{ensure_dir, get_hidden_service_hostname};
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use serde::{Deserialize, Serialize};
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
-use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc, time::Duration};
+use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc};
 use tokio::task::JoinHandle;
-use tracing::{debug, info};
 
 use crate::Config;
 
@@ -46,7 +44,7 @@ impl TorConfig {
             .map_err(|e| format!("{}", e))?)
     }
     pub async fn get_hostname(&self) -> Result<String, Box<dyn Error + Send + Sync>> {
-        let mut hidden_service_dir = self.hidden_service_dir().await?;
+        let hidden_service_dir = self.hidden_service_dir().await?;
         get_hidden_service_hostname(hidden_service_dir).await
     }
 }

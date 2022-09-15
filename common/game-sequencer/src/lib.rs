@@ -6,7 +6,7 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
-use mine_with_friends_board::game::game_move::GameMove;
+
 use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::XOnlyPublicKey;
@@ -543,7 +543,6 @@ mod test {
     use super::*;
     use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
     use mine_with_friends_board::{
-        entity::EntityID,
         game::game_move::{GameMove, Heartbeat},
         sanitize::Unsanitized,
     };
@@ -556,9 +555,9 @@ mod test {
     fn make_random_moves() -> Vec<VecDeque<Authenticated<Envelope>>> {
         let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
         let envelopes = (0..10)
-            .map(|j| {
+            .map(|_j| {
                 (0..100)
-                    .map(|i| {
+                    .map(|_i| {
                         let next_nonce_s = PrecomittedNonce::new(secp);
                         let next_nonce = next_nonce_s.get_public(secp);
                         let sk = SecretKey::new(&mut rand::thread_rng());
