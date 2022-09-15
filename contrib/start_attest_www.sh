@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-cd ../ux-attest
+cd ../www/attest
 export PORT=3002
 export BROWSER=none
 $(

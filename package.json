@@ -2,7 +2,7 @@
   "private": true,
   "workspaces": [
     "ux",
-    "ux-attest",
+    "www/attest",
     "www/game-host"
   ]
 }

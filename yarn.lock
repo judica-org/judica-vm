@@ -13136,9 +13136,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ux-attest@workspace:ux-attest":
+"ux-attest@workspace:www/attest":
   version: 0.0.0-use.local
-  resolution: "ux-attest@workspace:ux-attest"
+  resolution: "ux-attest@workspace:www/attest"
   dependencies:
     "@testing-library/jest-dom": ^5.14.1
     "@testing-library/react": ^13.0.0
