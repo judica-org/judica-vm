@@ -3,9 +3,7 @@
     windows_subsystem = "windows"
 )]
 use attest_database::{
-    connection::MsgDB,
-    db_handle::{create::TipControl, MsgDBHandle},
-    generate_new_user, setup_db,
+    connection::MsgDB, db_handle::create::TipControl, generate_new_user, setup_db,
 };
 use game_host_messages::{BroadcastByHost, Channelized};
 use mine_with_friends_board::{
@@ -14,12 +12,8 @@ use mine_with_friends_board::{
         game_move::{Chat, GameMove, Heartbeat, PurchaseNFT, Trade},
         GameBoard,
     },
-    nfts::{sale::UXForSaleList, NftPtr, UXNFTRegistry, UXPlantData},
+    nfts::{sale::UXForSaleList, NftPtr, UXPlantData},
     sanitize::Unsanitized,
-    tokens::{
-        token_swap::{TradingPairID, UXMaterialsPriceData},
-        TokenPointer,
-    },
     MoveEnvelope,
 };
 use sapio_bitcoin::{
@@ -28,12 +22,12 @@ use sapio_bitcoin::{
     KeyPair, XOnlyPublicKey,
 };
 use schemars::{schema::RootSchema, schema_for};
-use std::{collections::BTreeMap, error::Error, path::PathBuf, sync::Arc};
+use std::{error::Error, path::PathBuf, sync::Arc};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::{
     spawn,
-    sync::{futures::Notified, Notify, OnceCell},
+    sync::{futures::Notified, Notify},
 };
 use tracing::{info, warn};
 mod tasks;
@@ -53,7 +47,7 @@ async fn game_synchronizer(
     signing_key: State<'_, SigningKeyInner>,
 ) -> Result<(), ()> {
     info!("Registering Window for State Updates");
-    let p = PrintOnDrop("Registration Canceled".into());
+    let _p = PrintOnDrop("Registration Canceled".into());
     loop {
         // No Idea why the borrow checker likes this, but it seems to be the case
         // that because the notified needs to live inside the async state machine
@@ -78,7 +72,7 @@ async fn game_synchronizer(
         let (appName, prefix, list_of_chains, user_keys) = {
             let l = d.inner().state.lock().await;
             if let Some(g) = l.as_ref() {
-                let mut handle = g.db.get_handle().await;
+                let handle = g.db.get_handle().await;
                 let v = handle.get_all_users().map_err(|_| ())?;
                 let keys: Vec<XOnlyPublicKey> = handle.get_keymap().unwrap().into_keys().collect();
                 (g.name.clone(), g.prefix.clone(), v, keys)
@@ -175,7 +169,7 @@ async fn list_my_users(
     let ret: Vec<(XOnlyPublicKey, String)> = users
         .iter()
         .zip(keys.keys())
-        .map(|((a, b), k)| (k.clone(), b.clone()))
+        .map(|((_a, b), k)| (k.clone(), b.clone()))
         .collect();
     Ok(ret)
 }
@@ -237,7 +231,7 @@ async fn make_move_inner(
     from: EntityID,
 ) -> Result<(), ()> {
     let xpubkey = sk.inner().lock().await.ok_or(())?;
-    let msgdb = db.get().await.map_err(|e| ())?;
+    let msgdb = db.get().await.map_err(|_e| ())?;
     let mut handle = msgdb.get_handle().await;
     let tip = handle.get_tip_for_user_by_key(xpubkey).map_err(|_| ())?;
     let last: MoveEnvelope = serde_json::from_value(tip.msg().to_owned().into()).map_err(|_| ())?;
@@ -303,7 +297,7 @@ async fn switch_to_game(
         let mut g = game2.lock().await;
         g.as_mut()
             .map(|game| game.server.as_ref().map(|s| s.shutdown()));
-        let mut new_game = Game {
+        let new_game = Game {
             board: GameBoard::new(game_setup),
             should_notify: Arc::new(Notify::new()),
             host_key: key,
@@ -338,7 +332,7 @@ async fn set_signing_key(
         *l = selected;
     }
     {
-        let mut l = s.lock().await;
+        let l = s.lock().await;
         l.as_ref().map(|g| g.should_notify.notify_one());
     }
 
@@ -397,7 +391,7 @@ fn main() {
     };
     let sk = SigningKeyInner::new(Mutex::new(None));
     tauri::Builder::default()
-        .setup(|app| Ok(()))
+        .setup(|_app| Ok(()))
         .manage(Secp256k1::new())
         .manage(game.clone())
         .manage(db)
