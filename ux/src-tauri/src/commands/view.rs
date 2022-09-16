@@ -1,14 +1,8 @@
-use crate::{tasks::GameServer, Database, Game, GameState, PrintOnDrop, SigningKeyInner};
-use attest_database::db_handle::create::TipControl;
-use mine_with_friends_board::{
-    entity::EntityID,
-    game::game_move::{Chat, Heartbeat, PurchaseNFT, Trade},
-    nfts::{sale::UXForSaleList, NftPtr, UXPlantData},
-    sanitize::Unsanitized,
-};
-use sapio_bitcoin::{hashes::hex::ToHex, XOnlyPublicKey};
-use schemars::{schema::RootSchema, schema_for};
-use std::{path::PathBuf, sync::Arc};
+use crate::{Database, Game, GameState, PrintOnDrop, SigningKeyInner};
+
+use mine_with_friends_board::nfts::{sale::UXForSaleList, NftPtr, UXPlantData};
+use sapio_bitcoin::XOnlyPublicKey;
+
 use tauri::{State, Window};
 use tokio::sync::futures::Notified;
 use tracing::info;
@@ -107,7 +101,9 @@ pub(crate) async fn game_synchronizer_inner(
     }
 }
 
-pub(crate) async fn list_my_users_inner(db: State<'_, Database>) -> Result<Vec<(XOnlyPublicKey, String)>, ()> {
+pub(crate) async fn list_my_users_inner(
+    db: State<'_, Database>,
+) -> Result<Vec<(XOnlyPublicKey, String)>, ()> {
     let msgdb = db.get().await.map_err(|_| ())?;
     let handle = msgdb.get_handle().await;
     let keys = handle.get_keymap().map_err(|_| ())?;
@@ -123,4 +119,3 @@ pub(crate) async fn list_my_users_inner(db: State<'_, Database>) -> Result<Vec<(
         .collect();
     Ok(ret)
 }
-

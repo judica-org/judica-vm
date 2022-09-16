@@ -83,8 +83,7 @@ pub(crate) async fn make_move_inner_inner(
         sequence: last.sequence + 1,
         time: attest_util::now() as u64,
     };
-    let v =
-        ruma_serde::to_canonical_value(mve).or(Err("Could Not Canonicalize new Enveloper"))?;
+    let v = ruma_serde::to_canonical_value(mve).or(Err("Could Not Canonicalize new Enveloper"))?;
     let keys = handle.get_keymap().or(Err("Could not get keys"))?;
     let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
