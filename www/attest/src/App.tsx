@@ -1,9 +1,9 @@
-import React, { FormEvent } from 'react';
+import React from 'react';
 import logo from './logo.svg';
 import './App.css';
 import { GridColDef, GridColumns } from '@mui/x-data-grid';
-import { Newspaper } from '@mui/icons-material';
-import { Container } from '@mui/material';
+import { Menu, Newspaper } from '@mui/icons-material';
+import { AppBar, Box, Container, IconButton, Toolbar, Typography } from '@mui/material';
 import { AddPeer } from './AddPeer';
 import { TaskSet } from './TaskSet';
 import { Peers } from './Peers';
@@ -11,12 +11,12 @@ import { ExpensiveMsgDB } from './ExpensiveMsgDB';
 import { Tips } from './Tips';
 import { Users } from './Users';
 import { MakeGenesis } from './MakeGenesis';
+import { ChangeService } from './ChangeService';
 
 
 function App() {
   const start = new URL(global.location.toString());
   const init = start.searchParams.get("service_url");
-  const service = React.useRef<HTMLInputElement | null>(null);
   const [url, set_url] = React.useState<null | string>(init);
   const [status, set_status] = React.useState<null | any>(null);
   React.useEffect(
@@ -43,60 +43,44 @@ function App() {
       }
     }
     , [url])
-  const handle_click = (ev: FormEvent) => {
-    ev.preventDefault();
-    if (service.current !== null) {
-      const url = new URL(global.location.toString());
-      url.searchParams.set("service_url", service.current.value)
-      global.location.href = url.toString();
-      set_url(service.current.value)
-    }
-  };
   return (
-    <div className="App" >
-      <Container maxWidth={"lg"}>
+    <Box className="App">
+      <AppBar position="static" color="secondary">
+        <Toolbar variant="dense">
+          <IconButton edge="start" color="inherit" aria-label="menu" sx={{ mr: 2 }}>
+            <Menu />
+          </IconButton>
+          <Typography variant="body2" color="inherit" component="div" style={{ paddingRight: "10px" }}>
+            {url}
+          </Typography>
+          <ChangeService set_url={set_url} ></ChangeService>
+          <Typography variant="body2" color="inherit" component="div" style={{ paddingLeft: "10px" }}>
+            Tor: {status && status.hidden_service_url && status.hidden_service_url[0]}:{status && status.hidden_service_url[1]}
+          </Typography>
+        </Toolbar>
+      </AppBar>
+      <Container maxWidth={"lg"} className="Main">
 
         <div className="TableGrid">
-          <div style={{ gridArea: "head" }}>
-            Connected to: {url}
-            <form onSubmit={handle_click}>
-              <input ref={service} name="service" type="text" ></input>
-              <button type="submit">Set Server</button>
-            </form>
-            <hr></hr>
-            {url && <AddPeer root={url}></AddPeer>}
-            <hr></hr>
-            {url && <MakeGenesis url={url}></MakeGenesis>}
-            <hr></hr>
-            {status && status.hidden_service_url && <div>
-              <h1>Tor Enabled:</h1>
-              <h6>{status.hidden_service_url[0]}:{status.hidden_service_url[1]} </h6>
-            </div>}
-          </div>
 
-          <div style={{ gridArea: "a" }}>
-            <h4>Peers</h4>
-            {status && <Peers peers={status.peers}></Peers>}
+          <div style={{ gridArea: "peers" }}>
+            {status && url && <Peers peers={status.peers} root={url}></Peers>}
           </div>
-          <div style={{ gridArea: "b" }}>
-            <h4>Tasks</h4>
+          <div style={{ gridArea: "tasks" }}>
             {status && <TaskSet tasks={status.peer_connections}></TaskSet>}
           </div>
-          <div style={{ gridArea: "c" }}>
-            <h4>Tips</h4>
+          <div style={{ gridArea: "tips" }}>
             {status && <Tips tips={status.tips}></Tips>}
           </div>
-          <div style={{ gridArea: "d" }}>
-            <h4>Key Chain</h4>
+          <div style={{ gridArea: "keys" }}>
             {status && url && <Users users={status.all_users} url={url}></Users>}
           </div>
-          <div style={{ gridArea: "e" }}>
-            <h4>DB Snapshot</h4>
+          <div style={{ gridArea: "all-msgs" }}>
             {url ? <ExpensiveMsgDB url={url}></ExpensiveMsgDB> : <div></div>}
           </div>
         </div>
       </Container>
-    </div>
+    </Box>
   );
 }
 

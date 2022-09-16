@@ -17,6 +17,14 @@ export function ExpensiveMsgDB(props: { url: string; }) {
     }
     catch { }
   };
+  function CustomToolbar() {
+    return (
+      <GridToolbarContainer>
+        <h4>All Messages in DB</h4>
+        <Button onClick={handle}> Refresh </Button>
+      </GridToolbarContainer>
+    );
+  }
 
   const rows: GridRowsProp = Object.entries(data).map(([msg_hash, envelope]: [string, Envelope], id) => {
     const genesis = envelope.header.ancestors?.genesis ?? msg_hash;
@@ -39,14 +47,6 @@ export function ExpensiveMsgDB(props: { url: string; }) {
       ]
     }
   ];
-  function CustomToolbar() {
-    return (
-      <GridToolbarContainer>
-        <h4>All Messages in DB</h4>
-        <Button onClick={handle}> Refresh </Button>
-      </GridToolbarContainer>
-    );
-  }
 
   return <DataGrid rows={rows} columns={columns} components={{ Toolbar: CustomToolbar }} />;
 }

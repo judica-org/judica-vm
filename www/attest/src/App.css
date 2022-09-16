@@ -1,6 +1,15 @@
 .TableGrid {
     display: grid;
-    grid-template-areas: "head . ." " a a b " " c c c" " d e e";
-    grid-template-rows: 1fr 1fr 1fr 1fr;
+    grid-template-areas: " peers peers peers tasks " " tips tips tips tips " " keys all-msgs all-msgs all-msgs";
+    grid-template-rows: 1fr 1fr 1fr;
     grid-gap: 10px;
+    height: 100%;
+}
+
+.Main {
+    height: 100%;
+}
+
+.App {
+    height: 100vh;
 }

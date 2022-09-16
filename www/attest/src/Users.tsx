@@ -1,7 +1,8 @@
 import React from 'react';
-import { DataGrid, GridActionsCellItem, GridRowParams, GridRowsProp } from '@mui/x-data-grid';
+import { DataGrid, GridActionsCellItem, GridRowParams, GridRowsProp, GridToolbarContainer } from '@mui/x-data-grid';
 import { Create } from '@mui/icons-material';
 import { handle_new_msg } from './App';
+import { MakeGenesis } from './MakeGenesis';
 
 export function Users(props: { users: Array<[string, string, boolean]>; url: string; }) {
 
@@ -22,6 +23,14 @@ export function Users(props: { users: Array<[string, string, boolean]>; url: str
     }
   ];
 
-  return <DataGrid rows={rows} columns={columns} />;
+  return <DataGrid rows={rows} columns={columns} components={{ Toolbar: CustomToolbar(props.url) }} />;
 
+}
+function CustomToolbar(url: string) {
+  return () => (
+    <GridToolbarContainer>
+      <h4>Chains</h4>
+      <MakeGenesis url={url}></MakeGenesis>
+    </GridToolbarContainer>
+  );
 }

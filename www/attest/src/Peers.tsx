@@ -1,8 +1,17 @@
 import React from 'react';
-import { DataGrid, GridActionsCellItem, GridRowParams, GridRowsProp } from '@mui/x-data-grid';
+import { DataGrid, GridActionsCellItem, GridRowParams, GridRowsProp, GridToolbarContainer } from '@mui/x-data-grid';
 import { Cancel, Start } from '@mui/icons-material';
+import { AddPeer } from './AddPeer';
 
-export function Peers(props: { peers: Array<{ service_url: string; port: string; fetch_from: boolean; push_to: boolean; }>; }) {
+function CustomToolbar(root: string) {
+  return ()=>(
+    <GridToolbarContainer>
+      <h4>Peers</h4>
+      <AddPeer root={root}></AddPeer>
+    </GridToolbarContainer>
+  );
+}
+export function Peers(props: { peers: Array<{ service_url: string; port: string; fetch_from: boolean; push_to: boolean; }>, root: string }) {
 
   const rows: GridRowsProp = props.peers.map((peer, id) => {
     const row: typeof rows[number] = Object.fromEntries(Object.entries(peer));
@@ -34,5 +43,5 @@ export function Peers(props: { peers: Array<{ service_url: string; port: string;
     }
   ];
 
-  return <DataGrid rows={rows} columns={columns} />;
+  return <DataGrid rows={rows} columns={columns} components={{ Toolbar: CustomToolbar(props.root) }} />;
 }

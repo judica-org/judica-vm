@@ -1,3 +1,4 @@
+import { Button } from '@mui/material';
 import React from 'react';
 
 export function MakeGenesis(props: { url: String; }) {
@@ -15,5 +16,5 @@ export function MakeGenesis(props: { url: String; }) {
       console.log(await (await ret).json());
     }
   };
-  return <button onClick={() => handle()}>New Genesis</button>;
+  return <Button size="small" onClick={() => handle()}>New Genesis</Button>;
 }

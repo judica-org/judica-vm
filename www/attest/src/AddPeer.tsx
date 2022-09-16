@@ -1,3 +1,4 @@
+import { Button, FormControl, FormGroup, TextField } from '@mui/material';
 import React, { FormEvent } from 'react';
 
 export function AddPeer(props: { root: string; }) {
@@ -21,9 +22,11 @@ export function AddPeer(props: { root: string; }) {
         })
       });
   }
-  return <form onSubmit={add_hidden}>
-    <input ref={url} name="url" type="text"></input>
-    <input ref={port} name='port' type="number"></input>
-    <button type="submit">Add Peer</button>
-  </form>;
+  return <FormControl onSubmit={add_hidden} size="small">
+    <FormGroup row={true}>
+      <TextField ref={url} name="url" type="text" label="Domain" size="small"></TextField>
+      <TextField ref={port} name='port' type="number" label="Port" size="small"></TextField>
+      <Button type="submit">Add Peer</Button>
+    </FormGroup>
+  </FormControl>;
 }
