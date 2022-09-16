@@ -87,10 +87,10 @@ impl NFTSaleRegistry {
             transfer_count,
         }) = self.nfts.get(&asset)
         {
-            if *seller != nfts[asset.clone()].owner() {
+            if *seller != nfts[asset].owner() {
                 return;
             }
-            if *transfer_count != nfts[asset.clone()].transfer_count() {
+            if *transfer_count != nfts[asset].transfer_count() {
                 return;
             }
             if limit_currency != *currency {
@@ -99,9 +99,9 @@ impl NFTSaleRegistry {
             if limit_price < *price {
                 return;
             }
-            let token = &mut tokens[currency.clone()];
+            let token = &mut tokens[(*currency)];
             token.transaction();
-            if token.transfer(sender, &nfts[asset.clone()].owner(), *price) {
+            if token.transfer(sender, &nfts[asset].owner(), *price) {
                 // NOTE: transfer may fail, so revert if so.
                 // Check is_transferable
                 nfts[asset].transfer(*sender);

@@ -11,7 +11,7 @@ use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::instances::powerplant::PlantType;
-use crate::nfts::instances::powerplant::PowerPlant;
+
 use crate::nfts::instances::powerplant::PowerPlantPrices;
 use crate::nfts::instances::powerplant::PowerPlantProducer;
 use crate::nfts::sale::NFTSaleRegistry;
@@ -293,7 +293,7 @@ impl GameBoard {
         let from = *self.users_by_key.get(&signed_by).ok_or(())?;
         info!(key = signed_by, ?from, "Got Move {} From Player", sequence);
         // TODO: check that sequence is the next sequence for that particular user
-        let current_move = self.player_move_sequence.entry(from.clone()).or_default();
+        let current_move = self.player_move_sequence.entry(from).or_default();
         if (*current_move + 1) != sequence || *current_move == 0 && sequence == 0 {
             return Ok(());
         } else {
@@ -388,7 +388,7 @@ impl GameBoard {
                 self.chat.push_back((self.chat_counter, from, s));
             }
         }
-        return Ok(());
+        Ok(())
     }
 
     pub fn get_ux_chat_log(&self) -> VecDeque<(u64, EntityID, String)> {
@@ -489,7 +489,7 @@ impl GameBoard {
         let plants = &self.nfts.power_plants.clone();
         plants.iter().for_each(|(pointer, power_plant)| {
             let mut for_sale = false;
-            if let Some(_nft_sale) = &self.nft_sales.nfts.get(&pointer) {
+            if let Some(_nft_sale) = &self.nft_sales.nfts.get(pointer) {
                 for_sale = true;
             }
             // unwrap should be safe here - we have problems if we have a pointer and cant find the NFT.
@@ -501,7 +501,7 @@ impl GameBoard {
                     coordinates: power_plant.coordinates,
                     for_sale,
                     has_miners: false,
-                    owner: owner.clone(),
+                    owner: *owner,
                     plant_type: power_plant.plant_type.clone(),
                     watts: power_plant.watts,
                     hashrate: power_plant.compute_hashrate(self),
@@ -519,7 +519,7 @@ impl GameBoard {
             power_plant_data.insert(*ptr, plant.clone());
         });
 
-        return Ok(UXNFTRegistry { power_plant_data });
+        Ok(UXNFTRegistry { power_plant_data })
     }
 
     pub fn get_user_power_plants(&mut self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
@@ -531,7 +531,7 @@ impl GameBoard {
             power_plant_data.insert(*ptr, plant.clone());
         });
         // return shape?
-        return Ok(UXNFTRegistry { power_plant_data });
+        Ok(UXNFTRegistry { power_plant_data })
     }
 
     pub fn get_ux_user_inventory(&mut self, user_id: EntityID) -> Result<UXUserInventory, ()> {
@@ -548,10 +548,10 @@ impl GameBoard {
             }
             balances
         };
-        return Ok(UXUserInventory {
+        Ok(UXUserInventory {
             user_power_plants,
             user_token_balances,
-        });
+        })
     }
 
     pub fn get_ux_energy_market(&self) -> Result<UXForSaleList, ()> {
@@ -559,13 +559,13 @@ impl GameBoard {
         self.nft_sales.nfts.iter().for_each(|(pointer, listing)| {
             listings.push(UXNFTSale {
                 nft_id: *pointer,
-                price: listing.price.clone(),
+                price: listing.price,
                 currency: listing.currency,
                 seller: listing.seller,
                 transfer_count: listing.transfer_count,
             });
         });
-        return Ok(UXForSaleList { listings });
+        Ok(UXForSaleList { listings })
     }
     pub fn get_user_hashrate_share(&self) -> BTreeMap<EntityID, (u64, u64)> {
         let denominator = 100000u64;
@@ -574,8 +574,8 @@ impl GameBoard {
         let mut total = 0u64;
         // accumulation step
         for (ptr, plant) in reg.power_plants.iter() {
-            let rate = plant.compute_hashrate(&self) as u64;
-            let player = reg.nfts.get(&ptr).unwrap().owner();
+            let rate = plant.compute_hashrate(self) as u64;
+            let player = reg.nfts.get(ptr).unwrap().owner();
             match res.get_mut(&player) {
                 None => {
                     res.insert(player, (rate * denominator, denominator));

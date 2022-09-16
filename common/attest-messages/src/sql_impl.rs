@@ -9,7 +9,7 @@ use sapio_bitcoin::XOnlyPublicKey;
 use std::str::FromStr;
 impl ToSql for Envelope {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        let cv = ruma_serde::to_canonical_value(&self)
+        let cv = ruma_serde::to_canonical_value(self)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
         Ok(ToSqlOutput::from(cv.to_string()))
     }

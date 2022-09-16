@@ -209,7 +209,7 @@ pub fn run(
     db: MsgDB,
 ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + Send + Sync + 'static>>> {
     let secp = Secp256k1::new();
-    return tokio::spawn(async move {
+    tokio::spawn(async move {
         // build our application with a route
         let app = Router::new()
             // `POST /msg` goes to `msg`
@@ -238,5 +238,5 @@ pub fn run(
             .serve(app.into_make_service())
             .await?;
         Ok(())
-    });
+    })
 }

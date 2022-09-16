@@ -7,7 +7,7 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use attest_util::now;
 use attest_util::INFER_UNIT;
-use tokio;
+
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
 use tracing::trace;
@@ -51,7 +51,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
         envelopes_to_process.clone(),
         tips_to_resolve,
     );
-    let _: () = tokio::select! {
+    tokio::select! {
         a = &mut envelope_processor => {
             warn!(?service, task="FETCH", subtask="Envelope Processor", event="SHUTDOWN", err=?a);
             latest_tip_fetcher.abort();
@@ -90,7 +90,8 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
     request_tips: UnboundedSender<Vec<CanonicalEnvelopeHash>>,
     allow_unsolicited_tips: bool,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
-    let envelope_processor = {
+    
+    {
         tokio::spawn(async move {
             while let Some((resp, cancel_inflight)) = next_envelope.recv().await {
                 // Prefer to process envelopes
@@ -111,8 +112,7 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
             }
             INFER_UNIT
         })
-    };
-    envelope_processor
+    }
 }
 async fn handle_envelope<C: Verification + 'static>(
     g: Arc<Globals>,
@@ -187,7 +187,7 @@ async fn handle_envelope<C: Verification + 'static>(
                     }
                 }
                 // safe to reuse since it is authentic still..
-                all_tips.extend(envelope.header().tips().iter().map(|(_, _, v)| v.clone()));
+                all_tips.extend(envelope.header().tips().iter().map(|(_, _, v)| *v));
                 all_tips.extend(envelope.header().ancestors().iter().map(|a| a.prev_msg()));
             }
             Err(_) => {

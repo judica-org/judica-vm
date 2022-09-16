@@ -33,7 +33,7 @@ impl BitcoinCheckPointCache {
         let new = fresh(&client, None)
             .await
             .unwrap_or_default()
-            .unwrap_or(BitcoinCheckPoints::default());
+            .unwrap_or_default();
         BitcoinCheckPointCache {
             cache: Arc::new(RwLock::new(new)),
             client,

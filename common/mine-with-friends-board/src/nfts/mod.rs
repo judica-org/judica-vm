@@ -52,9 +52,9 @@ pub struct NftPtr(EntityID);
 impl NFTRegistry {
     pub(crate) fn add(&mut self, nft: Box<dyn NFT>) -> NftPtr {
         let id = NftPtr(nft.id());
-        if self.nfts.contains_key(&id) {
+        if let std::collections::btree_map::Entry::Vacant(e) = self.nfts.entry(id) {
+            e.insert(nft);
         } else {
-            self.nfts.insert(id.clone(), nft);
         }
         id
     }

@@ -20,7 +20,7 @@ use std::{collections::BTreeSet, env::temp_dir, sync::Arc, time::Duration};
 use test_log::test;
 use tokio::spawn;
 use tracing::{debug, info};
-const HOME: &'static str = "127.0.0.1";
+const HOME: &str = "127.0.0.1";
 
 // Connect to a specific local server for testing, or assume there is an
 // open-to-world server available locally
@@ -45,7 +45,7 @@ fn get_test_id() -> Option<u16> {
     }
     Some(if test_one { 0 } else { 1 })
 }
-async fn test_context<T, F>(nodes: u8, code: F) -> ()
+async fn test_context<T, F>(nodes: u8, code: F)
 where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
@@ -148,11 +148,11 @@ async fn connect_and_test_nodes() {
             });
             let resp = join_all(it).await;
             debug!("Created {:?}", resp);
-            let genesis_resp = resp
+            
+            resp
                 .into_iter()
                 .collect::<Result<Vec<Envelope>, _>>()
-                .unwrap();
-            genesis_resp
+                .unwrap()
         };
         // Check that each node knows about it's own genesis envelope
         {
@@ -274,7 +274,7 @@ async fn connect_and_test_nodes() {
         tokio::time::sleep(Duration::from_millis(20)).await;
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
 
-        ()
+        
     })
     .await
 }
@@ -402,8 +402,7 @@ async fn check_synched(
             assert!(tips
                 .iter()
                 .map(|t| t.msg())
-                .find(|f| f.as_str() == needle.as_str())
-                .is_some())
+                .any(|f| f.as_str() == needle.as_str()))
         }
         if require_full {
             for r in resp {

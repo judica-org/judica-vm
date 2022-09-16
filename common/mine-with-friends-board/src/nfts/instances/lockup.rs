@@ -65,6 +65,6 @@ impl Callback for CoinLockup {
     }
 
     fn purpose(&self) -> String {
-        format!("CoinLockup Release Trigger")
+        "CoinLockup Release Trigger".to_string()
     }
 }

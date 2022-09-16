@@ -85,6 +85,6 @@ impl Callback for SteelSmelter {
     }
 
     fn purpose(&self) -> String {
-        format!("Releasing new Steel to the market")
+        "Releasing new Steel to the market".to_string()
     }
 }

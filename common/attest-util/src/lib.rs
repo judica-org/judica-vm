@@ -42,7 +42,7 @@ pub async fn ensure_dir(
         _e => dir?,
     };
     if let Some(perms) = perms {
-        let _metadata = tokio::fs::set_permissions(&data_dir, perms).await?;
+        tokio::fs::set_permissions(&data_dir, perms).await?;
     }
     Ok(data_dir)
 }

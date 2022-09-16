@@ -41,7 +41,7 @@ pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgD
     let data_dir: PathBuf = dirs.data_dir().into();
     let data_dir = if let Some(prefix) = prefix {
         tracing::debug!("Creating DB with Prefix {}", prefix.display());
-        prefix.join(&data_dir.strip_prefix("/")?)
+        prefix.join(data_dir.strip_prefix("/")?)
     } else {
         data_dir
     };
@@ -52,12 +52,12 @@ pub fn generate_new_user<C: Signing, T: Serialize>(
     secp: &Secp256k1<C>,
     init: Option<T>,
 ) -> Result<(KeyPair, PrecomittedNonce, Envelope), Box<dyn Error>> {
-    let keypair: _ = KeyPair::new(&secp, &mut rand::thread_rng());
-    let nonce = PrecomittedNonce::new(&secp);
-    let next_nonce = PrecomittedNonce::new(&secp);
+    let keypair: _ = KeyPair::new(secp, &mut rand::thread_rng());
+    let nonce = PrecomittedNonce::new(secp);
+    let next_nonce = PrecomittedNonce::new(secp);
     let sent_time_ms = attest_util::now();
 
-    let pub_next_nonce = next_nonce.get_public(&secp);
+    let pub_next_nonce = next_nonce.get_public(secp);
     let mut msg = Envelope::new(
         Header::new(
             keypair.public_key().x_only_public_key().0,
@@ -72,6 +72,6 @@ pub fn generate_new_user<C: Signing, T: Serialize>(
         init.map(|v| ruma_serde::to_canonical_value(v))
             .unwrap_or(Ok(Null))?,
     );
-    msg.sign_with(&keypair, &secp, nonce)?;
+    msg.sign_with(&keypair, secp, nonce)?;
     Ok((keypair, next_nonce, msg))
 }

@@ -77,6 +77,6 @@ impl Callback for SiliconRefinery {
     }
 
     fn purpose(&self) -> String {
-        format!("Releasing new Silicon to the market")
+        "Releasing new Silicon to the market".to_string()
     }
 }

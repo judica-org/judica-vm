@@ -21,7 +21,7 @@ pub unsafe extern "C" fn custom_nonce(
     data: *mut c_void,
 ) -> c_int {
     nonce32.copy_from_nonoverlapping(data as *const c_uchar, 32);
-    return 1;
+    1
 }
 
 #[derive(Clone, Copy)]

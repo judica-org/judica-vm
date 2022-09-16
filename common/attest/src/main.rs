@@ -65,7 +65,7 @@ async fn init_main(g: Arc<Globals>) -> Result<(), Box<dyn Error + Send + Sync>> 
 
     tracing::debug!("Starting Subservices");
     let mut skip = None;
-    let _to_skip = tokio::select!(
+    tokio::select!(
     a = &mut attestation_server => {
         tracing::debug!("Error From Attestation Server: {:?}", a);
         skip.replace("attest");

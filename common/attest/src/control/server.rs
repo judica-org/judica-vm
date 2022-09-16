@@ -50,7 +50,7 @@ async fn get_expensive_db_snapshot(
     let handle = db.get_handle().await;
     let mut map = Default::default();
     let mut newer = None;
-    let _r = handle
+    handle
         .get_all_messages_collect_into_inconsistent::<Envelope>(&mut newer, &mut map)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
@@ -147,8 +147,7 @@ async fn listen_to_service(
         allow_unsolicited_tips,
     }): Json<Subscribe>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
-    let _r =
-        db.0.get_handle()
+    db.0.get_handle()
             .await
             .upsert_hidden_service(url, port, fetch_from, push_to, allow_unsolicited_tips)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -268,7 +267,7 @@ pub async fn run(
     peer_status: Sender<PeerQuery>,
     bitcoin_tipcache: Arc<BitcoinCheckPointCache>,
 ) -> tokio::task::JoinHandle<AbstractResult<()>> {
-    return tokio::spawn(async move {
+    tokio::spawn(async move {
         // build our application with a route
         let app = Router::new()
             // `POST /msg` goes to `msg`
@@ -349,5 +348,5 @@ pub async fn run(
         tracing::debug!("Control Service Failed");
         r?;
         INFER_UNIT
-    });
+    })
 }

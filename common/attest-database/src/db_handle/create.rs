@@ -53,11 +53,10 @@ where
 
         let tips = tips
             .iter()
-            .map(|tip| {
+            .filter_map(|tip| {
                 let h = tip.canonicalized_hash_ref();
                 Some((tip.header().key(), tip.header().height(), h))
             })
-            .flatten()
             .collect();
         debug!(?tips, "Extracted Tip Hashes");
         let my_tip = if let Some(envelope) = dangerous_bypass_tip {
