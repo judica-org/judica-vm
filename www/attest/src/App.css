@@ -2,4 +2,5 @@
     display: grid;
     grid-template-areas: "head . ." " a a b " " c c c" " d e e";
     grid-template-rows: 1fr 1fr 1fr 1fr;
+    grid-gap: 10px;
 }
