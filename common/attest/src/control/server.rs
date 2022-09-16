@@ -28,7 +28,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
 
-use super::query::{Outcome, PushMsg, Subscribe};
+use super::query::{NewGenesis, Outcome, PushMsg, Subscribe};
 
 #[derive(Serialize, Deserialize)]
 pub struct TipData {
@@ -139,18 +139,18 @@ async fn get_status(
 
 async fn listen_to_service(
     db: Extension<MsgDB>,
-    Json(subscribe): Json<Subscribe>,
+    Json(Subscribe {
+        url,
+        port,
+        fetch_from,
+        push_to,
+        allow_unsolicited_tips,
+    }): Json<Subscribe>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
     let _r =
         db.0.get_handle()
             .await
-            .upsert_hidden_service(
-                subscribe.url,
-                subscribe.port,
-                Some(true),
-                Some(true),
-                Some(true),
-            )
+            .upsert_hidden_service(url, port, fetch_from, push_to, allow_unsolicited_tips)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()
@@ -227,9 +227,9 @@ async fn push_message_dangerous(
 async fn make_genesis(
     db: Extension<MsgDB>,
     secp: Extension<Secp256k1<All>>,
-    Json(nickname): Json<String>,
+    Json(NewGenesis { nickname, msg }): Json<NewGenesis>,
 ) -> Result<(Response<()>, Json<Envelope>), (StatusCode, String)> {
-    let (kp, pre, genesis) = generate_new_user(&secp.0, None::<()>).map_err(|e| {
+    let (kp, pre, genesis) = generate_new_user(&secp.0, Some(msg)).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Creating Genesis Message failed: {}", e),

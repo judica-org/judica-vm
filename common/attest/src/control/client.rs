@@ -1,7 +1,7 @@
 use attest_messages::Envelope;
 use reqwest::Client;
 
-use super::query::{Outcome, PushMsg, Subscribe};
+use super::query::{NewGenesis, Outcome, PushMsg, Subscribe};
 
 #[derive(Clone)]
 pub struct ControlClient(pub Client);
@@ -15,14 +15,14 @@ impl AsRef<Client> for &'_ ControlClient {
 impl ControlClient {
     pub async fn make_genesis(
         &self,
-        nickname: &String,
+        new_genesis: &NewGenesis,
         url: &String,
         port: u16,
     ) -> Result<Envelope, reqwest::Error> {
         let resp = self
             .as_ref()
             .post(format!("http://{}:{}/make_genesis", url, port))
-            .json(nickname)
+            .json(new_genesis)
             .send()
             .await?
             .json()

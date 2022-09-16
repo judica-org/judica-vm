@@ -4,7 +4,7 @@ use crate::{
     configuration::{ControlConfig, PeerServiceConfig},
     control::{
         client::ControlClient,
-        query::{Outcome, PushMsg, Subscribe},
+        query::{NewGenesis, Outcome, PushMsg, Subscribe},
     },
     globals::Globals,
     init_main, AppShutdown,
@@ -135,7 +135,14 @@ async fn connect_and_test_nodes() {
                 let control_client = control_client.clone();
                 async move {
                     control_client
-                        .make_genesis(&format!("ch-{}", ctrl), &HOME.into(), *ctrl)
+                        .make_genesis(
+                            &NewGenesis {
+                                nickname: format!("ch-{}", ctrl),
+                                msg: CanonicalJsonValue::Null,
+                            },
+                            &HOME.into(),
+                            *ctrl,
+                        )
                         .await
                 }
             });
@@ -187,6 +194,9 @@ async fn connect_and_test_nodes() {
                     &Subscribe {
                         url: HOME.into(),
                         port: to,
+                        fetch_from: Some(true),
+                        push_to: Some(true),
+                        allow_unsolicited_tips: Some(true),
                     },
                     &HOME.into(),
                     ctrl,
