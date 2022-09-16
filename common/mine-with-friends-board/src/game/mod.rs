@@ -10,7 +10,9 @@ use crate::callbacks::CallbackRegistry;
 use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
+use crate::nfts::instances::powerplant::PlantType;
 use crate::nfts::instances::powerplant::PowerPlant;
+use crate::nfts::instances::powerplant::PowerPlantPrices;
 use crate::nfts::instances::powerplant::PowerPlantProducer;
 use crate::nfts::sale::NFTSaleRegistry;
 use crate::nfts::sale::UXForSaleList;
@@ -36,6 +38,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::max;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::ops::Index;
 use tokens::TokenBase;
@@ -75,6 +78,7 @@ pub struct GameBoard {
     pub ticks: BTreeMap<EntityID, u64>,
     pub chat: VecDeque<(u64, EntityID, String)>,
     pub chat_counter: u64,
+    pub(crate) plant_prices: PowerPlantPrices,
 }
 
 pub struct CallContext {
@@ -136,6 +140,19 @@ impl GameBoard {
             .insert(silicon_token_id, Silicon { weight_in_kg: 1 });
 
         let root_user = alloc.make();
+        let mut plant_prices = HashMap::new();
+        plant_prices.insert(
+            PlantType::Solar,
+            Vec::from([(steel_token_id, 57), (silicon_token_id, 437)]),
+        );
+        plant_prices.insert(
+            PlantType::Hydro,
+            Vec::from([(steel_token_id, 247), (silicon_token_id, 96)]),
+        );
+        plant_prices.insert(
+            PlantType::Flare,
+            Vec::from([(steel_token_id, 76), (silicon_token_id, 84)]),
+        );
 
         let mut g = GameBoard {
             tokens,
@@ -157,6 +174,7 @@ impl GameBoard {
             ticks: Default::default(),
             chat: VecDeque::with_capacity(1000),
             chat_counter: 0,
+            plant_prices,
         };
         g.post_init();
         setup.setup_game(&mut g);
@@ -294,13 +312,13 @@ impl GameBoard {
                 ConstantFunctionMarketMaker::do_trade(self, pair, amount_a, amount_b, &context);
             }
             GameMove::MintPowerPlant(MintPowerPlant {
-                resources,
+                scale,
                 location,
                 plant_type,
             }) => {
                 PowerPlantProducer::mint_power_plant(
                     self,
-                    resources,
+                    scale,
                     location,
                     plant_type,
                     context.sender,

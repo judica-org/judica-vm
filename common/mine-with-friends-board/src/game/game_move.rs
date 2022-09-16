@@ -64,8 +64,8 @@ pub struct Trade {
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct MintPowerPlant {
-    /// The token(s) and quantities required to mint the NFT
-    pub resources: Vec<(Currency, Price)>,
+    /// Size of the power plant
+    pub scale: u64,
     pub location: (u64, u64),
     pub plant_type: PlantType,
 }

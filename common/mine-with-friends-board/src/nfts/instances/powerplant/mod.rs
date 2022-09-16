@@ -1,5 +1,5 @@
 use std::cmp::min;
-
+use std::collections::HashMap;
 pub mod events;
 use super::lockup::CoinLockup;
 use crate::entity::EntityID;
@@ -10,11 +10,25 @@ use crate::{nfts::BaseNFT, nfts::NftPtr, tokens::TokenPointer};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub(crate) type PowerPlantPrices = HashMap<PlantType, Vec<(Currency, Price)>>;
+
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize, JsonSchema, Hash)]
 pub enum PlantType {
     Solar,
     Hydro,
     Flare,
+}
+
+impl PlantType {
+    fn raw_materials_bill(&self, game: &GameBoard, scale: u64) -> Vec<(Currency, Price)> {
+        let base_prices = game.plant_prices.get(self).unwrap().to_owned();
+        let total_prices = base_prices
+            .iter()
+            .map(|(cur, qty)| (*cur, *qty * scale as u128))
+            .clone()
+            .collect();
+        total_prices
+    }
 }
 #[derive(Serialize, Clone)]
 pub(crate) struct PowerPlant {
@@ -26,11 +40,26 @@ pub(crate) struct PowerPlant {
 
 impl PowerPlant {
     /// Create a new PowerPlant
-    fn new(id: NftPtr, plant_type: PlantType, coordinates: (u64, u64)) -> Self {
+    fn new(
+        game: &GameBoard,
+        id: NftPtr,
+        plant_type: PlantType,
+        coordinates: (u64, u64),
+        scale: u64,
+    ) -> Self {
+        let watts = {
+            // this can be a more fun calculation in the future
+            let materials = plant_type.raw_materials_bill(game, scale);
+            let mut total_watts = 0;
+            for (_, qty) in materials {
+                total_watts += qty / 2;
+            }
+            total_watts
+        };
         Self {
             id,
             plant_type,
-            watts: 1000, // this should probably change
+            watts,
             coordinates,
         }
     }
@@ -89,12 +118,13 @@ impl PowerPlantProducer {
     /// Mint a new PowerPlant NFT
     pub(crate) fn mint_power_plant(
         game: &mut GameBoard,
-        // need to put a power plant price map somewhere
-        resources: Vec<(Currency, Price)>,
+        // size of the plant
+        scale: u64,
         location: (u64, u64),
         plant_type: PlantType,
         owner: EntityID,
     ) {
+        let resources = plant_type.raw_materials_bill(game, scale);
         // check whether owner has enough of each material
         // there's a better way to do this
         let mut insufficient = false;
@@ -118,7 +148,7 @@ impl PowerPlantProducer {
         // insert into registry and get pointer
         let plant_ptr = game.nfts.add(Box::new(base_power_plant));
         // create PowerPlant nft
-        let new_plant = PowerPlant::new(plant_ptr, plant_type, location);
+        let new_plant = PowerPlant::new(game, plant_ptr, plant_type, location, scale);
         // add to plant register, need to return Plant?
         let _ = game.nfts.power_plants.insert(plant_ptr, new_plant).unwrap();
 
