@@ -24,3 +24,9 @@ pub struct Subscribe {
 pub struct Outcome {
     pub success: bool,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct NewGenesis {
+    pub nickname: String,
+    pub msg: CanonicalJsonValue,
+}

@@ -28,7 +28,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc::Sender, oneshot};
 use tower_http::cors::{Any, CorsLayer};
 
-use super::query::{Outcome, PushMsg, Subscribe};
+use super::query::{NewGenesis, Outcome, PushMsg, Subscribe};
 
 #[derive(Serialize, Deserialize)]
 pub struct TipData {
@@ -227,9 +227,9 @@ async fn push_message_dangerous(
 async fn make_genesis(
     db: Extension<MsgDB>,
     secp: Extension<Secp256k1<All>>,
-    Json(nickname): Json<String>,
+    Json(NewGenesis { nickname, msg }): Json<NewGenesis>,
 ) -> Result<(Response<()>, Json<Envelope>), (StatusCode, String)> {
-    let (kp, pre, genesis) = generate_new_user(&secp.0, None::<()>).map_err(|e| {
+    let (kp, pre, genesis) = generate_new_user(&secp.0, Some(msg)).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Creating Genesis Message failed: {}", e),
