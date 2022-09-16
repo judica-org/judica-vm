@@ -1,7 +1,21 @@
 use mine_with_friends_board::game::game_move::GameMove;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
+use tauri::{generate_handler, Invoke};
 
 use super::*;
+pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
+    game_synchronizer,
+    get_move_schema,
+    get_materials_schema,
+    get_purchase_schema,
+    make_move_inner,
+    switch_to_game,
+    switch_to_db,
+    set_signing_key,
+    send_chat,
+    make_new_chain,
+    list_my_users
+];
 #[tauri::command]
 pub async fn game_synchronizer(
     window: Window,

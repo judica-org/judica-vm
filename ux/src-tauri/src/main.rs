@@ -3,6 +3,7 @@
     windows_subsystem = "windows"
 )]
 use attest_database::{connection::MsgDB, setup_db};
+use commands::bindings::HANDLER;
 use mine_with_friends_board::game::GameBoard;
 use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
 use std::{error::Error, path::PathBuf, sync::Arc};
@@ -78,19 +79,7 @@ fn main() {
         .manage(game)
         .manage(db)
         .manage(sk)
-        .invoke_handler(tauri::generate_handler![
-            commands::bindings::game_synchronizer,
-            commands::bindings::get_move_schema,
-            commands::bindings::get_materials_schema,
-            commands::bindings::get_purchase_schema,
-            commands::bindings::make_move_inner,
-            commands::bindings::switch_to_game,
-            commands::bindings::switch_to_db,
-            commands::bindings::set_signing_key,
-            commands::bindings::send_chat,
-            commands::bindings::make_new_chain,
-            commands::bindings::list_my_users
-        ])
+        .invoke_handler(HANDLER)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
