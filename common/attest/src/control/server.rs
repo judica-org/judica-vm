@@ -148,9 +148,9 @@ async fn listen_to_service(
     }): Json<Subscribe>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
     db.0.get_handle()
-            .await
-            .upsert_hidden_service(url, port, fetch_from, push_to, allow_unsolicited_tips)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await
+        .upsert_hidden_service(url, port, fetch_from, push_to, allow_unsolicited_tips)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()
             .status(200)

@@ -314,7 +314,6 @@ impl OnlineDBFetcher {
     }
     /// Goes through the oracles commitments in order
     fn start_sequencer(self: Arc<Self>) -> JoinHandle<()> {
-        
         spawn(async move {
             let mut count = 0;
             while !self.should_shutdown() {
@@ -371,7 +370,6 @@ impl OnlineDBFetcher {
     }
     /// This task builds a HashMap of all unprocessed envelopes regularly
     fn start_envelope_db_fetcher(self: Arc<Self>) -> JoinHandle<()> {
-        
         spawn(async move {
             let mut newer = None;
             while !self.should_shutdown() {
@@ -471,7 +469,6 @@ impl Sequencer {
 
     // Whenever new sequencing comes in, wait until they are all in the messages DB, and then drain them out for processing
     fn start_envelope_batcher(self: Arc<Self>) -> JoinHandle<()> {
-        
         spawn(async move {
             let batches = self.db_fetcher.batches_to_sequence();
             let mut input_envelope_hashes = batches.lock().await;
@@ -513,7 +510,6 @@ impl Sequencer {
     // moves in a pipeline as they get deserialized
     // TODO: We skip invalid moves? Should do something else?
     fn start_move_deserializer(self: Arc<Self>) -> JoinHandle<()> {
-        
         spawn(async move {
             let mut next_envelope = self.output_envelope.lock().await;
             while let Some(envelope) = next_envelope.recv().await {
@@ -554,7 +550,7 @@ mod test {
 
     fn make_random_moves() -> Vec<VecDeque<Authenticated<Envelope>>> {
         let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
-        
+
         (0..10)
             .map(|_j| {
                 (0..100)

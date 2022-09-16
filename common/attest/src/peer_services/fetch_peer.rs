@@ -90,7 +90,6 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
     request_tips: UnboundedSender<Vec<CanonicalEnvelopeHash>>,
     allow_unsolicited_tips: bool,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
-    
     {
         tokio::spawn(async move {
             while let Some((resp, cancel_inflight)) = next_envelope.recv().await {

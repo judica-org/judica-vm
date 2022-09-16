@@ -31,7 +31,6 @@ pub fn startup(
     db: MsgDB,
     mut status: Receiver<PeerQuery>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
-    
     tokio::spawn(async move {
         let mut bld = reqwest::Client::builder();
         if let Some(tor_config) = g.config.tor.clone() {

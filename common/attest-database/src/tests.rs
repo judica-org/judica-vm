@@ -468,7 +468,7 @@ async fn test_chain_commit_groups() {
                     )
                     .unwrap()
                     .unwrap();
-                
+
                 e.self_authenticate(&secp).unwrap()
             })
             .collect::<Vec<_>>();

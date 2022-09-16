@@ -79,14 +79,12 @@ pub mod get {
 
         pub const SQL_GET_SECRET_FOR_NONCE: &str =
             include_str!("../sql/get/nonces/secret_for_nonce.sql");
-        pub const SQL_GET_REUSED_NONCE: &str =
-            include_str!("../sql/get/nonces/reused_nonces.sql");
+        pub const SQL_GET_REUSED_NONCE: &str = include_str!("../sql/get/nonces/reused_nonces.sql");
     }
     pub mod users {
 
         pub const SQL_GET_ALL_USERS: &str = include_str!("../sql/get/users/all_users.sql");
-        pub const SQL_GET_USER_BY_KEY: &str =
-            include_str!("../sql/get/users/user_by_key.sql");
+        pub const SQL_GET_USER_BY_KEY: &str = include_str!("../sql/get/users/user_by_key.sql");
         pub const SQL_GET_ALL_SECRET_KEYS: &str =
             include_str!("../sql/get/users/all_secret_keys.sql");
     }

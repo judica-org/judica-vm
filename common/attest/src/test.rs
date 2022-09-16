@@ -148,9 +148,8 @@ async fn connect_and_test_nodes() {
             });
             let resp = join_all(it).await;
             debug!("Created {:?}", resp);
-            
-            resp
-                .into_iter()
+
+            resp.into_iter()
                 .collect::<Result<Vec<Envelope>, _>>()
                 .unwrap()
         };
@@ -273,8 +272,6 @@ async fn connect_and_test_nodes() {
         check_synched(11, true).await;
         tokio::time::sleep(Duration::from_millis(20)).await;
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
-
-        
     })
     .await
 }
