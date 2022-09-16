@@ -14,6 +14,7 @@ use crate::nfts::sale::UXForSaleList;
 use crate::nfts::sale::UXNFTSale;
 use crate::nfts::BaseNFT;
 use crate::nfts::NFTRegistry;
+use crate::nfts::NftPtr;
 use crate::nfts::UXNFTRegistry;
 use crate::nfts::UXPlantData;
 use crate::sanitize::Sanitizable;
@@ -41,6 +42,11 @@ use tokens::TokenPointer;
 use tokens::TokenRegistry;
 use tracing::info;
 
+#[derive(Serialize)]
+pub struct UXUserInventory {
+    user_power_plants: BTreeMap<NftPtr, UXPlantData>,
+    user_token_balances: Vec<(String, u128)>,
+}
 #[derive(Serialize)]
 pub struct UserData {
     key: String,
@@ -492,6 +498,26 @@ impl GameBoard {
         });
         // return shape?
         return Ok(UXNFTRegistry { power_plant_data });
+    }
+
+    pub fn get_ux_user_inventory(&mut self, user_id: EntityID) -> Result<UXUserInventory, ()> {
+        let user_power_plants = self
+            .get_user_power_plants(user_id)
+            .unwrap()
+            .power_plant_data;
+        let user_token_balances = {
+            let mut balances = Vec::new();
+            for token in self.tokens.tokens.values_mut() {
+                let balance = token.balance_check(&user_id);
+                let nickname = token.nickname().unwrap();
+                balances.push((nickname, balance))
+            }
+            balances
+        };
+        return Ok(UXUserInventory {
+            user_power_plants,
+            user_token_balances,
+        });
     }
 
     pub fn get_ux_energy_market(&self) -> Result<UXForSaleList, ()> {
