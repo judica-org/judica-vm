@@ -187,6 +187,9 @@ async fn connect_and_test_nodes() {
                     &Subscribe {
                         url: HOME.into(),
                         port: to,
+                        fetch_from: Some(true),
+                        push_to: Some(true),
+                        allow_unsolicited_tips: Some(true),
                     },
                     &HOME.into(),
                     ctrl,

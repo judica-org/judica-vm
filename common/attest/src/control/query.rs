@@ -12,6 +12,12 @@ pub struct PushMsg {
 pub struct Subscribe {
     pub url: String,
     pub port: u16,
+    #[serde(default)]
+    pub fetch_from: Option<bool>,
+    #[serde(default)]
+    pub push_to: Option<bool>,
+    #[serde(default)]
+    pub allow_unsolicited_tips: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
