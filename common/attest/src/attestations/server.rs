@@ -114,7 +114,7 @@ pub async fn post_message(
 }
 
 pub async fn run(g: Arc<Globals>, db: MsgDB) -> tokio::task::JoinHandle<AbstractResult<()>> {
-    return tokio::spawn(async move {
+    tokio::spawn(async move {
         tracing::debug!("Starting Task for Attestation Server");
         // build our application with a route
         let app = Router::new()
@@ -134,5 +134,5 @@ pub async fn run(g: Arc<Globals>, db: MsgDB) -> tokio::task::JoinHandle<Abstract
             .await
             .unwrap();
         INFER_UNIT
-    });
+    })
 }

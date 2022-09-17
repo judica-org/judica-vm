@@ -92,6 +92,6 @@ impl Callback for ASICProducer {
     }
 
     fn purpose(&self) -> String {
-        format!("Adjusting the market for ASICs")
+        "Adjusting the market for ASICs".to_string()
     }
 }

@@ -85,7 +85,7 @@ where
     }
 
     /// creates a new user from a genesis envelope
-    #[must_use]
+    #[must_use = "Must Check that the new user was succesfully created"]
     pub fn insert_user_by_genesis_envelope(
         &mut self,
         nickname: String,
@@ -131,7 +131,7 @@ where
     /// Will fail if the key is not registered.
     ///
     /// Will return false if the message already existed
-    #[must_use]
+    #[must_use = "Required to check if the insertion of an Envelope was successful"]
     pub fn try_insert_authenticated_envelope(
         &mut self,
         data: Authenticated<Envelope>,
@@ -189,7 +189,7 @@ where
     }
 }
 
-#[must_use]
+#[must_use = "Required to check if the insertion of an Envelope was successful"]
 pub fn try_insert_authenticated_envelope_with_txn(
     data: Authenticated<Envelope>,
     tx: &Transaction,
@@ -202,7 +202,7 @@ pub fn try_insert_authenticated_envelope_with_txn(
         .header()
         .ancestors()
         .map(|m| m.prev_msg())
-        .unwrap_or(CanonicalEnvelopeHash::genesis());
+        .unwrap_or_else(CanonicalEnvelopeHash::genesis);
     trace!(?genesis, ?data, "attempt to insert envelope");
     let hash = data.clone().canonicalized_hash();
     match stmt.insert(rusqlite::named_params! {

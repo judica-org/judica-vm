@@ -51,13 +51,12 @@ where
         }
         debug!(?tips, "Tip Envelopes");
 
-        let tips = tips
+        let tips: Vec<(XOnlyPublicKey, i64, attest_messages::CanonicalEnvelopeHash)> = tips
             .iter()
             .map(|tip| {
                 let h = tip.canonicalized_hash_ref();
-                Some((tip.header().key(), tip.header().height(), h))
+                (tip.header().key(), tip.header().height(), h)
             })
-            .flatten()
             .collect();
         debug!(?tips, "Extracted Tip Hashes");
         let my_tip = if let Some(envelope) = dangerous_bypass_tip {

@@ -8,9 +8,8 @@ use tokio::{
 use tracing::{trace, warn};
 
 use super::*;
-pub async fn push_to_peer<C: Verification + 'static>(
+pub async fn push_to_peer(
     g: Arc<Globals>,
-    secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
     conn: MsgDB,
@@ -30,7 +29,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
         let g = g.clone();
         let tip_tracker = tip_tracker.clone();
         let client = client.clone();
-        let (url, port) = service.clone();
+        let (url, port) = service;
         let new_tips = new_tips.clone();
         async move {
             while !g.shutdown.should_quit() {
@@ -39,7 +38,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     .get_latest_tips(&url, port)
                     .await?
                     .iter()
-                    .flat_map(|e| e.self_authenticate(&secp))
+                    .flat_map(|e| e.self_authenticate(&g.secp))
                     .collect();
                 trace!(
                     url,
@@ -147,7 +146,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                         for o in genesis.iter_mut() {
                             match o {
                                 Some((h, _e)) => {
-                                    if following_chains.contains(&h) {
+                                    if following_chains.contains(h) {
                                         *o = None;
                                     }
                                 }
@@ -188,7 +187,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
         }
     });
 
-    let _r = tokio::select! {
+    tokio::select! {
         a = &mut t1 => {
             t2.abort();
             match &a {

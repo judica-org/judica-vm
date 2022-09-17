@@ -7,15 +7,14 @@ use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
 use attest_util::now;
 use attest_util::INFER_UNIT;
-use tokio;
+
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
 
-pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
+pub(crate) async fn fetch_from_peer(
     g: Arc<Globals>,
-    secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
     conn: MsgDB,
@@ -38,7 +37,6 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
         g.clone(),
         service.clone(),
         conn,
-        secp,
         next_envelope,
         request_tips,
         allow_unsolicited_tips,
@@ -51,7 +49,7 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
         envelopes_to_process.clone(),
         tips_to_resolve,
     );
-    let _: () = tokio::select! {
+    tokio::select! {
         a = &mut envelope_processor => {
             warn!(?service, task="FETCH", subtask="Envelope Processor", event="SHUTDOWN", err=?a);
             latest_tip_fetcher.abort();
@@ -81,16 +79,15 @@ pub(crate) async fn fetch_from_peer<C: Verification + 'static>(
 
 /// enevelope processor verifies an envelope and then forwards any unknown tips
 /// to the missing_envelope_fetcher.
-pub(crate) fn envelope_processor<C: Verification + 'static>(
+pub(crate) fn envelope_processor(
     g: Arc<Globals>,
     service: (String, u16),
     conn: MsgDB,
-    secp: Arc<Secp256k1<C>>,
     mut next_envelope: tokio::sync::mpsc::UnboundedReceiver<(Vec<Envelope>, NotifyOnDrop)>,
     request_tips: UnboundedSender<Vec<CanonicalEnvelopeHash>>,
     allow_unsolicited_tips: bool,
 ) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
-    let envelope_processor = {
+    {
         tokio::spawn(async move {
             while let Some((resp, cancel_inflight)) = next_envelope.recv().await {
                 // Prefer to process envelopes
@@ -98,7 +95,6 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
                     g.clone(),
                     service.clone(),
                     resp,
-                    secp.as_ref(),
                     &conn,
                     &request_tips,
                     allow_unsolicited_tips,
@@ -111,14 +107,12 @@ pub(crate) fn envelope_processor<C: Verification + 'static>(
             }
             INFER_UNIT
         })
-    };
-    envelope_processor
+    }
 }
-async fn handle_envelope<C: Verification + 'static>(
+async fn handle_envelope(
     g: Arc<Globals>,
     service: (String, u16),
     resp: Vec<Envelope>,
-    secp: &Secp256k1<C>,
     conn: &MsgDB,
     request_tips: &UnboundedSender<Vec<CanonicalEnvelopeHash>>,
     allow_unsolicited_tips: bool,
@@ -135,7 +129,7 @@ async fn handle_envelope<C: Verification + 'static>(
                         ?service,
                         "Processing this envelope");
         tracing::trace!(?envelope, ?service, "Processing this envelope");
-        match envelope.self_authenticate(secp) {
+        match envelope.self_authenticate(&g.secp) {
             Ok(authentic) => {
                 tracing::debug!(?service, "Authentic Tip: {:?}", authentic);
                 let mut handle = conn.get_handle().await;
@@ -157,7 +151,7 @@ async fn handle_envelope<C: Verification + 'static>(
                     }
                 } else {
                     match handle.try_insert_authenticated_envelope(authentic.clone())? {
-                        Ok(_) => {}
+                        Ok(()) => {}
                         // This means that a conststraint, most likely that the
                         // genesis header must be known, was not allowed
                         Err((SqliteFail::SqliteConstraintCheck, _msg)) => {
@@ -183,11 +177,10 @@ async fn handle_envelope<C: Verification + 'static>(
                                 all_tips.push(envelope.get_genesis_hash());
                             }
                         }
-                        _ => {}
                     }
                 }
                 // safe to reuse since it is authentic still..
-                all_tips.extend(envelope.header().tips().iter().map(|(_, _, v)| v.clone()));
+                all_tips.extend(envelope.header().tips().iter().map(|(_, _, v)| *v));
                 all_tips.extend(envelope.header().ancestors().iter().map(|a| a.prev_msg()));
             }
             Err(_) => {

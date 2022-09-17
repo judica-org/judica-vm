@@ -69,6 +69,6 @@ impl Callback for ConcreteMiller {
     }
 
     fn purpose(&self) -> String {
-        format!("Releasing new Concrete to the market")
+        "Releasing new Concrete to the market".to_string()
     }
 }

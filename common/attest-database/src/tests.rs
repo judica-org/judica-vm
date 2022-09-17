@@ -53,7 +53,7 @@ async fn test_reused_nonce() {
         )
         .unwrap()
         .unwrap();
-    let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
+    let envelope_1 = envelope_1.self_authenticate(&secp).unwrap();
     let envelope_2 = handle
         .wrap_message_in_envelope_for_user_by_key(
             CanonicalJsonValue::String("distinct".into()),
@@ -65,12 +65,14 @@ async fn test_reused_nonce() {
         )
         .unwrap()
         .unwrap();
-    let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
+    let envelope_2 = envelope_2.self_authenticate(&secp).unwrap();
     handle
         .try_insert_authenticated_envelope(envelope_1.clone())
+        .unwrap()
         .unwrap();
     handle
         .try_insert_authenticated_envelope(envelope_2.clone())
+        .unwrap()
         .unwrap();
     for i in 0..2 {
         // Check that only this group is returned
@@ -103,10 +105,12 @@ async fn test_reused_nonce() {
         let envelope_i = envelope_i.clone().self_authenticate(&secp).unwrap();
         handle
             .try_insert_authenticated_envelope(envelope_i.clone())
+            .unwrap()
             .unwrap();
     }
 }
 
+#[allow(unused)]
 fn print_db(handle: &MsgDBHandle) {
     let mut stm = handle
         .0
@@ -206,6 +210,7 @@ async fn test_envelope_creation() {
         let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
         handle
             .try_insert_authenticated_envelope(envelope_1.clone())
+            .unwrap()
             .unwrap();
         verify_tip(&handle, &envelope_1, user_id, kp, &all_past_tips);
 
@@ -223,6 +228,7 @@ async fn test_envelope_creation() {
         let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
         handle
             .try_insert_authenticated_envelope(envelope_2.clone())
+            .unwrap()
             .unwrap();
         verify_tip(&handle, &envelope_2, user_id, kp, &all_past_tips);
 
@@ -252,6 +258,7 @@ async fn test_envelope_creation() {
                 println!("Inserting i={}", i);
                 handle
                     .try_insert_authenticated_envelope(envelope_disconnected.clone())
+                    .unwrap()
                     .unwrap();
             } else {
                 println!("Skipping i={}", i);
@@ -259,7 +266,7 @@ async fn test_envelope_creation() {
             let idx = if i >= special_idx { special_idx - 1 } else { i };
             let check_envelope = &envs[idx as usize].1;
 
-            verify_tip(&handle, &check_envelope, user_id, kp, &all_past_tips);
+            verify_tip(&handle, check_envelope, user_id, kp, &all_past_tips);
             if i > special_idx {
                 let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
                 assert_eq!(tips.len(), user_id + 1);
@@ -278,6 +285,7 @@ async fn test_envelope_creation() {
 
         handle
             .try_insert_authenticated_envelope(disconnected[user_id].clone())
+            .unwrap()
             .unwrap();
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
@@ -337,9 +345,10 @@ async fn test_envelope_creation() {
         )
         .unwrap()
         .unwrap();
-    let envelope_3 = envelope_3.clone().self_authenticate(&secp).unwrap();
+    let envelope_3 = envelope_3.self_authenticate(&secp).unwrap();
     handle
         .try_insert_authenticated_envelope(envelope_3.clone())
+        .unwrap()
         .unwrap();
 
     {
@@ -362,7 +371,7 @@ fn make_test_user(
     name: String,
 ) -> KeyPair {
     let (kp, nonce, envelope) = generate_new_user(secp, None::<()>).unwrap();
-    let _u = handle.save_keypair(kp).unwrap();
+    handle.save_keypair(kp).unwrap();
     let genesis = envelope.self_authenticate(secp).unwrap();
     handle
         .insert_user_by_genesis_envelope(name, genesis)
@@ -392,7 +401,7 @@ async fn test_chain_commit_groups() {
             for g in &mut friends {
                 loop {
                     for f in g.iter_mut() {
-                        *f = *f % 100;
+                        *f %= 100;
                     }
                     g.sort();
                     if g.iter().any(|a| *a == i) || g.windows(2).any(|w| w[0] == w[1]) {
@@ -468,8 +477,8 @@ async fn test_chain_commit_groups() {
                     )
                     .unwrap()
                     .unwrap();
-                let e = e.self_authenticate(&secp).unwrap();
-                e
+
+                e.self_authenticate(&secp).unwrap()
             })
             .collect::<Vec<_>>();
         for (i, (msg, (_kp, friend_groups, _g))) in msgs.iter().zip(users.iter()).enumerate() {

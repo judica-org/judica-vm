@@ -74,7 +74,7 @@ impl<'a> Iterator for ContractContinuations<'a> {
         if let Some(ref mut value) = self.1 {
             let next = value.next();
             if next.is_some() {
-                return next;
+                next
             } else {
                 if let Some(contract) = self.0.pop() {
                     self.1 = Some(contract.continue_apis.values());
@@ -303,7 +303,7 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                             }
-                            return false;
+                            false
                         })
                         .filter(|api| {
                             if let Some(schema) = &api.schema {

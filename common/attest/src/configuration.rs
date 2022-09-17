@@ -56,11 +56,11 @@ pub struct PeerServicesTimers {
 impl PeerServicesTimers {
     pub(crate) fn scaled_default(scale: f64) -> Self {
         Self {
-            reconnect_rate: Duration::from_millis((30000 as f64 * scale) as u64),
-            scan_for_unsent_tips_rate: Duration::from_millis((10000 as f64 * scale) as u64),
-            attach_tip_while_busy_rate: Duration::from_millis((30000 as f64 * scale) as u64),
-            tip_fetch_rate: Duration::from_millis((15000 as f64 * scale) as u64),
-            entropy_range: Duration::from_millis((1000 as f64 * scale) as u64),
+            reconnect_rate: Duration::from_millis((30000_f64 * scale) as u64),
+            scan_for_unsent_tips_rate: Duration::from_millis((10000_f64 * scale) as u64),
+            attach_tip_while_busy_rate: Duration::from_millis((30000_f64 * scale) as u64),
+            tip_fetch_rate: Duration::from_millis((15000_f64 * scale) as u64),
+            entropy_range: Duration::from_millis((1000_f64 * scale) as u64),
         }
     }
 }

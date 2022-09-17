@@ -22,7 +22,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio;
+
 use tokio::spawn;
 use tokio::sync::futures::Notified;
 use tokio::sync::{
@@ -181,7 +181,7 @@ impl OfflineSequencer {
         let mut v = vec![];
         for batch in &self.batches_to_sequence {
             for h in batch {
-                if let Some(e) = self.msg_cache.remove(&h) {
+                if let Some(e) = self.msg_cache.remove(h) {
                     v.push(e);
                 } else {
                     return Err(());
@@ -314,7 +314,7 @@ impl OnlineDBFetcher {
     }
     /// Goes through the oracles commitments in order
     fn start_sequencer(self: Arc<Self>) -> JoinHandle<()> {
-        let task = spawn(async move {
+        spawn(async move {
             let mut count = 0;
             while !self.should_shutdown() {
                 'check: while !self.should_shutdown() {
@@ -366,12 +366,11 @@ impl OnlineDBFetcher {
                     }
                 }
             }
-        });
-        task
+        })
     }
     /// This task builds a HashMap of all unprocessed envelopes regularly
     fn start_envelope_db_fetcher(self: Arc<Self>) -> JoinHandle<()> {
-        let task = spawn(async move {
+        spawn(async move {
             let mut newer = None;
             while !self.should_shutdown() {
                 let newer_before = newer;
@@ -394,8 +393,7 @@ impl OnlineDBFetcher {
                 sleep(self.rebuild_db_period).await;
             }
             self.new_msgs_in_cache.notify_waiters();
-        });
-        task
+        })
     }
 }
 
@@ -471,14 +469,14 @@ impl Sequencer {
 
     // Whenever new sequencing comes in, wait until they are all in the messages DB, and then drain them out for processing
     fn start_envelope_batcher(self: Arc<Self>) -> JoinHandle<()> {
-        let task = spawn(async move {
+        spawn(async move {
             let batches = self.db_fetcher.batches_to_sequence();
             let mut input_envelope_hashes = batches.lock().await;
             let msg_cache = self.db_fetcher.msg_cache();
             while let Some(mut envelope_hashes) = input_envelope_hashes.recv().await {
                 info!(n = envelope_hashes.len(), "Got New Batch to Sequence");
                 let mut should_wait = None;
-                'wait_for_new: while envelope_hashes.len() != 0 {
+                'wait_for_new: while !envelope_hashes.is_empty() {
                     if let Some(n) = should_wait.take() {
                         // register for notification, then drop lock, then wait
                         n.await;
@@ -506,14 +504,13 @@ impl Sequencer {
                     }
                 }
             }
-        });
-        task
+        })
     }
     // Run the deserialization of the inner message type to move sets in it's own thread so that we can process
     // moves in a pipeline as they get deserialized
     // TODO: We skip invalid moves? Should do something else?
     fn start_move_deserializer(self: Arc<Self>) -> JoinHandle<()> {
-        let task = spawn(async move {
+        spawn(async move {
             let mut next_envelope = self.output_envelope.lock().await;
             while let Some(envelope) = next_envelope.recv().await {
                 trace!(msg_hash=?envelope.canonicalized_hash_ref(), "Got Envelope");
@@ -533,8 +530,7 @@ impl Sequencer {
                     }
                 }
             }
-        });
-        task
+        })
     }
 }
 
@@ -554,7 +550,8 @@ mod test {
 
     fn make_random_moves() -> Vec<VecDeque<Authenticated<Envelope>>> {
         let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
-        let envelopes = (0..10)
+
+        (0..10)
             .map(|_j| {
                 (0..100)
                     .map(|_i| {
@@ -598,16 +595,14 @@ mod test {
                     })
                     .collect::<VecDeque<_>>()
             })
-            .collect::<Vec<_>>();
-        envelopes
+            .collect::<Vec<_>>()
     }
     #[tokio::test]
     async fn test_offline_sequencer() {
         let envelopes = make_random_moves();
         let hmap = envelopes
             .iter()
-            .map(|e| e.iter())
-            .flatten()
+            .flat_map(|e| e.iter())
             .map(|e| (e.canonicalized_hash_ref(), e.clone()))
             .collect::<HashMap<_, _>>();
         let hashes = envelopes
@@ -635,7 +630,7 @@ mod test {
                     assert_eq!(m, game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
-                    assert!(false);
+                    unreachable!("Offline Sequencer did not sequence all messages")
                 }
             }
         }
@@ -688,7 +683,7 @@ mod test {
                 }
 
                 {
-                    let cache = Arc::clone(&cache);
+                    let cache = Arc::clone(cache);
                     let mut cache = cache.lock().await;
                     for (k, v) in send_now {
                         cache.insert(k, v);
@@ -696,7 +691,7 @@ mod test {
                 }
                 me.new_msgs_in_cache.notify_waiters();
                 spawn({
-                    let cache = Arc::clone(&cache);
+                    let cache = Arc::clone(cache);
                     let me = me.clone();
                     async move {
                         tokio::task::yield_now().await;
@@ -751,7 +746,7 @@ mod test {
                     assert_eq!(m, game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
-                    assert!(false);
+                    unreachable!("Online Sequencer did not sequence all messages")
                 }
             }
         }

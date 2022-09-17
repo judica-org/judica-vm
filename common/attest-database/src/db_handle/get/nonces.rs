@@ -113,7 +113,7 @@ where
     {
         let res = res.clone();
         let field = field.clone();
-        let divisor = divisor.clone();
+        let divisor = divisor;
         assert_eq!(&res.gcd, &1u32.into());
         assert_eq!((res.x * divisor).mod_floor(&field), 1u32.into());
     }
@@ -130,7 +130,7 @@ where
     SecretKey::from_slice(&sig_bytes[..]).ok()
 }
 
-const BIP340_CHALLENGE: &'static [u8] = "BIP0340/challenge".as_bytes();
+const BIP340_CHALLENGE: &[u8] = "BIP0340/challenge".as_bytes();
 pub(crate) fn get_signature_tagged_hash() -> sha256::HashEngine {
     let tag = sha256::Hash::hash(BIP340_CHALLENGE);
     let mut engine = sha256::Hash::engine();

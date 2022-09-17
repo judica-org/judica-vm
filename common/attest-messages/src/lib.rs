@@ -3,7 +3,7 @@ use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::{sha256, Hash};
-use sapio_bitcoin::secp256k1::schnorrsig::Signature;
+use sapio_bitcoin::secp256k1::schnorr::Signature;
 use sapio_bitcoin::secp256k1::ThirtyTwoByteHash;
 use sapio_bitcoin::secp256k1::{Message as SchnorrMessage, Secp256k1};
 use sapio_bitcoin::secp256k1::{Signing, Verification};
@@ -15,7 +15,6 @@ use std::error::Error;
 use std::fmt::Display;
 pub mod authenticated;
 pub mod nonce;
-mod util;
 pub use authenticated::*;
 pub mod checkpoints;
 #[cfg(feature = "rusqlite")]
@@ -77,6 +76,7 @@ pub struct Header {
 }
 
 impl Header {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         key: sapio_bitcoin::secp256k1::XOnlyPublicKey,
         next_nonce: PrecomittedPublicNonce,

@@ -30,13 +30,13 @@ pub mod get {
     pub use users::*;
     pub mod chain_commit_groups {
         pub const SQL_GET_ALL_CHAIN_COMMIT_GROUPS: &str =
-            &include_str!("../sql/get/chain_commit_groups/all_chain_commit_groups.sql");
+            include_str!("../sql/get/chain_commit_groups/all_chain_commit_groups.sql");
         pub const SQL_GET_ALL_CHAIN_COMMIT_GROUPS_FOR_CHAIN: &str =
-            &include_str!("../sql/get/chain_commit_groups/all_chain_commit_groups_for_chain.sql");
+            include_str!("../sql/get/chain_commit_groups/all_chain_commit_groups_for_chain.sql");
         pub const SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_FOR_CHAIN: &str = include_str!(
             "../sql/get/chain_commit_groups/all_chain_commit_group_members_for_chain.sql"
         );
-        pub const SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_TIPS_FOR_CHAIN: &str = &include_str!(
+        pub const SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_TIPS_FOR_CHAIN: &str = include_str!(
             "../sql/get/chain_commit_groups/all_chain_commit_group_members_tips_for_chain.sql"
         );
     }
@@ -77,22 +77,20 @@ pub mod get {
     }
     pub mod nonces {
 
-        pub const SQL_GET_SECRET_FOR_NONCE: &'static str =
+        pub const SQL_GET_SECRET_FOR_NONCE: &str =
             include_str!("../sql/get/nonces/secret_for_nonce.sql");
-        pub const SQL_GET_REUSED_NONCE: &'static str =
-            include_str!("../sql/get/nonces/reused_nonces.sql");
+        pub const SQL_GET_REUSED_NONCE: &str = include_str!("../sql/get/nonces/reused_nonces.sql");
     }
     pub mod users {
 
-        pub const SQL_GET_ALL_USERS: &'static str = include_str!("../sql/get/users/all_users.sql");
-        pub const SQL_GET_USER_BY_KEY: &'static str =
-            include_str!("../sql/get/users/user_by_key.sql");
-        pub const SQL_GET_ALL_SECRET_KEYS: &'static str =
+        pub const SQL_GET_ALL_USERS: &str = include_str!("../sql/get/users/all_users.sql");
+        pub const SQL_GET_USER_BY_KEY: &str = include_str!("../sql/get/users/user_by_key.sql");
+        pub const SQL_GET_ALL_SECRET_KEYS: &str =
             include_str!("../sql/get/users/all_secret_keys.sql");
     }
 }
 pub mod setup {
-    pub const SQL_CREATE_TABLES: &'static str = concat!(
+    pub const SQL_CREATE_TABLES: &str = concat!(
         "PRAGMA foreign_keys = ON;",
         include_str!("../sql/tables/users.sql"),
         include_str!("../sql/tables/messages.sql"),
@@ -107,7 +105,7 @@ pub mod setup {
     );
 }
 
-pub const CACHED: &'static [&'static str] = &[
+pub const CACHED: &[&str] = &[
     SQL_INSERT_NONCE_BY_KEY,
     SQL_INSERT_HIDDEN_SERVICE,
     SQL_INSERT_KEYPAIR,

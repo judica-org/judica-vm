@@ -15,12 +15,12 @@ use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
 use ruma_serde::CanonicalJsonValue;
-use sapio_bitcoin::XOnlyPublicKey;
+use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
 use std::{collections::BTreeSet, env::temp_dir, sync::Arc, time::Duration};
 use test_log::test;
 use tokio::spawn;
 use tracing::{debug, info};
-const HOME: &'static str = "127.0.0.1";
+const HOME: &str = "127.0.0.1";
 
 // Connect to a specific local server for testing, or assume there is an
 // open-to-world server available locally
@@ -33,19 +33,7 @@ fn get_btc_config() -> BitcoinConfig {
         },
     }
 }
-fn get_test_id() -> Option<u16> {
-    let test_one = std::env::var("ATTEST_TEST_ONE").is_ok();
-    let test_two = std::env::var("ATTEST_TEST_TWO").is_ok();
-    if !test_one && !test_two {
-        tracing::debug!("Skipping Test, not enabled");
-        return None;
-    } else {
-        tracing::debug!("One XOR Two? {}", test_one ^ test_two);
-        assert!(test_one ^ test_two);
-    }
-    Some(if test_one { 0 } else { 1 })
-}
-async fn test_context<T, F>(nodes: u8, code: F) -> ()
+async fn test_context<T, F>(nodes: u8, code: F)
 where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
@@ -54,6 +42,7 @@ where
     let mut unord = FuturesUnordered::new();
     let mut quits = vec![];
     let mut ports = vec![];
+    let secp = Arc::new(Secp256k1::new());
     for test_id in 0..nodes {
         let btc_config = get_btc_config();
         let shutdown = AppShutdown::new();
@@ -80,12 +69,16 @@ where
             test_db: true,
         };
         ports.push((config.attestation_port, config.control.port));
-        let task_one = spawn(async move {
-            init_main(Arc::new(Globals {
-                config: Arc::new(config),
-                shutdown,
-            }))
-            .await
+        let task_one = spawn({
+            let secp = secp.clone();
+            async move {
+                init_main(Arc::new(Globals {
+                    config: Arc::new(config),
+                    shutdown,
+                    secp,
+                }))
+                .await
+            }
         });
         unord.push(task_one);
     }
@@ -104,7 +97,7 @@ where
         quit.begin_shutdown();
     }
     // Wait for tasks to finish
-    for _ in unord.next().await {}
+    while (unord.next().await).is_some() {}
     if fail.is_some() {
         fail.unwrap().unwrap().unwrap()
     }
@@ -120,14 +113,19 @@ async fn connect_and_test_nodes() {
         let client = AttestationClient::new(base.clone());
         let control_client = ControlClient(base.clone());
         // Initial fetch should show no tips posessed
-        {
+        loop {
             let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
                 async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
             let resp = join_all(it).await;
             let empty = (0..NODES).map(|_| Some(vec![])).collect::<Vec<_>>();
+            if resp.iter().any(Result::is_err) {
+                // Wait until all services are online
+                continue;
+            }
             assert_eq!(resp.into_iter().map(|r| r.ok()).collect::<Vec<_>>(), empty);
+            break;
         }
         // Create a genesis envelope for each node
         let genesis_envelopes = {
@@ -148,11 +146,10 @@ async fn connect_and_test_nodes() {
             });
             let resp = join_all(it).await;
             debug!("Created {:?}", resp);
-            let genesis_resp = resp
-                .into_iter()
+
+            resp.into_iter()
                 .collect::<Result<Vec<Envelope>, _>>()
-                .unwrap();
-            genesis_resp
+                .unwrap()
         };
         // Check that each node knows about it's own genesis envelope
         {
@@ -273,8 +270,6 @@ async fn connect_and_test_nodes() {
         check_synched(11, true).await;
         tokio::time::sleep(Duration::from_millis(20)).await;
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
-
-        ()
     })
     .await
 }
@@ -338,10 +333,6 @@ async fn make_nth(
     control_client: ControlClient,
     genesis_envelopes: Vec<Envelope>,
 ) {
-    let keys = genesis_envelopes
-        .iter()
-        .map(|g| g.header().key())
-        .collect::<Vec<_>>();
     info!(n, "Making messages");
     let make_message = |((port, ctrl), key): ((u16, u16), XOnlyPublicKey)| {
         let control_client = control_client.clone();
@@ -361,7 +352,7 @@ async fn make_nth(
     let it = ports
         .iter()
         .cloned()
-        .zip(keys.into_iter())
+        .zip(genesis_envelopes.iter().map(|g| g.header().key()))
         .map(make_message);
     let resp = join_all(it).await;
     info!(n, "Made Messages: {:?}", resp);
@@ -402,8 +393,7 @@ async fn check_synched(
             assert!(tips
                 .iter()
                 .map(|t| t.msg())
-                .find(|f| f.as_str() == needle.as_str())
-                .is_some())
+                .any(|f| f.as_str() == needle.as_str()))
         }
         if require_full {
             for r in resp {

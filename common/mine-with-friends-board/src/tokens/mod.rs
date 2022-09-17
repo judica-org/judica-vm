@@ -68,7 +68,7 @@ impl TokenBase {
     /// function that only has an impact in test mode
     fn check_in_transaction(&self) {
         #[cfg(test)]
-        if !self.in_transaction.is_some() {
+        if self.in_transaction.is_none() {
             panic!("Not In Transaction Currently");
         }
     }
@@ -99,25 +99,25 @@ impl TokenBase {
 impl Token for TokenBase {
     fn mint(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
-        let amt = self.balances.entry(to.clone()).or_default();
+        let amt = self.balances.entry(*to).or_default();
         *amt += amount;
         self.total += amount;
     }
     fn burn(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
-        let amt = self.balances.entry(to.clone()).or_default();
+        let amt = self.balances.entry(*to).or_default();
         *amt -= amount;
         self.total -= amount;
     }
 
     fn balance_check(&self, to: &EntityID) -> u128 {
-        self.balances.get(to).map_or(0, |x| x.clone())
+        self.balances.get(to).map_or(0, |x| *x)
     }
     fn total_coins(&self) -> u128 {
         self.total
     }
     fn to_json(&self) -> serde_json::Value {
-        serde_json::to_value(&self).unwrap()
+        serde_json::to_value(self).unwrap()
     }
 
     fn transaction(&mut self) {
@@ -151,7 +151,7 @@ impl Token for TokenBase {
         }
         self.burn(sender, amount);
         self.mint(receiver, amount);
-        return true;
+        true
     }
 
     fn id(&self) -> EntityID {

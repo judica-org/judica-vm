@@ -24,7 +24,9 @@ impl NotifyOnDrop {
 }
 impl Drop for NotifyOnDrop {
     fn drop(&mut self) {
-        self.0.as_ref().map(|n| n.notify_one());
+        if let Some(n) = self.0.as_ref() {
+            n.notify_one()
+        }
     }
 }
 impl AttestationClient {

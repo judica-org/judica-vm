@@ -219,7 +219,7 @@ async fn game(
         }
 
         info!(key=?keypair.x_only_public_key().0, n=to_sequence.len(), "Messages to Sequence");
-        if to_sequence.len() > 0 {
+        if !to_sequence.is_empty() {
             let msg = ruma_serde::to_canonical_value(Channelized {
                 data: BroadcastByHost::Sequence(to_sequence),
                 channel: "default".into(),
