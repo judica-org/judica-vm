@@ -630,7 +630,7 @@ mod test {
                     assert_eq!(m, game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
-                    assert!(false);
+                    unreachable!("Offline Sequencer did not sequence all messages")
                 }
             }
         }
@@ -746,7 +746,7 @@ mod test {
                     assert_eq!(m, game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
-                    assert!(false);
+                    unreachable!("Online Sequencer did not sequence all messages")
                 }
             }
         }

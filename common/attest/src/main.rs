@@ -1,11 +1,8 @@
 use attest_database::connection::MsgDB;
 use attest_util::INFER_UNIT;
 use bitcoin_header_checkpoints::BitcoinCheckPointCache;
-
 use globals::{AppShutdown, Globals};
 use openssl_sys as _;
-
-use sapio_bitcoin::secp256k1::{Secp256k1, Verification};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -39,6 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let g = Arc::new(Globals {
         config,
         shutdown: AppShutdown::new(),
+        secp: Default::default(),
     });
     init_main(g).await
 }

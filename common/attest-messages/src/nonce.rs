@@ -10,7 +10,16 @@ use sapio_bitcoin::XOnlyPublicKey;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-pub unsafe extern "C" fn custom_nonce(
+/// .
+///
+/// # Safety
+/// This function is only safe as SchnorrSigExtraParams when the data pointer
+/// points to at least 32 bytes that do not overlap nonce32 argument.
+///
+/// This signature algorithm is dangerous to use in general contexts at it may
+/// lead to leaked keys.
+/// .
+pub unsafe extern "C" fn get_nonce_from_extra_data_directly(
     nonce32: *mut c_uchar,
     _msg32: *const c_uchar,
     _msg_len: size_t,
@@ -58,7 +67,7 @@ impl PrecomittedNonce {
         self.0.as_c_ptr() as *const c_void
     }
     pub fn as_param(&self) -> SchnorrSigExtraParams {
-        SchnorrSigExtraParams::new(Some(custom_nonce), self.as_ptr())
+        SchnorrSigExtraParams::new(Some(get_nonce_from_extra_data_directly), self.as_ptr())
     }
     pub fn get_public<C: Signing>(&self, secp: &Secp256k1<C>) -> PrecomittedPublicNonce {
         PrecomittedPublicNonce(self.0.public_key(secp).x_only_public_key().0)

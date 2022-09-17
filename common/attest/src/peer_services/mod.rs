@@ -52,7 +52,6 @@ pub fn startup(
         }
         let inner_client = bld.build()?;
         let client = AttestationClient::new(inner_client);
-        let secp = Arc::new(Secp256k1::new());
         let mut interval = g.config.peer_service.timer_override.reconnect_interval();
         let mut task_set: HashMap<TaskID, JoinHandle<Result<(), _>>> = HashMap::new();
         let _tip_attacher = spawn({
@@ -152,7 +151,6 @@ pub fn startup(
                             task_id.clone(),
                             tokio::spawn(push_peer::push_to_peer(
                                 g.clone(),
-                                secp.clone(),
                                 client,
                                 (task_id.0, task_id.1),
                                 db.clone(),
@@ -164,7 +162,6 @@ pub fn startup(
                             task_id.clone(),
                             tokio::spawn(fetch_peer::fetch_from_peer(
                                 g.clone(),
-                                secp.clone(),
                                 client,
                                 (task_id.0, task_id.1),
                                 db.clone(),

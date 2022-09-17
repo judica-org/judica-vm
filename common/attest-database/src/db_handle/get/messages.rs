@@ -195,7 +195,7 @@ where
         r
     }
 
-    pub fn messages_by_id<'i, E>(&self, id: MessageID) -> Result<E, rusqlite::Error>
+    pub fn messages_by_id<E>(&self, id: MessageID) -> Result<E, rusqlite::Error>
     where
         E: AsRef<Envelope> + FromSql,
     {

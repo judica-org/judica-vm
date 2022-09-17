@@ -68,9 +68,11 @@ async fn test_reused_nonce() {
     let envelope_2 = envelope_2.self_authenticate(&secp).unwrap();
     handle
         .try_insert_authenticated_envelope(envelope_1.clone())
+        .unwrap()
         .unwrap();
     handle
         .try_insert_authenticated_envelope(envelope_2.clone())
+        .unwrap()
         .unwrap();
     for i in 0..2 {
         // Check that only this group is returned
@@ -103,10 +105,12 @@ async fn test_reused_nonce() {
         let envelope_i = envelope_i.clone().self_authenticate(&secp).unwrap();
         handle
             .try_insert_authenticated_envelope(envelope_i.clone())
+            .unwrap()
             .unwrap();
     }
 }
 
+#[allow(unused)]
 fn print_db(handle: &MsgDBHandle) {
     let mut stm = handle
         .0
@@ -206,6 +210,7 @@ async fn test_envelope_creation() {
         let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
         handle
             .try_insert_authenticated_envelope(envelope_1.clone())
+            .unwrap()
             .unwrap();
         verify_tip(&handle, &envelope_1, user_id, kp, &all_past_tips);
 
@@ -223,6 +228,7 @@ async fn test_envelope_creation() {
         let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
         handle
             .try_insert_authenticated_envelope(envelope_2.clone())
+            .unwrap()
             .unwrap();
         verify_tip(&handle, &envelope_2, user_id, kp, &all_past_tips);
 
@@ -252,6 +258,7 @@ async fn test_envelope_creation() {
                 println!("Inserting i={}", i);
                 handle
                     .try_insert_authenticated_envelope(envelope_disconnected.clone())
+                    .unwrap()
                     .unwrap();
             } else {
                 println!("Skipping i={}", i);
@@ -278,6 +285,7 @@ async fn test_envelope_creation() {
 
         handle
             .try_insert_authenticated_envelope(disconnected[user_id].clone())
+            .unwrap()
             .unwrap();
         {
             let tips = handle.get_disconnected_tip_for_known_keys().unwrap();
@@ -340,6 +348,7 @@ async fn test_envelope_creation() {
     let envelope_3 = envelope_3.self_authenticate(&secp).unwrap();
     handle
         .try_insert_authenticated_envelope(envelope_3.clone())
+        .unwrap()
         .unwrap();
 
     {

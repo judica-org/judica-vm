@@ -11,7 +11,7 @@ impl MsgDB {
     pub fn new(db: Arc<Mutex<Connection>>) -> Self {
         MsgDB(db)
     }
-    pub async fn get_handle<'a>(&'a self) -> MsgDBHandle<'a, handle_type::All> {
+    pub async fn get_handle(&self) -> MsgDBHandle<'_, handle_type::All> {
         MsgDBHandle(self.0.lock().await, PhantomData::default())
     }
 }

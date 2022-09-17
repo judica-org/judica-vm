@@ -1,4 +1,5 @@
 use crate::configuration::Config;
+use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -8,6 +9,7 @@ use tracing::info;
 pub struct Globals {
     pub config: Arc<Config>,
     pub shutdown: AppShutdown,
+    pub secp: Arc<Secp256k1<All>>,
 }
 
 #[derive(Clone)]

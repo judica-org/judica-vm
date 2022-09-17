@@ -8,9 +8,8 @@ use tokio::{
 use tracing::{trace, warn};
 
 use super::*;
-pub async fn push_to_peer<C: Verification + 'static>(
+pub async fn push_to_peer(
     g: Arc<Globals>,
-    secp: Arc<Secp256k1<C>>,
     client: AttestationClient,
     service: (String, u16),
     conn: MsgDB,
@@ -39,7 +38,7 @@ pub async fn push_to_peer<C: Verification + 'static>(
                     .get_latest_tips(&url, port)
                     .await?
                     .iter()
-                    .flat_map(|e| e.self_authenticate(&secp))
+                    .flat_map(|e| e.self_authenticate(&g.secp))
                     .collect();
                 trace!(
                     url,
