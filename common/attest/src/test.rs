@@ -113,14 +113,19 @@ async fn connect_and_test_nodes() {
         let client = AttestationClient::new(base.clone());
         let control_client = ControlClient(base.clone());
         // Initial fetch should show no tips posessed
-        {
+        loop {
             let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
                 async move { client.get_latest_tips(&HOME.into(), *port).await }
             });
             let resp = join_all(it).await;
             let empty = (0..NODES).map(|_| Some(vec![])).collect::<Vec<_>>();
+            if resp.iter().any(Result::is_err) {
+                // Wait until all services are online
+                continue;
+            }
             assert_eq!(resp.into_iter().map(|r| r.ok()).collect::<Vec<_>>(), empty);
+            break;
         }
         // Create a genesis envelope for each node
         let genesis_envelopes = {
