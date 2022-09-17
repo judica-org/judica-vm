@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 tmux start-server
 BTCPORT=${BTCPORT:-"18443"}
 
@@ -20,7 +20,7 @@ Darwin)
   ;;
 
 Linux)
-  export BITCOIN_DIR="$HOME/~/.bitcoin"
+  export BITCOIN_DIR="$HOME/.bitcoin"
   BTCCOOKIE=${BTCCOOKIE:-"$HOME/.bitcoin/signet/.cookie"}
   ;;
 *)
