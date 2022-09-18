@@ -195,10 +195,9 @@ impl AsRef<Envelope> for Envelope {
 }
 
 mod from_wrap {
-    use std::convert::{TryFrom, TryInto};
+    use std::convert::TryFrom;
 
     use serde::{Deserialize, Serialize};
-    use serde_json::Value;
 
     use crate::AttestEnvelopable;
 

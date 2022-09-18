@@ -1,5 +1,5 @@
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
-use crate::{AttestEnvelopable, Authenticated, CanonicalEnvelopeHash, Envelope, GenericEnvelope};
+use crate::{AttestEnvelopable, Authenticated, CanonicalEnvelopeHash, GenericEnvelope};
 use rusqlite::types::{FromSql, FromSqlError, ToSqlOutput};
 use rusqlite::ToSql;
 use sapio_bitcoin::hashes::hex::ToHex;

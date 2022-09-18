@@ -1,7 +1,7 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
-use attest_messages::{Authenticated, Envelope, GenericEnvelope};
-use mine_with_friends_board::{game::game_move::GameMove, MoveEnvelope};
+use attest_messages::{Authenticated, GenericEnvelope};
+use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::XOnlyPublicKey;
 use schemars::JsonSchema;
 use serde::Deserialize;

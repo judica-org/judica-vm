@@ -11,7 +11,7 @@ use attest_messages::Header;
 use attest_messages::SigningError;
 use attest_messages::Unsigned;
 use attest_messages::WrappedJson;
-use ruma_serde::CanonicalJsonValue;
+
 use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,

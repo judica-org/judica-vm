@@ -5,7 +5,7 @@ use crate::db_handle::MessageID;
 use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
-use attest_messages::Envelope;
+
 use attest_messages::GenericEnvelope;
 use fallible_iterator::FallibleIterator;
 use rusqlite::named_params;

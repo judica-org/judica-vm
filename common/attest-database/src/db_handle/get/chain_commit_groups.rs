@@ -1,5 +1,3 @@
-use std::convert::identity;
-
 use super::super::handle_type;
 use super::super::ChainCommitGroupID;
 use super::super::MessageID;
@@ -9,7 +7,7 @@ use crate::sql_serializers::PK;
 use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
-use attest_messages::Envelope;
+
 use attest_messages::GenericEnvelope;
 use rusqlite::named_params;
 use sapio_bitcoin::XOnlyPublicKey;

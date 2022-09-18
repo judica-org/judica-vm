@@ -10,7 +10,7 @@ use attest_messages::nonce::PrecomittedPublicNonce;
 use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
-use attest_messages::Envelope;
+
 use attest_messages::GenericEnvelope;
 use rusqlite::ffi;
 use rusqlite::ffi::{SQLITE_CONSTRAINT_CHECK, SQLITE_CONSTRAINT_NOTNULL, SQLITE_CONSTRAINT_UNIQUE};
