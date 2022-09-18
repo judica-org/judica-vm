@@ -6,6 +6,7 @@ members = [
     "common/attest-database",
     "common/attest-util",
     "common/bitcoin-header-checkpoints",
+    "common/event-log",
     "common/game-host",
     "common/game-host-messages",
     "common/game-sequencer",

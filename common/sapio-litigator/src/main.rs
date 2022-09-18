@@ -5,6 +5,10 @@ use bitcoin::psbt::PartiallySignedTransaction;
 use bitcoin::{OutPoint, Transaction, Txid};
 use bitcoincore_rpc_async::Client;
 use emulator_connect::{CTVAvailable, CTVEmulator};
+use event_log::connection::EventLog;
+use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
+use ruma_serde::CanonicalJsonValue;
 use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::{CompilationError, Compiled};
@@ -21,7 +25,6 @@ use std::collections::btree_map::Values;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
-
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
@@ -35,6 +38,15 @@ enum Event {
     ExternalEvent(simps::Event),
     Rebind(OutPoint),
     SyntheticPeriodicActions,
+}
+
+impl ToOccurrence for Event {
+    fn to_data(&self) -> CanonicalJsonValue {
+        ruma_serde::to_canonical_value(self).unwrap()
+    }
+    fn stable_typeid(&self) -> ApplicationTypeID {
+        ApplicationTypeID::from_inner("LitigatorEvent")
+    }
 }
 
 enum AppState {
@@ -121,6 +133,15 @@ struct Config {
     bitcoin: BitcoinConfig,
     app_instance: String,
     logfile: PathBuf,
+    event_log: EventLogConfig,
+}
+
+#[derive(Deserialize)]
+struct EventLogConfig {
+    app_name: String,
+    #[serde(default)]
+    prefix: Option<PathBuf>,
+    group: OccurrenceGroupKey,
 }
 
 impl Config {
@@ -130,6 +151,11 @@ impl Config {
     }
     async fn get_db(&self) -> Result<MsgDB, Box<dyn std::error::Error>> {
         let db = setup_db(&self.db_app_name, self.db_prefix.clone()).await?;
+        Ok(db)
+    }
+    async fn get_event_log(&self) -> Result<EventLog, Box<dyn std::error::Error>> {
+        let db =
+            event_log::setup_db(&self.event_log.app_name, self.event_log.prefix.clone()).await?;
         Ok(db)
     }
     async fn get_bitcoin_rpc(&self) -> Result<Arc<Client>, Box<dyn std::error::Error>> {
@@ -143,7 +169,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::from_env()?;
+    let config = Arc::new(Config::from_env()?);
+    let evlog = config.get_event_log().await?;
     let _db = config.get_db().await?;
     let _bitcoin = config.get_bitcoin_rpc().await?;
     let typ = "org";
@@ -154,7 +181,7 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     let mut data_dir = proj.data_dir().to_owned();
     data_dir.push("modules");
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
-    let logfile = config.logfile;
+    let logfile = config.logfile.clone();
     let mut opened = OpenOptions::default();
     opened.append(true).create(true).open(&logfile).await?;
     let fi = File::open(logfile).await?;
@@ -175,18 +202,41 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    let tx = tx.clone();
+    let config = config.clone();
+    let accessor = evlog.get_accessor().await;
+    let key = &config.event_log.group;
+    let evlog_group_id = accessor.get_occurrence_group_by_key(key);
+    let evlog_group_id = evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?;
+    // This should be in notify_one mode, which means that only the db reader
+    // should be calling notified and wakers should call notify_one.
+    let new_synthetic_event = Arc::new(Notify::new());
     {
-        let tx = tx.clone();
+        let evlog = evlog.clone();
+        let new_synthetic_event = new_synthetic_event.clone();
         tokio::spawn(async move {
+            let mut last = None;
             loop {
-                // TODO: Read lines after end?
-                match lines.next_line().await {
-                    Ok(Some(l)) => {
-                        let e: Event = serde_json::from_str(&l)?;
-                        tx.send(e).await;
+                let wait_for_new_synth = {
+                    let accessor = evlog.get_accessor().await;
+                    let to_process = if let Some(last) = last {
+                        accessor.get_occurrences_for_group_after_id(evlog_group_id, last)
+                    } else {
+                        accessor.get_occurrences_for_group(evlog_group_id)
+                    }?;
+
+                    for (occurrence_id, occurrence) in to_process {
+                        let ev = Event::from_occurrence(occurrence)?;
+                        if tx.send(ev).await.is_err() {
+                            return Ok(());
+                        }
+                        last = Some(occurrence_id);
                     }
-                    Ok(None) => (),
-                    _ => break,
+                    new_synthetic_event.notified()
+                };
+                tokio::select! {
+                    _ = wait_for_new_synth => {}
+                    _ = tokio::time::sleep(Duration::from_secs(30)) => {}
                 }
             }
             OK_T
@@ -194,8 +244,8 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let periodic_action_complete = Arc::new(Notify::new());
     {
-        let tx = tx.clone();
         let periodic_action_complete = periodic_action_complete.clone();
+        let evlog = evlog.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(30)).await;
@@ -205,9 +255,15 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
                 //
                 // we do this so that we don't ever have more than one active Periodic Action
                 let wait = periodic_action_complete.notified();
-                tx.send(Event::SyntheticPeriodicActions).await;
+                {
+                    let accessor = evlog.get_accessor().await;
+                    let o: &dyn ToOccurrence = &Event::SyntheticPeriodicActions;
+                    accessor.insert_new_occurrence_now_from(evlog_group_id, o)?;
+                    new_synthetic_event.notify_one();
+                }
                 wait.await;
             }
+            OK_T
         });
     }
     let mut state = AppState::Uninitialized;
