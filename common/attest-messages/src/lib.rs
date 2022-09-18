@@ -157,11 +157,13 @@ where
         + Clone
         + Serialize
         + AsRef<Self::Ref>
-        + std::fmt::Debug,
+        + std::fmt::Debug
+        + Send
+        + Sync,
     Self::Ref: ToOwned,
 {
     type Ref;
-    fn as_canonical(&self) -> Result<CanonicalJsonValue, serde_json::Error>;
+    fn as_canonical(&self) -> Result<CanonicalJsonValue, ruma_serde::CanonicalJsonError>;
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, JsonSchema, Debug)]
@@ -179,7 +181,7 @@ impl AsRef<CanonicalJsonValue> for WrappedJson {
     }
 }
 impl AttestEnvelopable for WrappedJson {
-    fn as_canonical(&self) -> Result<CanonicalJsonValue, serde_json::Error> {
+    fn as_canonical(&self) -> Result<CanonicalJsonValue, ruma_serde::CanonicalJsonError> {
         Ok(self.0.clone())
     }
     type Ref = CanonicalJsonValue;

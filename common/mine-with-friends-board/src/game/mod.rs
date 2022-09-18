@@ -36,6 +36,7 @@ use crate::tokens::token_swap::ConstantFunctionMarketMaker;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::token_swap::UXMaterialsPriceData;
 use crate::MoveEnvelope;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::max;
@@ -95,7 +96,7 @@ pub struct CallContext {
     pub sender: EntityID,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct GameSetup {
     // TODO: Make Set to guarantee Unique...
     pub players: Vec<String>,

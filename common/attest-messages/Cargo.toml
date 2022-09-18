@@ -7,14 +7,13 @@ edition = "2021"
 [dependencies]
 serde_json = "1.0.79"
 serde = "1.0.136"
-serde_derive = "1.0.136"
 ruma-serde = "0.6.0"
 schemars = "0.8.10"
 
 [dependencies.rusqlite]
 version = "0.27.0"
-features = ["serde_json"]
 optional = true
+features = ["serde_json"]
 
 [dependencies.sapio-bitcoin]
 version = "0.28.1"

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// N.B. we do the enum-of-struct-variant pattern to make serialization/schemas
 /// nicer.
-#[derive(Debug, Serialize, Deserialize, JsonSchema, Eq, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Eq, PartialEq, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum GameMove {
     Heartbeat(Heartbeat),
@@ -52,17 +52,17 @@ derive_from!(ListNFTForSale);
 derive_from!(SendTokens);
 derive_from!(Chat);
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Heartbeat();
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Trade {
     pub pair: TradingPairID,
     pub amount_a: u128,
     pub amount_b: u128,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct MintPowerPlant {
     /// Size of the power plant
     pub scale: u64,
@@ -70,28 +70,28 @@ pub struct MintPowerPlant {
     pub plant_type: PlantType,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct PurchaseNFT {
     pub nft_id: NftPtr,
     pub limit_price: Price,
     pub currency: Currency,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct ListNFTForSale {
     pub nft_id: NftPtr,
     pub price: Price,
     pub currency: Currency,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct SendTokens {
     pub to: EntityID,
     pub amount: Price,
     pub currency: Currency,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Chat(pub String);
 
 impl MoveEnvelope {
