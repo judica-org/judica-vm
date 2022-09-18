@@ -331,50 +331,47 @@ where
             let mut count = 0;
             while !self.should_shutdown() {
                 'check: while !self.should_shutdown() {
-                    let msg: Result<Authenticated<Envelope>, _> = {
+                    let msg: Result<
+                        Option<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>>,
+                        _,
+                    > = {
                         let handle = self.db.get_handle().await;
                         handle.get_message_at_height_for_user(self.oracle_key, count)
                     };
                     match msg {
-                        Ok(envelope) => {
-                            match serde_json::from_value::<Channelized<BroadcastByHost>>(
-                                envelope.msg().to_owned().into(),
-                            ) {
-                                Ok(v) => {
-                                    match v.data {
-                                        BroadcastByHost::Heartbeat => {}
-                                        BroadcastByHost::Sequence(s) => {
-                                            info!(key=?self.oracle_key, n_msg = s.len(), "Got Batch to Sequence");
-                                            if self.schedule_batches_to_sequence.send(s).is_err() {
-                                                return;
-                                            };
-                                        }
-                                        BroadcastByHost::NewPeer(Peer { service_url, port }) => {
-                                            let handle = self.db.get_handle().await;
-                                            // idempotent
-                                            handle
-                                                .insert_hidden_service(
-                                                    service_url,
-                                                    port,
-                                                    true,
-                                                    true,
-                                                    true,
-                                                )
-                                                .ok();
-                                        }
-                                        BroadcastByHost::GameSetup(_) => {}
-                                    }
-                                    count += 1;
-                                }
-                                Err(_) => {
-                                    return;
-                                }
-                            }
-                            break 'check;
-                        }
-                        Err(_) => {
+                        Ok(None) => {
                             debug!(key=?self.oracle_key, sleep_for = ?self.poll_sequencer_period, "No New Messages Sleeping...");
                             sleep(self.poll_sequencer_period).await;
+                            continue 'check;
+                        }
+                        Ok(Some(envelope)) => {
+                            match &envelope.msg().data {
+                                BroadcastByHost::Heartbeat => {}
+                                BroadcastByHost::Sequence(s) => {
+                                    info!(key=?self.oracle_key, n_msg = s.len(), "Got Batch to Sequence");
+                                    if self.schedule_batches_to_sequence.send(s.clone()).is_err() {
+                                        return;
+                                    };
+                                }
+                                BroadcastByHost::NewPeer(Peer { service_url, port }) => {
+                                    let handle = self.db.get_handle().await;
+                                    // idempotent
+                                    handle
+                                        .insert_hidden_service(
+                                            service_url.clone(),
+                                            *port,
+                                            true,
+                                            true,
+                                            true,
+                                        )
+                                        .ok();
+                                }
+                                BroadcastByHost::GameSetup(_) => {}
+                            }
+                            count += 1;
+                        }
+                        Err(e) => {
+                            warn!(error=?e, "Database Failure")
                         }
                     }
                 }

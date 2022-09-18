@@ -11,6 +11,7 @@ use fallible_iterator::FallibleIterator;
 use rusqlite::named_params;
 use rusqlite::params;
 use rusqlite::types::FromSql;
+use rusqlite::OptionalExtension;
 use sapio_bitcoin;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::hashes::sha256;
@@ -51,12 +52,13 @@ where
         &self,
         key: XOnlyPublicKey,
         height: u64,
-    ) -> Result<Authenticated<GenericEnvelope<M>>, rusqlite::Error>
+    ) -> Result<Option<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
     where
         M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGES_BY_HEIGHT_AND_USER)?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
+            .optional()
     }
 
     /// finds the most recent message for a user by their key

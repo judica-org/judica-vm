@@ -121,7 +121,8 @@ pub(crate) async fn switch_to_game_inner(
             let handle = db.db.get_handle().await;
             handle
                 .get_message_at_height_for_user::<Channelized<BroadcastByHost>>(key, 0)
-                .map_err(|_| "No Genesis found for selected Key")?
+                .map_err(|e| "Internal Databse Error")?
+                .ok_or("No Genesis found for selected Key")?
         };
         let game_setup = {
             let m: &Channelized<BroadcastByHost> = genesis.msg();
