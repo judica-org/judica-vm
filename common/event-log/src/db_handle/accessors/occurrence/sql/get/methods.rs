@@ -35,17 +35,21 @@ where
     pub fn get_occurrences_for_group(
         &self,
         id: OccurrenceGroupID,
-    ) -> Result<Vec<Occurrence>, rusqlite::Error> {
+    ) -> Result<Vec<(OccurrenceID, Occurrence)>, rusqlite::Error> {
         let mut stmt = self.0.prepare_cached(SQL_GET_OCCURRENCES_FOR_GROUP)?;
         let q = stmt.query_map(named_params! {":group_id": id}, |row| {
-            let data: SqlJson = row.get(0)?;
-            let time: i64 = row.get(1)?;
-            let typeid: ApplicationTypeID = row.get(2)?;
-            Ok(Occurrence {
-                data: data.0,
-                time,
-                typeid,
-            })
+            let row_id: OccurrenceID = row.get(0)?;
+            let data: SqlJson = row.get(1)?;
+            let time: i64 = row.get(2)?;
+            let typeid: ApplicationTypeID = row.get(3)?;
+            Ok((
+                row_id,
+                Occurrence {
+                    data: data.0,
+                    time,
+                    typeid,
+                },
+            ))
         })?;
         let v = q.collect::<Result<Vec<_>, _>>()?;
         Ok(v)
@@ -54,19 +58,23 @@ where
         &self,
         group_id: OccurrenceGroupID,
         after_id: OccurrenceID,
-    ) -> Result<Vec<Occurrence>, rusqlite::Error> {
+    ) -> Result<Vec<(OccurrenceID, Occurrence)>, rusqlite::Error> {
         let mut stmt = self.0.prepare_cached(SQL_GET_OCCURRENCE_AFTER_ID)?;
         let q = stmt.query_map(
             named_params! {":group_id": group_id, ":after_id": after_id},
             |row| {
-                let data: SqlJson = row.get(0)?;
-                let time: i64 = row.get(1)?;
-                let typeid: ApplicationTypeID = row.get(2)?;
-                Ok(Occurrence {
-                    data: data.0,
-                    time,
-                    typeid,
-                })
+                let row_id: OccurrenceID = row.get(0)?;
+                let data: SqlJson = row.get(1)?;
+                let time: i64 = row.get(2)?;
+                let typeid: ApplicationTypeID = row.get(3)?;
+                Ok((
+                    row_id,
+                    Occurrence {
+                        data: data.0,
+                        time,
+                        typeid,
+                    },
+                ))
             },
         )?;
         let v = q.collect::<Result<Vec<_>, _>>()?;

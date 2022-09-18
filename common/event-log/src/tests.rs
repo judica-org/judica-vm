@@ -87,9 +87,14 @@ async fn test_db_basic_function() {
     let occurrence_two = accessor.insert_occurrence(group_one, &repeat).unwrap();
     let occurrence_three = accessor.insert_occurrence(group_one, &repeat).unwrap();
 
+    let occurrences = vec![
+        (occurrence_one, d_first.into()),
+        (occurrence_two, repeat.clone()),
+        (occurrence_three, repeat.clone()),
+    ];
     assert_eq!(
         accessor.get_occurrences_for_group(group_one).unwrap(),
-        vec![d_first.into(), repeat.clone(), repeat.clone()]
+        occurrences,
     );
 
     assert_eq!(accessor.get_occurrence(occurrence_two).unwrap(), repeat);
@@ -97,20 +102,20 @@ async fn test_db_basic_function() {
         accessor
             .get_occurrences_for_group_after_id(group_one, occurrence_one)
             .unwrap(),
-        vec![repeat.clone(), repeat.clone()]
+        occurrences[1..]
     );
 
     assert_eq!(
         accessor
             .get_occurrences_for_group_after_id(group_one, occurrence_two)
             .unwrap(),
-        vec![repeat]
+        occurrences[2..]
     );
 
     assert_eq!(
         accessor
             .get_occurrences_for_group_after_id(group_one, occurrence_three)
             .unwrap(),
-        vec![]
+        occurrences[3..]
     );
 }
