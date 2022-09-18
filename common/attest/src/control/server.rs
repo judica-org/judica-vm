@@ -180,7 +180,7 @@ async fn push_message_dangerous(
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
     let tips = bitcoin_tipcache.0.read_cache().await;
     let env = handle
-        .wrap_message_in_envelope_for_user_by_key(
+        .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
             msg,
             &kp,
             &secp.0,

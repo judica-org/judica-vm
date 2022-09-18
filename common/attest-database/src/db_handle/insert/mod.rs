@@ -7,9 +7,11 @@ use crate::sql_serializers::PK;
 use crate::sql_serializers::SK;
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
+use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
+use attest_messages::GenericEnvelope;
 use rusqlite::ffi;
 use rusqlite::ffi::{SQLITE_CONSTRAINT_CHECK, SQLITE_CONSTRAINT_NOTNULL, SQLITE_CONSTRAINT_UNIQUE};
 use rusqlite::params;
@@ -86,11 +88,14 @@ where
 
     /// creates a new user from a genesis envelope
     #[must_use = "Must Check that the new user was succesfully created"]
-    pub fn insert_user_by_genesis_envelope(
+    pub fn insert_user_by_genesis_envelope<M>(
         &mut self,
         nickname: String,
-        envelope: Authenticated<Envelope>,
-    ) -> Result<Result<String, (sql_error::SqliteFail, Option<String>)>, rusqlite::Error> {
+        envelope: Authenticated<GenericEnvelope<M>>,
+    ) -> Result<Result<String, (sql_error::SqliteFail, Option<String>)>, rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         info!(genesis=?envelope.get_genesis_hash(), nickname, "Creating New Genesis");
         let tx = self.0.transaction()?;
         let mut stmt = tx.prepare_cached(SQL_INSERT_USER)?;
@@ -132,10 +137,13 @@ where
     ///
     /// Will return false if the message already existed
     #[must_use = "Required to check if the insertion of an Envelope was successful"]
-    pub fn try_insert_authenticated_envelope(
+    pub fn try_insert_authenticated_envelope<M>(
         &mut self,
-        data: Authenticated<Envelope>,
-    ) -> Result<Result<(), (sql_error::SqliteFail, Option<String>)>, rusqlite::Error> {
+        data: Authenticated<GenericEnvelope<M>>,
+    ) -> Result<Result<(), (sql_error::SqliteFail, Option<String>)>, rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         let tx = self.0.transaction()?;
         let res = try_insert_authenticated_envelope_with_txn(data, &tx);
         tx.commit()?;
@@ -190,10 +198,13 @@ where
 }
 
 #[must_use = "Required to check if the insertion of an Envelope was successful"]
-pub fn try_insert_authenticated_envelope_with_txn(
-    data: Authenticated<Envelope>,
+pub fn try_insert_authenticated_envelope_with_txn<M>(
+    data: Authenticated<GenericEnvelope<M>>,
     tx: &Transaction,
-) -> Result<Result<(), (sql_error::SqliteFail, Option<String>)>, rusqlite::Error> {
+) -> Result<Result<(), (sql_error::SqliteFail, Option<String>)>, rusqlite::Error>
+where
+    M: AttestEnvelopable,
+{
     let data = data.inner();
     let mut stmt = tx.prepare_cached(SQL_INSERT_ENVELOPE)?;
     let time = attest_util::now();

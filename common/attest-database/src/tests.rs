@@ -92,7 +92,7 @@ async fn test_reused_nonce() {
         );
         // Inserting more messages shouldn't change anything
         let envelope_i = handle
-            .wrap_message_in_envelope_for_user_by_key(
+            .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
                 CanonicalJsonValue::String(format!("distinct-{}", i)),
                 &kp,
                 &secp,
@@ -335,7 +335,7 @@ async fn test_envelope_creation() {
     let kp_2 = make_test_user(&secp, &mut handle, "TestUser2".into());
 
     let envelope_3 = handle
-        .wrap_message_in_envelope_for_user_by_key(
+        .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
             CanonicalJsonValue::Null,
             &kp_2,
             &secp,

@@ -231,7 +231,7 @@ async fn game(
             let mut handle = db.get_handle().await;
             // TODO: Run a tipcache
             let wrapped = handle
-                .wrap_message_in_envelope_for_user_by_key(
+                .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
                     msg,
                     &keypair,
                     &secp,
