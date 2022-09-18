@@ -228,7 +228,7 @@ async fn make_genesis(
     secp: Extension<Secp256k1<All>>,
     Json(NewGenesis { nickname, msg }): Json<NewGenesis>,
 ) -> Result<(Response<()>, Json<Envelope>), (StatusCode, String)> {
-    let (kp, pre, genesis) = generate_new_user(&secp.0, Some(msg)).map_err(|e| {
+    let (kp, pre, genesis) = generate_new_user::<_, WrappedJson, _>(&secp.0, msg).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Creating Genesis Message failed: {}", e),

@@ -39,14 +39,14 @@ pub(crate) async fn make_new_chain_inner(
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
 ) -> Result<String, String> {
-    let (kp, next_nonce, genesis) = generate_new_user(
+    let (kp, next_nonce, genesis) = generate_new_user::<_, MoveEnvelope, _>(
         secp.inner(),
-        Some(MoveEnvelope {
+        MoveEnvelope {
             d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
             sequence: 0,
             /// The player who is making the move, myst be figured out somewhere...
             time: attest_util::now() as u64,
-        }),
+        },
     )
     .err_to_string()?;
     let msgdb = db.get().await.err_to_string()?;
@@ -116,7 +116,6 @@ pub(crate) async fn switch_to_game_inner(
     let game = game.inner().clone();
     spawn(async move {
         let genesis = {
-
             let db = db.state.lock().await;
             let db: &DatabaseInner = db.as_ref().ok_or("No Database Set Up")?;
             let handle = db.db.get_handle().await;

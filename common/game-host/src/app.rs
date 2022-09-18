@@ -111,12 +111,12 @@ pub async fn create_new_attestation_chain(
     Extension(ref secp): Extension<Secp256k1<All>>,
 ) -> Result<(Response<()>, Json<CreatedNewChain>), (StatusCode, &'static str)> {
     tracing::debug!("Creating New Attestation Chain");
-    let (kp, n, e) = generate_new_user(
+    let (kp, n, e) = generate_new_user::<_, Channelized<BroadcastByHost>, _>(
         secp,
-        Some(Channelized {
+        Channelized {
             data: BroadcastByHost::GameSetup(setup),
             channel: "default".into(),
-        }),
+        },
     )
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     let e = e

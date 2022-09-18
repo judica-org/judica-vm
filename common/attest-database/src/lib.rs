@@ -1,16 +1,15 @@
-use std::{error::Error, fs::Permissions, path::PathBuf, sync::Arc};
-
-use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
+use attest_messages::{
+    nonce::PrecomittedNonce, AttestEnvelopable, GenericEnvelope, Header, Unsigned,
+};
 use attest_util::ensure_dir;
 use connection::MsgDB;
-use ruma_serde::CanonicalJsonValue::Null;
 use rusqlite::Connection;
 use sapio_bitcoin::{
     secp256k1::{rand, Secp256k1, Signing},
     KeyPair,
 };
-use serde::Serialize;
 use std::os::unix::fs::PermissionsExt;
+use std::{error::Error, fs::Permissions, path::PathBuf, sync::Arc};
 
 pub mod connection;
 pub mod db_handle;
@@ -48,17 +47,17 @@ pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgD
     setup_db_at(data_dir, "attestations").await
 }
 
-pub fn generate_new_user<C: Signing, T: Serialize>(
+pub fn generate_new_user<C: Signing, M: AttestEnvelopable, Im: Into<M>>(
     secp: &Secp256k1<C>,
-    init: Option<T>,
-) -> Result<(KeyPair, PrecomittedNonce, Envelope), Box<dyn Error>> {
+    init: Im,
+) -> Result<(KeyPair, PrecomittedNonce, GenericEnvelope<M>), Box<dyn Error>> {
     let keypair: _ = KeyPair::new(secp, &mut rand::thread_rng());
     let nonce = PrecomittedNonce::new(secp);
     let next_nonce = PrecomittedNonce::new(secp);
     let sent_time_ms = attest_util::now();
 
     let pub_next_nonce = next_nonce.get_public(secp);
-    let mut msg = Envelope::new(
+    let mut msg = GenericEnvelope::new(
         Header::new(
             keypair.public_key().x_only_public_key().0,
             pub_next_nonce,
@@ -69,8 +68,7 @@ pub fn generate_new_user<C: Signing, T: Serialize>(
             Unsigned::new(Default::default()),
             Default::default(),
         ),
-        init.map(|v| ruma_serde::to_canonical_value(v))
-            .unwrap_or(Ok(Null))?,
+        init,
     );
     msg.sign_with(&keypair, secp, nonce)?;
     Ok((keypair, next_nonce, msg))
