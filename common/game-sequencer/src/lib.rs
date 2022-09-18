@@ -101,6 +101,7 @@ impl TryFrom<UnauthenticatedRawSequencer> for RawSequencer {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(try_from = "UnauthenticatedRawSequencer")]
+#[schemars(with = "UnauthenticatedRawSequencer")]
 pub struct RawSequencer {
     sequencer_envelopes: Vec<Authenticated<Envelope>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
@@ -172,6 +173,7 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(try_from = "RawSequencer")]
+#[schemars(with = "RawSequencer")]
 pub struct OfflineSequencer {
     batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
@@ -223,6 +225,7 @@ impl OfflineSequencer {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(try_from = "OfflineSequencer")]
+#[schemars(with = "OfflineSequencer")]
 pub struct ExtractedMoveEnvelopes(
     #[schemars(with = "Vec<(MoveEnvelope, String)>")] pub Vec<(MoveEnvelope, XOnlyPublicKey)>,
 );
