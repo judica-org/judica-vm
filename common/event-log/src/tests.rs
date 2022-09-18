@@ -40,7 +40,9 @@ async fn test_db_basic_function() {
     let groups = accessor.get_all_occurrence_groups().unwrap();
     assert_eq!(groups.len(), 0);
 
-    let group_one = accessor.insert_new_occurrence_group("Test".into()).unwrap();
+    let group_one = accessor
+        .insert_new_occurrence_group(&"Test".into())
+        .unwrap();
 
     assert_eq!(
         "Test",
@@ -49,7 +51,9 @@ async fn test_db_basic_function() {
 
     assert_eq!(
         group_one,
-        accessor.get_occurrence_group_by_key("Test".into()).unwrap()
+        accessor
+            .get_occurrence_group_by_key(&"Test".into())
+            .unwrap()
     );
 
     assert_eq!(

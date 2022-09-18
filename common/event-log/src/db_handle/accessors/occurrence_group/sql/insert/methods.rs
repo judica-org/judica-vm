@@ -14,7 +14,7 @@ where
 {
     pub fn insert_new_occurrence_group(
         &self,
-        key: OccurrenceGroupKey,
+        key: &OccurrenceGroupKey,
     ) -> Result<OccurrenceGroupID, rusqlite::Error> {
         let mut stmt = self.0.prepare_cached(SQL_NEW_OCCURRENCE_GROUP)?;
         let q = stmt.insert(named_params! {

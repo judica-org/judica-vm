@@ -18,6 +18,7 @@ directories = "3.0.1"
 rand="^0.6"
 jsonschema-valid = "0.4.0"
 bitcoincore-rpc-async = "4.0.1-alpha.1"
+ruma-serde = "0.6.0"
 
 [dependencies.sapio-psbt]
 path = "../../submodule/sapio/sapio-psbt"
@@ -69,6 +70,9 @@ features = ["host"]
 
 [dependencies.attest-database]
 path = "../attest-database"
+
+[dependencies.event-log]
+path = "../event-log"
 
 [dependencies.attest-util]
 path = "../attest-util"

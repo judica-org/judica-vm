@@ -41,7 +41,7 @@ where
 
     pub fn get_occurrence_group_by_key(
         &self,
-        key: OccurrenceGroupKey,
+        key: &OccurrenceGroupKey,
     ) -> Result<OccurrenceGroupID, rusqlite::Error> {
         let mut stmt = self.0.prepare_cached(SQL_GET_OCCURRENCE_GROUP_BY_KEY)?;
         let q = stmt.query_row(named_params! {":group_key": key}, |row| {
