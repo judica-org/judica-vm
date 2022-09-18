@@ -140,22 +140,31 @@ impl std::fmt::Debug for Header {
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, JsonSchema)]
 #[serde(try_from = "from_wrap::GenericErasedEnvelope")]
 #[serde(bound = "T: for<'a> Deserialize<'a> + Serialize + Clone")]
-pub struct GenericEnvelope<T: AttestEnvelopable = WrappedJson> {
+pub struct GenericEnvelope<T = WrappedJson>
+where
+    T: AttestEnvelopable,
+{
     header: Header,
     msg: T,
     #[serde(skip)]
     cache: Option<CanonicalEnvelopeHash>,
 }
 
-pub trait AttestEnvelopable: JsonSchema
+pub trait AttestEnvelopable
 where
-    Self: AsRef<Self::Ref>,
+    Self: JsonSchema
+        + for<'a> Deserialize<'a>
+        + Clone
+        + Serialize
+        + AsRef<Self::Ref>
+        + std::fmt::Debug,
+    Self::Ref: ToOwned,
 {
     type Ref;
     fn as_canonical(&self) -> Result<CanonicalJsonValue, serde_json::Error>;
 }
 
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, JsonSchema, Debug)]
 #[serde(transparent)]
 pub struct WrappedJson(#[schemars(with = "Value")] CanonicalJsonValue);
 impl From<CanonicalJsonValue> for WrappedJson {
@@ -226,7 +235,10 @@ where
     }
 }
 
-impl std::fmt::Debug for Envelope {
+impl<T> std::fmt::Debug for GenericEnvelope<T>
+where
+    T: AttestEnvelopable,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&serde_json::to_string(self).unwrap())
     }

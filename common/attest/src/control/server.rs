@@ -7,7 +7,7 @@ use attest_database::{
     db_handle::{create::TipControl, get::PeerInfo},
     generate_new_user,
 };
-use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, WrappedJson};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     http::Response,
@@ -51,7 +51,7 @@ async fn get_expensive_db_snapshot(
     let mut map = Default::default();
     let mut newer = None;
     handle
-        .get_all_messages_collect_into_inconsistent::<Envelope>(&mut newer, &mut map)
+        .get_all_messages_collect_into_inconsistent::<Envelope, WrappedJson>(&mut newer, &mut map)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()
@@ -73,7 +73,7 @@ async fn get_status(
             .get_all_hidden_services()
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let tips = handle
-            .get_tips_for_all_users::<Authenticated<Envelope>>()
+            .get_tips_for_all_users::<Authenticated<Envelope>, WrappedJson>()
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let tips = tips
             .into_iter()

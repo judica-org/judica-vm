@@ -313,7 +313,7 @@ impl OnlineDBFetcher {
             let mut count = 0;
             while !self.should_shutdown() {
                 'check: while !self.should_shutdown() {
-                    let msg = {
+                    let msg: Result<Authenticated<Envelope>, _> = {
                         let handle = self.db.get_handle().await;
                         handle.get_message_at_height_for_user(self.oracle_key, count)
                     };

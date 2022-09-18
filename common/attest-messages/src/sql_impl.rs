@@ -1,5 +1,5 @@
 use crate::nonce::{PrecomittedNonce, PrecomittedPublicNonce};
-use crate::{Authenticated, CanonicalEnvelopeHash, Envelope};
+use crate::{AttestEnvelopable, Authenticated, CanonicalEnvelopeHash, Envelope, GenericEnvelope};
 use rusqlite::types::{FromSql, FromSqlError, ToSqlOutput};
 use rusqlite::ToSql;
 use sapio_bitcoin::hashes::hex::ToHex;
@@ -7,24 +7,33 @@ use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::secp256k1::SecretKey;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::str::FromStr;
-impl ToSql for Envelope {
+impl<T> ToSql for GenericEnvelope<T>
+where
+    T: AttestEnvelopable,
+{
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         let cv = ruma_serde::to_canonical_value(self)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
         Ok(ToSqlOutput::from(cv.to_string()))
     }
 }
-impl FromSql for Envelope {
+impl<T> FromSql for GenericEnvelope<T>
+where
+    T: AttestEnvelopable,
+{
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         let s = value.as_str()?;
         serde_json::from_str(s).map_err(|e| rusqlite::types::FromSqlError::Other(e.into()))
     }
 }
 
-impl FromSql for Authenticated<Envelope> {
+impl<T> FromSql for Authenticated<GenericEnvelope<T>>
+where
+    T: AttestEnvelopable,
+{
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         let s = value.as_str()?;
-        let envelope: Envelope =
+        let envelope: GenericEnvelope<T> =
             serde_json::from_str(s).map_err(|e| rusqlite::types::FromSqlError::Other(e.into()))?;
         Ok(Authenticated(envelope))
     }

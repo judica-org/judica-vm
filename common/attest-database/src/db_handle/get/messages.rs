@@ -2,9 +2,11 @@ use super::super::handle_type;
 use super::super::MsgDBHandle;
 use crate::db_handle::sql::get::messages::*;
 use crate::db_handle::MessageID;
+use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 use attest_messages::Envelope;
+use attest_messages::GenericEnvelope;
 use fallible_iterator::FallibleIterator;
 use rusqlite::named_params;
 use rusqlite::params;
@@ -22,12 +24,13 @@ where
     T: handle_type::Get,
 {
     /// Returns the message at a given height for a key
-    pub fn get_connected_messages_newer_than_envelopes<'v, It>(
+    pub fn get_connected_messages_newer_than_envelopes<'v, It, M>(
         &self,
         envelopes: It,
-    ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error>
+    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
     where
-        It: Iterator<Item = &'v Authenticated<Envelope>>,
+        It: Iterator<Item = &'v Authenticated<GenericEnvelope<M>>>,
+        M: AttestEnvelopable + 'v,
     {
         let mut stmt = self
             .0
@@ -37,50 +40,64 @@ where
             let rs = stmt
                 .query(named_params! (":genesis": envelope.get_genesis_hash(), ":height": envelope.header().height()))?;
             let mut envs = rs
-                .map(|r| r.get::<_, Authenticated<Envelope>>(0))
+                .map(|r| r.get::<_, Authenticated<GenericEnvelope<M>>>(0))
                 .collect()?;
             res.append(&mut envs);
         }
         Ok(res)
     }
     /// Returns the message at a given height for a key
-    pub fn get_message_at_height_for_user(
+    pub fn get_message_at_height_for_user<M>(
         &self,
         key: XOnlyPublicKey,
         height: u64,
-    ) -> Result<Authenticated<Envelope>, rusqlite::Error> {
+    ) -> Result<Authenticated<GenericEnvelope<M>>, rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGES_BY_HEIGHT_AND_USER)?;
         stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
     }
 
     /// finds the most recent message for a user by their key
-    pub fn get_tip_for_user_by_key(
+    pub fn get_tip_for_user_by_key<M>(
         &self,
         key: XOnlyPublicKey,
-    ) -> Result<Authenticated<Envelope>, rusqlite::Error> {
+    ) -> Result<Authenticated<GenericEnvelope<M>>, rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGES_TIPS_BY_USER)?;
         stmt.query_row([key.to_hex()], |r| r.get(0))
     }
 
     /// finds the most recent message only for messages where we know the key
-    pub fn get_tip_for_known_keys(&self) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
+    pub fn get_tip_for_known_keys<M>(
+        &self,
+    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         let mut stmt = self.0.prepare_cached(SQL_GET_TIPS_FOR_KNOWN_KEYS)?;
         let rows = stmt.query([])?;
-        let vs: Vec<Authenticated<Envelope>> = rows
-            .map(|r| r.get::<_, Authenticated<Envelope>>(0))
+        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows
+            .map(|r| r.get::<_, Authenticated<GenericEnvelope<M>>>(0))
             .collect()?;
         Ok(vs)
     }
 
-    pub fn get_disconnected_tip_for_known_keys(
+    pub fn get_disconnected_tip_for_known_keys<M>(
         &self,
-    ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
+    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         let mut stmt = self
             .0
             .prepare_cached(SQL_GET_DISCONNECTED_TIPS_FOR_KNOWN_KEYS)?;
         let rows = stmt.query([])?;
-        let vs: Vec<Authenticated<Envelope>> = rows
-            .map(|r| r.get::<_, Authenticated<Envelope>>(0))
+        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows
+            .map(|r| r.get::<_, Authenticated<GenericEnvelope<M>>>(0))
             .collect()?;
         Ok(vs)
     }
@@ -95,11 +112,14 @@ where
     }
 
     /// finds the most recent message only for messages where we know the key
-    pub fn get_all_connected_messages_collect_into(
+    pub fn get_all_connected_messages_collect_into<M>(
         &self,
         newer: &mut Option<i64>,
-        map: &mut HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
-    ) -> Result<(), rusqlite::Error> {
+        map: &mut HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
+    ) -> Result<(), rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         let mut stmt = if newer.is_some() {
             self.0
                 .prepare_cached(SQL_GET_ALL_MESSAGES_AFTER_CONNECTED)?
@@ -110,22 +130,28 @@ where
             Some(i) => stmt.query([*i])?,
             None => stmt.query([])?,
         };
-        rows.map(|r| Ok((r.get::<_, Authenticated<Envelope>>(0)?, r.get::<_, i64>(1)?)))
-            .for_each(|(v, id)| {
-                map.insert(v.canonicalized_hash_ref(), v);
-                *newer = (*newer).max(Some(id));
-                Ok(())
-            })?;
+        rows.map(|r| {
+            Ok((
+                r.get::<_, Authenticated<GenericEnvelope<M>>>(0)?,
+                r.get::<_, i64>(1)?,
+            ))
+        })
+        .for_each(|(v, id)| {
+            map.insert(v.canonicalized_hash_ref(), v);
+            *newer = (*newer).max(Some(id));
+            Ok(())
+        })?;
         Ok(())
     }
 
-    pub fn get_all_messages_collect_into_inconsistent<E>(
+    pub fn get_all_messages_collect_into_inconsistent<E, M>(
         &self,
         newer: &mut Option<i64>,
         map: &mut HashMap<CanonicalEnvelopeHash, E>,
     ) -> Result<(), rusqlite::Error>
     where
-        E: FromSql + AsRef<Envelope>,
+        E: FromSql + AsRef<GenericEnvelope<M>>,
+        M: AttestEnvelopable,
     {
         let mut stmt = if newer.is_some() {
             self.0
@@ -147,9 +173,10 @@ where
     }
 
     /// finds all most recent messages for all users
-    pub fn get_tips_for_all_users<E>(&self) -> Result<Vec<E>, rusqlite::Error>
+    pub fn get_tips_for_all_users<E, M>(&self) -> Result<Vec<E>, rusqlite::Error>
     where
-        E: AsRef<Envelope> + FromSql + std::fmt::Debug,
+        E: AsRef<GenericEnvelope<M>> + FromSql + std::fmt::Debug,
+        M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_ALL_TIPS_FOR_ALL_USERS)?;
         let rows = stmt.query([])?;
@@ -159,11 +186,16 @@ where
         Ok(vs)
     }
 
-    pub fn get_all_genesis(&self) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
+    pub fn get_all_genesis<M>(
+        &self,
+    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         let mut stmt = self.0.prepare_cached(SQL_GET_ALL_GENESIS)?;
         let rows = stmt.query([])?;
-        let vs: Vec<Authenticated<Envelope>> = rows
-            .map(|r| r.get::<_, Authenticated<Envelope>>(0))
+        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows
+            .map(|r| r.get::<_, Authenticated<GenericEnvelope<M>>>(0))
             .collect()?;
         debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
         trace!(envelopes=?vs, "Genesis Tips Returned");
@@ -171,22 +203,26 @@ where
     }
 
     /// loads all the messages from a given user
-    pub fn load_all_messages_for_user_by_key_connected(
+    pub fn load_all_messages_for_user_by_key_connected<M>(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    ) -> Result<Vec<Authenticated<Envelope>>, rusqlite::Error> {
+    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
+    where
+        M: AttestEnvelopable,
+    {
         let mut stmt = self
             .0
             .prepare_cached(SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED)?;
         let rows = stmt.query(params![key.to_hex()])?;
-        let vs: Vec<Authenticated<Envelope>> = rows.map(|r| r.get(0)).collect()?;
+        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows.map(|r| r.get(0)).collect()?;
         Ok(vs)
     }
 
-    pub fn messages_by_hash<'i, I, E>(&self, hashes: I) -> Result<Vec<E>, rusqlite::Error>
+    pub fn messages_by_hash<'i, I, E, M>(&self, hashes: I) -> Result<Vec<E>, rusqlite::Error>
     where
         I: Iterator<Item = &'i CanonicalEnvelopeHash>,
-        E: AsRef<Envelope> + FromSql,
+        E: AsRef<GenericEnvelope<M>> + FromSql,
+        M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_HASH)?;
         let r: Result<Vec<_>, _> = hashes
@@ -195,9 +231,10 @@ where
         r
     }
 
-    pub fn messages_by_id<E>(&self, id: MessageID) -> Result<E, rusqlite::Error>
+    pub fn messages_by_id<E, M>(&self, id: MessageID) -> Result<E, rusqlite::Error>
     where
-        E: AsRef<Envelope> + FromSql,
+        E: AsRef<GenericEnvelope<M>> + FromSql,
+        M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_ID)?;
         stmt.query_row([id], |r| r.get::<_, E>(0))
