@@ -1,0 +1,37 @@
+[package]
+name = "event-log"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+tokio = { version = "1.19.0", features = ["full"] }
+tracing = "0.1.35"
+serde = "1.0.136"
+directories = "3.0.1"
+fallible-iterator = "0.2.0"
+ruma-serde = "0.6.0"
+num-bigint = "0.4.3"
+num-integer = "0.1.45"
+serde_json = "1.0.79"
+
+[dependencies.attest-util]
+path = "../attest-util"
+features = ["tokio"]
+
+[dependencies.attest-messages]
+path = "../attest-messages"
+features = ["rusqlite"]
+
+
+[dependencies.rusqlite]
+version = "0.27.0"
+features = ["serde_json", "bundled"]
+
+[dependencies.sapio-bitcoin]
+version = "0.28.1"
+features=['use-serde', 'rand']
+
+[dev-dependencies]
+env_logger = "0.9.0"
+test-log = "0.2.11"

@@ -777,6 +777,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-log"
+version = "0.1.0"
+dependencies = [
+ "attest-messages",
+ "attest-util",
+ "directories",
+ "env_logger",
+ "fallible-iterator",
+ "num-bigint 0.4.3",
+ "num-integer",
+ "ruma-serde",
+ "rusqlite",
+ "sapio-bitcoin",
+ "serde",
+ "serde_json",
+ "test-log",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
