@@ -48,7 +48,7 @@ where
         // Side effect free...
         let mut tips = match tip_groups {
             TipControl::GroupsOnly => {
-                self.get_all_chain_commit_group_members_tips_for_chain(key)?
+                self.get_all_chain_commit_group_members_tips_for_chain(key, true)?
             }
             TipControl::AllTips => {
                 // N.B. get the WrappedJson typed tips because we don't care what their inner message type was.
