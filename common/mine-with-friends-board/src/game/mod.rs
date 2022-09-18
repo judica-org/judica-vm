@@ -123,7 +123,7 @@ impl GameSetup {
 
 impl GameBoard {
     /// Creates a new GameBoard
-    pub fn new(setup: GameSetup) -> GameBoard {
+    pub fn new(setup: &GameSetup) -> GameBoard {
         let mut alloc = EntityIDAllocator::new();
 
         let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Bitcoin".into()));

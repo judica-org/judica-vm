@@ -31,7 +31,7 @@ type MoveReadFn = fn(
     Authenticated<GenericEnvelope<MoveEnvelope>>,
 ) -> Result<(MoveEnvelope, XOnlyPublicKey), serde_json::Error>;
 #[derive(Clone)]
-pub struct Sequencer(
+pub struct Sequencer( pub
     Arc<
         GenericSequencer<
             MoveReadFn,
