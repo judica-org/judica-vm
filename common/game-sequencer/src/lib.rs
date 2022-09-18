@@ -22,13 +22,13 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-
 use tokio::spawn;
 use tokio::sync::futures::Notified;
 use tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex, Notify,
 };
+use tokio::task::JoinError;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tracing::debug;
@@ -176,15 +176,43 @@ pub struct OfflineSequencer {
     batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
 }
+#[derive(Debug)]
+pub enum SequenceingError<T> {
+    MappingError(T),
+    MissingEnvelope,
+}
+
+impl<E> From<E> for SequenceingError<E> {
+    fn from(e: E) -> Self {
+        SequenceingError::MappingError(e)
+    }
+}
+impl<E: std::fmt::Debug> Display for SequenceingError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+impl<E> std::error::Error for SequenceingError<E> where E: std::error::Error {}
+
+#[derive(Debug)]
+pub enum Void {}
 impl OfflineSequencer {
-    pub fn directly_sequence(&mut self) -> Result<Vec<Authenticated<Envelope>>, ()> {
+    pub fn directly_sequence(
+        &mut self,
+    ) -> Result<Vec<Authenticated<Envelope>>, SequenceingError<Void>> {
+        self.directly_sequence_map(Ok::<Authenticated<Envelope>, Void>)
+    }
+    pub fn directly_sequence_map<F, R, E>(&mut self, f: F) -> Result<Vec<R>, SequenceingError<E>>
+    where
+        F: Fn(Authenticated<Envelope>) -> Result<R, E>,
+    {
         let mut v = vec![];
         for batch in &self.batches_to_sequence {
             for h in batch {
                 if let Some(e) = self.msg_cache.remove(h) {
-                    v.push(e);
+                    v.push(f(e)?);
                 } else {
-                    return Err(());
+                    return Err(SequenceingError::MissingEnvelope);
                 }
             }
         }
@@ -192,6 +220,29 @@ impl OfflineSequencer {
         Ok(v)
     }
 }
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(try_from = "OfflineSequencer")]
+pub struct ExtractedMoveEnvelopes(
+    #[schemars(with = "Vec<(MoveEnvelope, String)>")] pub Vec<(MoveEnvelope, XOnlyPublicKey)>,
+);
+
+impl ExtractedMoveEnvelopes {}
+
+impl TryFrom<OfflineSequencer> for ExtractedMoveEnvelopes {
+    type Error = SequenceingError<serde_json::Error>;
+
+    fn try_from(mut value: OfflineSequencer) -> Result<Self, Self::Error> {
+        let x = value.directly_sequence_map(|x| {
+            Ok((
+                serde_json::from_value::<MoveEnvelope>(x.msg().to_owned().into())?,
+                x.header().key(),
+            ))
+        })?;
+        Ok(ExtractedMoveEnvelopes(x))
+    }
+}
+
 impl From<OfflineSequencer> for OfflineDBFetcher {
     fn from(o: OfflineSequencer) -> Self {
         OfflineDBFetcher::new(o.batches_to_sequence, o.msg_cache)
@@ -239,8 +290,8 @@ impl OfflineDBFetcher {
         }
     }
 
-    pub fn directly_sequence(self) -> Result<Vec<Authenticated<Envelope>>, ()> {
-        OfflineSequencer::try_from(self)?.directly_sequence()
+    pub fn directly_sequence(self) -> Result<Vec<Authenticated<Envelope>>, SequenceingError<()>> {
+        OfflineSequencer::try_from(self)?.directly_sequence_map(Ok)
     }
 }
 impl DBFetcher for OfflineDBFetcher {
@@ -446,7 +497,7 @@ impl Sequencer {
         })
     }
 
-    pub async fn run(self: Arc<Self>) {
+    pub async fn run(self: Arc<Self>) -> Result<(), JoinError> {
         let last =
             self.is_running
                 .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst);
@@ -454,9 +505,10 @@ impl Sequencer {
             info!("Starting Sequencer");
             let batcher = self.clone().start_envelope_batcher();
             let move_deserializer = self.clone().start_move_deserializer();
-            batcher.await;
-            move_deserializer.await;
+            batcher.await?;
+            move_deserializer.await?;
         }
+        Ok(())
     }
 
     pub async fn output_move(self: &Arc<Self>) -> Option<(MoveEnvelope, XOnlyPublicKey)> {
@@ -491,12 +543,15 @@ impl Sequencer {
                         match envs.entry(envelope) {
                             Occupied(e) => {
                                 // TODO: Batch size
-                                self.push_next_envelope.send(e.remove());
+                                if self.push_next_envelope.send(e.remove()).is_err() {
+                                    // quit if the channel is closed
+                                    return;
+                                }
                             }
                             Vacant(k) => {
                                 let msg_hash = k.into_key();
                                 envelope_hashes.push_front(msg_hash);
-                                should_wait.insert(self.db_fetcher.notified());
+                                should_wait = Some(self.db_fetcher.notified());
                                 info!(?msg_hash, "Wait for Envelope");
                                 continue 'wait_for_new;
                             }
@@ -616,9 +671,7 @@ mod test {
         let s = Sequencer::new(Default::default(), db_fetcher);
         {
             let s = s.clone();
-            spawn(async {
-                s.run().await;
-            });
+            spawn(async { s.run().await });
         }
 
         assert!(envelopes.iter().flatten().eq(db_fetcher_direct.iter()));
@@ -659,8 +712,14 @@ mod test {
                 let me = Arc::clone(&self);
                 async move {
                     for batch in &me.to_seq {
-                        me.schedule_batches_to_sequence
-                            .send(batch.iter().map(|e| e.canonicalized_hash_ref()).collect());
+                        if me
+                            .schedule_batches_to_sequence
+                            .send(batch.iter().map(|e| e.canonicalized_hash_ref()).collect())
+                            .is_err()
+                        {
+                            // quit on close
+                            return;
+                        }
                         tokio::task::yield_now().await;
                     }
                 }
@@ -735,9 +794,7 @@ mod test {
         let s = Sequencer::new(Default::default(), db_fetcher);
         {
             let s = s.clone();
-            spawn(async {
-                s.run().await;
-            });
+            spawn(async { s.run().await });
         }
         for batch in envelopes {
             for envelope in batch {
