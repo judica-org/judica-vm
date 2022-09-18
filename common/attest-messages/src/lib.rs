@@ -11,6 +11,7 @@ use sapio_bitcoin::util::key::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::error::Error;
 use std::fmt::Display;
 pub mod authenticated;
@@ -137,14 +138,45 @@ impl std::fmt::Debug for Header {
     }
 }
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, JsonSchema)]
-#[serde(from = "from_wrap::Envelope")]
-pub struct Envelope {
+#[serde(try_from = "from_wrap::GenericErasedEnvelope")]
+#[serde(bound = "T: for<'a> Deserialize<'a> + Serialize + Clone")]
+pub struct GenericEnvelope<T: AttestEnvelopable = WrappedJson> {
     header: Header,
-    #[schemars(with = "serde_json::Value")]
-    msg: CanonicalJsonValue,
+    msg: T,
     #[serde(skip)]
     cache: Option<CanonicalEnvelopeHash>,
 }
+
+pub trait AttestEnvelopable: JsonSchema
+where
+    Self: AsRef<Self::Ref>,
+{
+    type Ref;
+    fn as_canonical(&self) -> Result<CanonicalJsonValue, serde_json::Error>;
+}
+
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, JsonSchema)]
+#[serde(transparent)]
+pub struct WrappedJson(#[schemars(with = "Value")] CanonicalJsonValue);
+impl From<CanonicalJsonValue> for WrappedJson {
+    fn from(e: CanonicalJsonValue) -> Self {
+        WrappedJson(e)
+    }
+}
+
+impl AsRef<CanonicalJsonValue> for WrappedJson {
+    fn as_ref(&self) -> &CanonicalJsonValue {
+        &self.0
+    }
+}
+impl AttestEnvelopable for WrappedJson {
+    fn as_canonical(&self) -> Result<CanonicalJsonValue, serde_json::Error> {
+        Ok(self.0.clone())
+    }
+    type Ref = CanonicalJsonValue;
+}
+
+pub type Envelope = GenericEnvelope<WrappedJson>;
 impl AsRef<Envelope> for Envelope {
     fn as_ref(&self) -> &Envelope {
         self
@@ -152,25 +184,41 @@ impl AsRef<Envelope> for Envelope {
 }
 
 mod from_wrap {
-    use serde::Deserialize;
+    use std::convert::{TryFrom, TryInto};
+
+    use serde::{Deserialize, Serialize};
+    use serde_json::Value;
+
+    use crate::AttestEnvelopable;
 
     #[derive(Deserialize)]
-    pub struct Envelope {
+    pub struct GenericErasedEnvelope {
         header: super::Header,
         msg: super::CanonicalJsonValue,
     }
-    impl From<Envelope> for super::Envelope {
-        fn from(e: Envelope) -> Self {
-            super::Envelope::new(e.header, e.msg)
+    impl<T> TryFrom<GenericErasedEnvelope> for super::GenericEnvelope<T>
+    where
+        T: AttestEnvelopable + for<'a> Deserialize<'a> + Serialize + Clone,
+    {
+        type Error = serde_json::Error;
+        fn try_from(e: GenericErasedEnvelope) -> Result<Self, Self::Error> {
+            let v: T = serde_json::from_value(e.msg.into())?;
+            Ok(super::GenericEnvelope::new(e.header, v))
         }
     }
 }
 
-impl Envelope {
-    pub fn new(header: Header, msg: CanonicalJsonValue) -> Self {
+impl<T> GenericEnvelope<T>
+where
+    Self: Clone,
+    T: Clone,
+    T: for<'a> Deserialize<'a> + Serialize,
+    T: AttestEnvelopable,
+{
+    pub fn new<It: Into<T>>(header: Header, msg: It) -> Self {
         let mut s = Self {
             header,
-            msg,
+            msg: msg.into(),
             cache: None,
         };
         s.cache = Some(s.canonicalized_hash_ref());
@@ -240,7 +288,12 @@ impl From<SignatureDigest> for SchnorrMessage {
     }
 }
 
-impl Envelope {
+impl<T> GenericEnvelope<T>
+where
+    Self: Clone,
+    T: for<'a> Deserialize<'a> + Serialize + Clone,
+    T: AttestEnvelopable,
+{
     pub fn get_genesis_hash(&self) -> CanonicalEnvelopeHash {
         match self.header.ancestors {
             Some(ref a) => a.genesis,
@@ -372,8 +425,8 @@ impl Envelope {
         SignatureDigest(msg)
     }
 
-    pub fn msg(&self) -> &CanonicalJsonValue {
-        &self.msg
+    pub fn msg(&self) -> &T::Ref {
+        self.msg.as_ref()
     }
 
     pub fn header(&self) -> &Header {
