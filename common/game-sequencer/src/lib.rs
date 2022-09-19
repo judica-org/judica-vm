@@ -7,7 +7,6 @@ use attest_messages::Envelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
 
-use mine_with_friends_board::MoveEnvelope;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::XOnlyPublicKey;
 use schemars::JsonSchema;
@@ -18,61 +17,26 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt::Display;
+use std::marker::PhantomData;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-
 use tokio::spawn;
 use tokio::sync::futures::Notified;
 use tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex, Notify,
 };
+use tokio::task::JoinError;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tracing::debug;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
-
-// TODO: Examine this logic
-// async fn make_sequenceing(db: MsgDB, oracle_publickey: XOnlyPublicKey) -> Option<Vec<Envelope>> {
-//     {
-//         let handle = db.get_handle().await;
-//         let v = handle
-//             .load_all_messages_for_user_by_key_connected(&oracle_publickey)
-//             .ok()?;
-//         let mut already_sequenced: VecDeque<CanonicalEnvelopeHash> = Default::default();
-//         for x in v {
-//             let d = serde_json::from_value::<Channelized<BroadcastByHost>>(x.msg().clone().into())
-//                 .ok()?;
-//             match d.data {
-//                 BroadcastByHost::Sequence(l) => already_sequenced.extend(l.iter()),
-//                 BroadcastByHost::NewPeer(_) => {}
-//             }
-//         }
-//         let mut newer = None;
-//         let mut msgs = Default::default();
-//         handle
-//             .get_all_connected_messages_collect_into(&mut newer, &mut msgs)
-//             .ok()?;
-//         let all = already_sequenced
-//             .iter()
-//             .map(|h| msgs.remove(h))
-//             .collect::<Option<Vec<_>>>()?;
-//         let moves = all
-//             .iter()
-//             .map(|e| {
-//                 Ok((
-//                     e.header().key(),
-//                     serde_json::from_value(e.msg().to_owned().into())?,
-//                 ))
-//             })
-//             .collect::<Result<Vec<(XOnlyPublicKey, GameMove)>, serde_json::Error>>();
-//     }
-//     None
-// }
+pub mod game_specific;
+pub use game_specific::*;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct UnauthenticatedRawSequencer {
@@ -101,6 +65,7 @@ impl TryFrom<UnauthenticatedRawSequencer> for RawSequencer {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(try_from = "UnauthenticatedRawSequencer")]
+#[schemars(with = "UnauthenticatedRawSequencer")]
 pub struct RawSequencer {
     sequencer_envelopes: Vec<Authenticated<Envelope>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
@@ -172,19 +137,48 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(try_from = "RawSequencer")]
+#[schemars(with = "RawSequencer")]
 pub struct OfflineSequencer {
     batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
     msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
 }
+#[derive(Debug)]
+pub enum SequenceingError<T> {
+    MappingError(T),
+    MissingEnvelope,
+}
+
+impl<E> From<E> for SequenceingError<E> {
+    fn from(e: E) -> Self {
+        SequenceingError::MappingError(e)
+    }
+}
+impl<E: std::fmt::Debug> Display for SequenceingError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+impl<E> std::error::Error for SequenceingError<E> where E: std::error::Error {}
+
+#[derive(Debug)]
+pub enum Void {}
 impl OfflineSequencer {
-    pub fn directly_sequence(&mut self) -> Result<Vec<Authenticated<Envelope>>, ()> {
+    pub fn directly_sequence(
+        &mut self,
+    ) -> Result<Vec<Authenticated<Envelope>>, SequenceingError<Void>> {
+        self.directly_sequence_map(Ok::<Authenticated<Envelope>, Void>)
+    }
+    pub fn directly_sequence_map<F, R, E>(&mut self, f: F) -> Result<Vec<R>, SequenceingError<E>>
+    where
+        F: Fn(Authenticated<Envelope>) -> Result<R, E>,
+    {
         let mut v = vec![];
         for batch in &self.batches_to_sequence {
             for h in batch {
                 if let Some(e) = self.msg_cache.remove(h) {
-                    v.push(e);
+                    v.push(f(e)?);
                 } else {
-                    return Err(());
+                    return Err(SequenceingError::MissingEnvelope);
                 }
             }
         }
@@ -192,6 +186,7 @@ impl OfflineSequencer {
         Ok(v)
     }
 }
+
 impl From<OfflineSequencer> for OfflineDBFetcher {
     fn from(o: OfflineSequencer) -> Self {
         OfflineDBFetcher::new(o.batches_to_sequence, o.msg_cache)
@@ -239,8 +234,8 @@ impl OfflineDBFetcher {
         }
     }
 
-    pub fn directly_sequence(self) -> Result<Vec<Authenticated<Envelope>>, ()> {
-        OfflineSequencer::try_from(self)?.directly_sequence()
+    pub fn directly_sequence(self) -> Result<Vec<Authenticated<Envelope>>, SequenceingError<()>> {
+        OfflineSequencer::try_from(self)?.directly_sequence_map(Ok)
     }
 }
 impl DBFetcher for OfflineDBFetcher {
@@ -419,23 +414,34 @@ pub trait DBFetcher: Send + Sync {
     fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>;
     fn notified(&self) -> Notified<'_>;
 }
-pub struct Sequencer {
+pub struct GenericSequencer<F, R, E> {
     db_fetcher: Arc<dyn DBFetcher>,
     shutdown: Arc<AtomicBool>,
     push_next_envelope: UnboundedSender<Authenticated<Envelope>>,
     output_envelope: Mutex<UnboundedReceiver<Authenticated<Envelope>>>,
-    push_next_move: UnboundedSender<(MoveEnvelope, XOnlyPublicKey)>,
-    output_move: Mutex<UnboundedReceiver<(MoveEnvelope, XOnlyPublicKey)>>,
+    push_next_move: UnboundedSender<R>,
+    output_move: Mutex<UnboundedReceiver<R>>,
     is_running: AtomicBool,
+    envelope_extractor: F,
+    _pd: PhantomData<E>,
 }
 
-impl Sequencer {
-    pub fn new(shutdown: Arc<AtomicBool>, db_fetcher: Arc<dyn DBFetcher>) -> Arc<Self> {
+impl<F, R, E> GenericSequencer<F, R, E>
+where
+    F: Fn(Authenticated<Envelope>) -> Result<R, E> + Send + Sync + 'static,
+    E: Sync + Send + 'static + std::fmt::Debug,
+    R: Send + 'static,
+{
+    pub fn new(
+        shutdown: Arc<AtomicBool>,
+        db_fetcher: Arc<dyn DBFetcher>,
+        envelope_extractor: F,
+    ) -> Arc<Self> {
         let (push_next_envelope, output_envelope) = unbounded_channel();
         let output_envelope = Mutex::new(output_envelope);
         let (push_next_move, output_move) = unbounded_channel();
         let output_move = Mutex::new(output_move);
-        Arc::new(Sequencer {
+        Arc::new(Self {
             db_fetcher,
             shutdown,
             push_next_envelope,
@@ -443,23 +449,26 @@ impl Sequencer {
             push_next_move,
             output_move,
             is_running: Default::default(),
+            envelope_extractor,
+            _pd: Default::default(),
         })
     }
 
-    pub async fn run(self: Arc<Self>) {
+    pub async fn run(self: Arc<Self>) -> Result<(), JoinError> {
         let last =
             self.is_running
                 .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst);
         if let Ok(false) = last {
-            info!("Starting Sequencer");
+            info!("Starting GenericSequencer");
             let batcher = self.clone().start_envelope_batcher();
             let move_deserializer = self.clone().start_move_deserializer();
-            batcher.await;
-            move_deserializer.await;
+            batcher.await?;
+            move_deserializer.await?;
         }
+        Ok(())
     }
 
-    pub async fn output_move(self: &Arc<Self>) -> Option<(MoveEnvelope, XOnlyPublicKey)> {
+    pub async fn output_move(self: &Arc<Self>) -> Option<R> {
         self.output_move.lock().await.recv().await
     }
 
@@ -491,12 +500,15 @@ impl Sequencer {
                         match envs.entry(envelope) {
                             Occupied(e) => {
                                 // TODO: Batch size
-                                self.push_next_envelope.send(e.remove());
+                                if self.push_next_envelope.send(e.remove()).is_err() {
+                                    // quit if the channel is closed
+                                    return;
+                                }
                             }
                             Vacant(k) => {
                                 let msg_hash = k.into_key();
                                 envelope_hashes.push_front(msg_hash);
-                                should_wait.insert(self.db_fetcher.notified());
+                                should_wait = Some(self.db_fetcher.notified());
                                 info!(?msg_hash, "Wait for Envelope");
                                 continue 'wait_for_new;
                             }
@@ -514,19 +526,16 @@ impl Sequencer {
             let mut next_envelope = self.output_envelope.lock().await;
             while let Some(envelope) = next_envelope.recv().await {
                 trace!(msg_hash=?envelope.canonicalized_hash_ref(), "Got Envelope");
-                let r_game_move = serde_json::from_value(envelope.msg().to_owned().into());
-                match r_game_move {
-                    Ok(game_move) => {
-                        if self
-                            .push_next_move
-                            .send((game_move, envelope.header().key()))
-                            .is_err()
-                        {
+                let extracted = (self.envelope_extractor)(envelope);
+                match extracted {
+                    Ok(extracted) => {
+                        if self.push_next_move.send(extracted).is_err() {
                             return;
                         }
                     }
-                    Err(_) => {
-                        warn!(bad_move=?envelope.msg(),"Invalid Move Found");
+                    Err(e) => {
+                        // Skip
+                        warn!(bad_move=?e,"Invalid Move Found");
                     }
                 }
             }
@@ -536,11 +545,14 @@ impl Sequencer {
 
 #[cfg(test)]
 mod test {
+    use crate::game_specific::Sequencer;
+
     use super::*;
     use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
     use mine_with_friends_board::{
         game::game_move::{GameMove, Heartbeat},
         sanitize::Unsanitized,
+        MoveEnvelope,
     };
     use sapio_bitcoin::{
         secp256k1::{rand, SecretKey},
@@ -616,9 +628,7 @@ mod test {
         let s = Sequencer::new(Default::default(), db_fetcher);
         {
             let s = s.clone();
-            spawn(async {
-                s.run().await;
-            });
+            spawn(async move { s.run().await });
         }
 
         assert!(envelopes.iter().flatten().eq(db_fetcher_direct.iter()));
@@ -630,7 +640,7 @@ mod test {
                     assert_eq!(m, game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
-                    unreachable!("Offline Sequencer did not sequence all messages")
+                    unreachable!("Offline GenericSequencer did not sequence all messages")
                 }
             }
         }
@@ -659,8 +669,14 @@ mod test {
                 let me = Arc::clone(&self);
                 async move {
                     for batch in &me.to_seq {
-                        me.schedule_batches_to_sequence
-                            .send(batch.iter().map(|e| e.canonicalized_hash_ref()).collect());
+                        if me
+                            .schedule_batches_to_sequence
+                            .send(batch.iter().map(|e| e.canonicalized_hash_ref()).collect())
+                            .is_err()
+                        {
+                            // quit on close
+                            return;
+                        }
                         tokio::task::yield_now().await;
                     }
                 }
@@ -735,9 +751,7 @@ mod test {
         let s = Sequencer::new(Default::default(), db_fetcher);
         {
             let s = s.clone();
-            spawn(async {
-                s.run().await;
-            });
+            spawn(async move { s.run().await });
         }
         for batch in envelopes {
             for envelope in batch {
@@ -746,7 +760,7 @@ mod test {
                     assert_eq!(m, game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
-                    unreachable!("Online Sequencer did not sequence all messages")
+                    unreachable!("Online GenericSequencer did not sequence all messages")
                 }
             }
         }

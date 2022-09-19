@@ -1,5 +1,6 @@
 use game::game_move::GameMove;
 use sanitize::Unsanitized;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 mod callbacks;
@@ -10,7 +11,7 @@ pub mod sanitize;
 pub mod tokens;
 pub mod util;
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, JsonSchema)]
 /// Verified is a wrapper for a data type with sequencing and signature data
 pub struct MoveEnvelope {
     /// The data

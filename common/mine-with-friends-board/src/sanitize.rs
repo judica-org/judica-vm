@@ -2,6 +2,7 @@
 //!
 //! TODO: The Context Objects passed in should e.g. be sufficient to check that all pointers are valid
 //! Currently this is not done.
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -20,7 +21,7 @@ pub trait Sanitizable {
     fn sanitize(self, context: Self::Context) -> Result<Self::Output, Self::Error>;
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, JsonSchema)]
 pub struct Unsanitized<D: Sanitizable>(pub D);
 
 impl<D> Sanitizable for Unsanitized<D>
