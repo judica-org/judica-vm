@@ -211,6 +211,70 @@ impl ConstantFunctionMarketMaker {
         tokens[id.asset_b].end_transaction();
     }
 
+    pub(crate) fn simulate_trade(
+        game: &mut GameBoard,
+        mut id: TradingPairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
+        CallContext { ref sender }: &CallContext,
+    ) -> Result<SimulateTradeOutcome, ()> {
+        let unnormalized_id = id;
+        id.normalize();
+        if id != unnormalized_id {
+            std::mem::swap(&mut amount_a, &mut amount_b);
+        }
+        // the zero is the one to be computed
+        if !(amount_a == 0 || amount_b == 0) {
+            return;
+        }
+        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
+        let mkt = &game.swap.markets[&id];
+        let tokens: &mut TokenRegistry = &mut game.tokens;
+        tokens[id.asset_a].transaction();
+        tokens[id.asset_b].transaction();
+        if !(tokens[id.asset_a].balance_check(sender) >= amount_a
+            && tokens[id.asset_b].balance_check(sender) >= amount_b)
+        {
+            return;
+        }
+
+        if !(amount_a <= mkt.amt_a(tokens) && amount_b <= mkt.amt_b(tokens)) {
+            return;
+        }
+
+        let (
+            asset_player_purchased,
+            amount_player_purchased,
+            asset_player_sold,
+            amount_player_sold,
+        ) = {
+            let asset_a_name = tokens[id.asset_a].nickname().unwrap();
+            let asset_b_name = tokens[id.asset_b].nickname().unwrap();
+            tokens[id.asset_b].transaction();
+            // if a is zero, a is token being "purchased"
+            if amount_a == 0 {
+                // the amount player receives of a
+                let new_amount_a = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
+                // do not actually transfer, just return values.
+                (asset_a_name, new_amount_a, asset_b_name, amount_b)
+            } else {
+                // otherwise b is token being "purchased"
+                let new_amount_b = (mkt.amt_b(tokens) * amount_a) / mkt.amt_a(tokens);
+                (asset_b_name, amount_b, asset_a_name, new_amount_a)
+            }
+        };
+        tokens[id.asset_a].end_transaction();
+        tokens[id.asset_b].end_transaction();
+
+        Ok(SimulateTradeOutcome {
+            trading_pair: id,
+            asset_player_purchased,
+            amount_player_purchased,
+            asset_player_sold,
+            amount_player_sold,
+        })
+    }
+
     pub(crate) fn get_pair_price_data(
         game: &mut GameBoard,
         id: TradingPairID,
@@ -235,4 +299,13 @@ pub struct UXMaterialsPriceData {
     pub mkt_qty_a: u128,
     pub asset_b: String,
     pub mkt_qty_b: u128,
+}
+
+#[derive(Serialize, Clone)]
+pub struct SimulateTradeOutcome {
+    pub trading_pair: TradingPairID,
+    pub asset_player_purchased: String,
+    pub amount_player_purchased: u128,
+    pub asset_player_sold: String,
+    pub amount_player_sold: u128,
 }
