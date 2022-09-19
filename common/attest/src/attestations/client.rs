@@ -127,14 +127,13 @@ impl AttestationClient {
         url: &String,
         port: u16,
     ) -> Result<(), reqwest::Error> {
-        let resp = self
+self
             .client
             .post(format!("http://{}:{}/authenticate", url, port))
             .json(secret)
             .send()
             .await?
             .json()
-            .await?;
-        Ok(resp)
+            .await
     }
 }
