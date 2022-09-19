@@ -25,10 +25,9 @@
 // IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::WebSocketFunctionality;
 use axum::extract::ws::CloseFrame;
 use axum::{extract::ws::Message, http::HeaderValue, Error};
-use futures::{Future, SinkExt};
+use futures::SinkExt;
 use futures_util::StreamExt;
 use futures_util::{Sink, Stream};
 use std::{
@@ -36,30 +35,13 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite as ts;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 #[derive(Debug)]
 pub struct ClientWebSocket {
     inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
     protocol: Option<HeaderValue>,
-}
-impl WebSocketFunctionality for ClientWebSocket {
-    fn t_recv<'a>(
-        &'a mut self,
-    ) -> Pin<Box<dyn Future<Output = Option<Result<Message, axum::Error>>> + Send + 'a>> {
-        Box::pin(self.recv())
-    }
-
-    fn t_send<'a>(
-        &'a mut self,
-        msg: Message,
-    ) -> Pin<Box<dyn Future<Output = Result<(), axum::Error>> + Send + 'a>> {
-        Box::pin(self.send(msg))
-    }
-
-    fn t_close(self) -> Pin<Box<dyn Future<Output = Result<(), axum::Error>> + Send>> {
-        Box::pin(self.close())
-    }
 }
 impl ClientWebSocket {
     async fn connect(url: String) -> ClientWebSocket {
@@ -97,7 +79,6 @@ impl ClientWebSocket {
     }
 }
 
-use tokio_tungstenite::tungstenite as ts;
 pub fn into_tungstenite(m: Message) -> ts::Message {
     match m {
         Message::Text(text) => ts::Message::Text(text),
@@ -132,7 +113,7 @@ impl Stream for ClientWebSocket {
     type Item = Result<Message, axum::Error>;
 
     fn poll_next(
-       mut self: std::pin::Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         loop {
