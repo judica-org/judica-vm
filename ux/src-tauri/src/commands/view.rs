@@ -34,7 +34,8 @@ pub(crate) async fn game_synchronizer_inner(
                 .as_ref()
                 .map(|g| g.board.get_ux_chat_log())
                 .unwrap_or_default();
-            (s, w, game.as_ref().map(|g| g.host_key), chat_log)
+            let user_inventory = game.as_ref().map(|g| g.board.get_ux_user_inventory(signing_key)).unwrap().unwrap();
+            (s, w, game.as_ref().map(|g| g.host_key), chat_log, user_inventory)
         };
         let (appName, prefix, list_of_chains, user_keys) = {
             let l = d.inner().state.lock().await;
@@ -93,6 +94,7 @@ pub(crate) async fn game_synchronizer_inner(
         window.emit("materials-price-data", raw_price_data).unwrap();
         window.emit("power-plants", power_plants).unwrap();
         window.emit("energy-exchange", listings.listings).unwrap();
+        window.emit("user-inventory", user_inventory).unwrap();
         if let Some(w) = wait_on {
             w.await;
         } else {

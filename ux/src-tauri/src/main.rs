@@ -6,7 +6,7 @@ use attest_database::{connection::MsgDB, setup_db};
 use commands::bindings::HANDLER;
 use mine_with_friends_board::game::GameBoard;
 use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
-use std::{error::Error, path::PathBuf, sync::Arc};
+use std::{error::Error, path::PathBuf, sync::Arc, collections::HashMap};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, State};
 use tokio::sync::Notify;

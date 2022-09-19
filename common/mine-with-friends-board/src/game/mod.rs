@@ -48,7 +48,7 @@ use tokens::TokenPointer;
 use tokens::TokenRegistry;
 use tracing::info;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct UXUserInventory {
     user_power_plants: BTreeMap<NftPtr, UXPlantData>,
     user_token_balances: Vec<(String, u128)>,
@@ -534,7 +534,8 @@ impl GameBoard {
         Ok(UXNFTRegistry { power_plant_data })
     }
 
-    pub fn get_ux_user_inventory(&mut self, user_id: EntityID) -> Result<UXUserInventory, ()> {
+    pub fn get_ux_user_inventory(&mut self, user_key: String) -> Result<UXUserInventory, ()> {
+        let user_id = self.users_by_key.get(&user_key).unwrap().to_owned();
         let user_power_plants = self
             .get_user_power_plants(user_id)
             .unwrap()
