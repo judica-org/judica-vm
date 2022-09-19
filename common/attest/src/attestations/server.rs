@@ -1,3 +1,5 @@
+use self::protocol::GlobalSocketState;
+
 use super::query::Tips;
 use crate::{control::query::Outcome, globals::Globals};
 use attest_database::connection::MsgDB;
@@ -12,9 +14,12 @@ use axum::{
 };
 use sapio_bitcoin::secp256k1::Secp256k1;
 use std::{net::SocketAddr, sync::Arc};
+use tokio_tungstenite::tungstenite::protocol::Role;
 use tower_http::trace::TraceLayer;
 use tracing::{info, trace};
 pub mod tungstenite_client_adaptor;
+pub mod generic_websocket;
+pub mod protocol;
 
 pub async fn get_newest_tip_handler(
     Extension(db): Extension<MsgDB>,
@@ -113,26 +118,37 @@ pub async fn post_message(
     ))
 }
 
-#[derive(Clone)]
-pub struct GlobalSocketState;
-
 async fn handle_socket(
     ws: WebSocketUpgrade,
-    Extension(g): Extension<GlobalSocketState>,
+    Extension(g): Extension<Arc<Globals>>,
+    Extension(gss): Extension<GlobalSocketState>,
     Extension(db): Extension<MsgDB>,
 ) -> axum::response::Response {
-    ws.on_upgrade(|w| handle_socket_symmetric_server(w, g, db))
+    ws.on_upgrade(|w| handle_socket_symmetric_server(g, w, gss, db))
 }
 async fn handle_socket_symmetric_server(
-    mut socket: WebSocket,
-    g: GlobalSocketState,
+    g: Arc<Globals>,
+    socket: WebSocket,
+    gss: GlobalSocketState,
     db: MsgDB,
 ) -> () {
-    protocol::run_protocol(socket, g, db).await;
+    protocol::run_protocol(g, socket, gss, db, Role::Server).await;
 }
-pub mod generic_websocket;
+pub async fn handle_authenticate(
+    Extension(gss): Extension<GlobalSocketState>,
+    Json(cookie): Json<[u8; 32]>,
+) -> Result<(Response<()>, Json<()>), (StatusCode, &'static str)> {
 
-mod protocol;
+    gss.add_a_cookie(cookie).await;
+    Ok((
+        Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(())
+            .expect("Response<()> should always be valid"),
+        Json(()),
+    ))
+}
 
 pub async fn run(g: Arc<Globals>, db: MsgDB) -> tokio::task::JoinHandle<AbstractResult<()>> {
     tokio::spawn(async move {
@@ -144,8 +160,10 @@ pub async fn run(g: Arc<Globals>, db: MsgDB) -> tokio::task::JoinHandle<Abstract
             .route("/tips", get(get_tip_handler))
             .route("/newest_tips", get(get_newest_tip_handler))
             .route("/socket", get(handle_socket))
+            .route("/authenticate", post(handle_authenticate))
             .layer(Extension(db))
-            .layer(Extension(GlobalSocketState))
+            .layer(Extension(g.clone()))
+            .layer(Extension(GlobalSocketState::default()))
             .layer(TraceLayer::new_for_http());
 
         // run our app with hyper

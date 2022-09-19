@@ -120,4 +120,21 @@ impl AttestationClient {
             .await?;
         Ok(resp)
     }
+
+    pub async fn authenticate(
+        &self,
+        secret: &[u8; 32],
+        url: &String,
+        port: u16,
+    ) -> Result<(), reqwest::Error> {
+        let resp = self
+            .client
+            .post(format!("http://{}:{}/authenticate", url, port))
+            .json(secret)
+            .send()
+            .await?
+            .json()
+            .await?;
+        Ok(resp)
+    }
 }

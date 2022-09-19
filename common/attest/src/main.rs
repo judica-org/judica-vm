@@ -37,6 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         config,
         shutdown: AppShutdown::new(),
         secp: Default::default(),
+        client: Default::default()
     });
     init_main(g).await
 }

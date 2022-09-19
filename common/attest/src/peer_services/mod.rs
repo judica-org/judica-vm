@@ -32,26 +32,7 @@ pub fn startup(
     mut status: Receiver<PeerQuery>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     tokio::spawn(async move {
-        let mut bld = reqwest::Client::builder();
-        if let Some(tor_config) = g.config.tor.clone() {
-            // Local Pass if in test mode
-            // TODO: make this programmatic?
-            #[cfg(test)]
-            {
-                bld = bld.proxy(reqwest::Proxy::custom(move |url| {
-                    if url.host_str() == Some("127.0.0.1") {
-                        Some("127.0.0.1")
-                    } else {
-                        None
-                    }
-                }));
-            }
-            let proxy =
-                reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", tor_config.socks_port))?;
-            bld = bld.proxy(proxy);
-        }
-        let inner_client = bld.build()?;
-        let client = AttestationClient::new(inner_client);
+        let client = g.get_client().await?;
         let mut interval = g.config.peer_service.timer_override.reconnect_interval();
         let mut task_set: HashMap<TaskID, JoinHandle<Result<(), _>>> = HashMap::new();
         let _tip_attacher = spawn({

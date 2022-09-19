@@ -76,6 +76,7 @@ where
                     config: Arc::new(config),
                     shutdown,
                     secp,
+                    client: Default::default()
                 }))
                 .await
             }

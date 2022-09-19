@@ -1,16 +1,29 @@
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
-use super::GlobalSocketState;
 use crate::control::query::Outcome;
+use crate::globals::Globals;
 use attest_database::connection::MsgDB;
 use attest_messages::Envelope;
 use axum::extract::ws::Message;
+use sapio_bitcoin::hashes::sha256;
+use sapio_bitcoin::hashes::Hash;
+use sapio_bitcoin::secp256k1::rand;
+use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use serde::Deserialize;
 use serde::Serialize;
 use std;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt::Display;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::select;
+use tokio::sync::oneshot;
+use tokio::sync::Mutex;
+use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing;
 use tracing::info;
 use tracing::trace;
@@ -63,6 +76,8 @@ impl AttestResponse {
 #[derive(Debug)]
 pub enum AttestProtocolError {
     JsonError(String),
+    ReqwetError(String),
+    HostnameUnknown,
 }
 
 unsafe impl Send for AttestProtocolError {}
@@ -75,6 +90,11 @@ impl Display for AttestProtocolError {
     }
 }
 
+impl From<reqwest::Error> for AttestProtocolError {
+    fn from(e: reqwest::Error) -> Self {
+        AttestProtocolError::ReqwetError(e.to_string())
+    }
+}
 impl From<serde_json::Error> for AttestProtocolError {
     fn from(e: serde_json::Error) -> Self {
         AttestProtocolError::JsonError(e.to_string())
@@ -83,12 +103,171 @@ impl From<serde_json::Error> for AttestProtocolError {
 
 impl std::error::Error for AttestProtocolError {}
 
+type ServiceID = (String, u16);
+type ServiceState = Arc<Service>;
+type ServiceDB = Arc<Mutex<HashMap<ServiceID, ServiceState>>>;
+struct Service {
+    is_running: AtomicBool,
+}
+
+impl Service {
+    fn already_running(&self) -> bool {
+        self.is_running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct GlobalSocketState {
+    services: ServiceDB,
+    cookies: Arc<Mutex<BTreeMap<sha256::Hash, (oneshot::Sender<[u8; 32]>, i64)>>>,
+}
+
+impl GlobalSocketState {
+    pub async fn expect_a_cookie(&self, cookie: sha256::Hash) -> oneshot::Receiver<[u8; 32]> {
+        let mut cookiejar = self.cookies.lock().await;
+        if cookiejar.len() > 100 {
+            let stale = attest_util::now() - 1000 * 20;
+            cookiejar.retain(|k, x| x.1 > stale);
+            if cookiejar.len() > 100 {
+                if let Some(k) = cookiejar.keys().cloned().next() {
+                    cookiejar.remove(&k);
+                }
+            }
+        }
+        let (tx, rx) = oneshot::channel();
+
+        let e = cookiejar
+            .entry(cookie)
+            .or_insert_with(|| (tx, attest_util::now()));
+        rx
+    }
+    pub async fn add_a_cookie(&self, cookie: [u8; 32]) {
+        let mut cookiejar = self.cookies.lock().await;
+        if cookiejar.len() > 100 {
+            let stale = attest_util::now() - 1000 * 20;
+            cookiejar.retain(|k, x| x.1 > stale);
+            if cookiejar.len() > 100 {
+                if let Some(k) = cookiejar.keys().cloned().next() {
+                    cookiejar.remove(&k);
+                }
+            }
+        }
+        let k = sha256::Hash::hash(&cookie);
+
+        cookiejar.remove(&k).map(|f| {
+            f.0.send(cookie);
+        });
+    }
+}
+
 pub async fn run_protocol<W: WebSocketFunctionality>(
+    g: Arc<Globals>,
     mut socket: W,
-    g: GlobalSocketState,
+    gss: GlobalSocketState,
     db: MsgDB,
+    role: Role,
 ) -> Result<(), AttestProtocolError> {
     let inflight_requests: BTreeMap<u64, ResponseCode> = Default::default();
+    match role {
+        Role::Server => {
+            if let Some(Ok(Message::Text(t))) = socket.t_recv().await {
+                let s: ServiceID = serde_json::from_str(&t)?;
+                let mut services = gss.services.lock().await;
+                let svc = services
+                    .entry(s.clone())
+                    .or_insert_with(|| {
+                        Arc::new(Service {
+                            is_running: false.into(),
+                        })
+                    })
+                    .clone();
+                drop(services);
+                if svc.already_running() {
+                    socket.t_close().await;
+                    return Ok(());
+                }
+                let r = new_cookie();
+                let client = g.get_client().await?;
+                let h = sha256::Hash::hash(&r[..]);
+                socket.t_send(Message::Binary(h.into_inner().into())).await;
+
+                if let Some(Ok(Message::Binary(v))) = socket.t_recv().await {
+                    if v.len() == 0 {
+                        // Ready to go!
+                    } else {
+                        socket.t_close().await;
+                        return Ok(());
+                    }
+                } else {
+                    socket.t_close().await;
+                    return Ok(());
+                }
+
+                client.authenticate(&r, &s.0, s.1).await;
+                if let Some(Ok(Message::Binary(v))) = socket.t_recv().await {
+                    if v[..] == r {
+                        // Authenticated!
+                    } else {
+                        socket.t_close().await;
+                        return Ok(());
+                    }
+                } else {
+                    socket.t_close().await;
+                    return Ok(());
+                }
+                select! {
+                    _ = tokio::time::sleep(Duration::from_secs(10)) => {
+                        socket.t_close().await;
+                        return Ok(());
+                    }
+                    msg = socket.t_recv() => {
+
+                    }
+                }
+            } else {
+                socket.t_close().await;
+                return Ok(());
+            }
+        }
+        Role::Client => {
+            let me = if let Some(conf) = g.config.tor.as_ref() {
+                let h = conf
+                    .get_hostname()
+                    .await
+                    .map_err(|_| AttestProtocolError::HostnameUnknown)?;
+                h
+            } else {
+                ("127.0.0.1".into(), g.config.attestation_port)
+            };
+            socket
+                .t_send(Message::Text(serde_json::to_string(&me)?))
+                .await;
+
+            if let Some(Ok(Message::Binary(v))) = socket.t_recv().await {
+                if v.len() == 32 {
+                    let cookie: [u8; 32] = v.try_into().unwrap();
+                    let h = sha256::Hash::from_inner(cookie);
+                    let expect = gss.expect_a_cookie(h).await;
+                    socket.t_send(Message::Binary(vec![]));
+                    let cookie = expect.await;
+                    if let Ok(cookie) = cookie {
+                        socket.t_send(Message::Binary(cookie.into())).await;
+                    } else {
+                        socket.t_close().await;
+                        return Ok(());
+                    }
+                } else {
+                    socket.t_close().await;
+                    return Ok(());
+                }
+            } else {
+                socket.t_close().await;
+                return Ok(());
+            }
+        }
+    }
 
     while let Some(msg) = socket.t_recv().await {
         match msg {
@@ -223,4 +402,11 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     }
     socket.t_close().await;
     Ok(())
+}
+
+fn new_cookie() -> [u8; 32] {
+    let mut rng = rand::thread_rng();
+    let r: [u8; 32] = rng.gen();
+    drop(rng);
+    r
 }
