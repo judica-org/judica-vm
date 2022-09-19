@@ -4,7 +4,7 @@ use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::AuthenticationError;
 use attest_messages::CanonicalEnvelopeHash;
-use attest_messages::Envelope;
+
 use attest_messages::GenericEnvelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
@@ -387,9 +387,13 @@ where
                 {
                     let handle = self.db.get_handle().await;
                     let mut env = self.msg_cache.lock().await;
-                    if let Err(e) =
-                        handle.get_all_messages_collect_into_inconsistent(&mut newer, &mut env)
-                    {
+                    // it's fine for us to filter for *only* game moves in our
+                    // DB...  Ideally, we'd be able to use the group filter as
+                    // well, but currently we don't have that set up properly
+                    // for the host, so instead we load all moves.
+                    if let Err(e) = handle.get_all_messages_collect_into_inconsistent_skip_invalid(
+                        &mut newer, &mut env, true,
+                    ) {
                         warn!(error=?e, "DB Fetching Failed");
                         return;
                     }

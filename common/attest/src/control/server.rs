@@ -51,7 +51,9 @@ async fn get_expensive_db_snapshot(
     let mut map = Default::default();
     let mut newer = None;
     handle
-        .get_all_messages_collect_into_inconsistent::<Envelope, WrappedJson>(&mut newer, &mut map)
+        .get_all_messages_collect_into_inconsistent_skip_invalid::<Envelope, WrappedJson>(
+            &mut newer, &mut map, false,
+        )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()

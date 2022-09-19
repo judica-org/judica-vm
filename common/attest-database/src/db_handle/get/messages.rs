@@ -146,10 +146,11 @@ where
         Ok(())
     }
 
-    pub fn get_all_messages_collect_into_inconsistent<E, M>(
+    pub fn get_all_messages_collect_into_inconsistent_skip_invalid<E, M>(
         &self,
         newer: &mut Option<i64>,
         map: &mut HashMap<CanonicalEnvelopeHash, E>,
+        skip_invalid: bool,
     ) -> Result<(), rusqlite::Error>
     where
         E: FromSql + AsRef<GenericEnvelope<M>>,
@@ -161,16 +162,24 @@ where
         } else {
             self.0.prepare_cached(SQL_GET_ALL_MESSAGES_INCONSISTENT)?
         };
-        let rows = match newer {
+        let mut rows = match newer {
             Some(i) => stmt.query([*i])?,
             None => stmt.query([])?,
         };
-        rows.map(|r| Ok((r.get::<_, E>(0)?, r.get::<_, i64>(1)?)))
-            .for_each(|(v, id)| {
-                map.insert(v.as_ref().canonicalized_hash_ref(), v);
-                *newer = (*newer).max(Some(id));
-                Ok(())
-            })?;
+        while let Some(row) = rows.next()? {
+            let id = row.get::<_, i64>(1)?;
+            *newer = (*newer).max(Some(id));
+            // skip invalid...
+            match row.get::<_, E>(1) {
+                Ok(v) => {
+                    map.insert(v.as_ref().canonicalized_hash_ref(), v);
+                }
+                Err(e) if !skip_invalid => {
+                    return Err(e);
+                }
+                _ => {}
+            }
+        }
         Ok(())
     }
 
