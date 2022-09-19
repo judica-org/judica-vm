@@ -19,7 +19,6 @@ use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
-use std;
 use std::sync::Arc;
 use tauri::State;
 use tokio::spawn;
@@ -40,14 +39,14 @@ pub(crate) async fn make_new_chain_inner(
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
 ) -> Result<String, String> {
-    let (kp, next_nonce, genesis) = generate_new_user(
+    let (kp, next_nonce, genesis) = generate_new_user::<_, MoveEnvelope, _>(
         secp.inner(),
-        Some(MoveEnvelope {
+        MoveEnvelope {
             d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
             sequence: 0,
             /// The player who is making the move, myst be figured out somewhere...
             time: attest_util::now() as u64,
-        }),
+        },
     )
     .err_to_string()?;
     let msgdb = db.get().await.err_to_string()?;
@@ -74,23 +73,21 @@ pub(crate) async fn make_move_inner_inner(
     let msgdb = db.get().await.map_err(|_e| "No DB Available")?;
     let mut handle = msgdb.get_handle().await;
     let tip = handle
-        .get_tip_for_user_by_key(xpubkey)
+        .get_tip_for_user_by_key::<MoveEnvelope>(xpubkey)
         .or(Err("No Tip Found"))?;
-    let last: MoveEnvelope = serde_json::from_value(tip.msg().to_owned().into())
-        .or(Err("Could not Deserialized Old Tip"))?;
+    let last: &MoveEnvelope = tip.msg();
     let mve = MoveEnvelope {
         d: Unsanitized(next_move),
         sequence: last.sequence + 1,
         time: attest_util::now() as u64,
     };
-    let v = ruma_serde::to_canonical_value(mve).or(Err("Could Not Canonicalize new Enveloper"))?;
     let keys = handle.get_keymap().or(Err("Could not get keys"))?;
     let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
     // TODO: Runa tipcache
     let msg = handle
-        .wrap_message_in_envelope_for_user_by_key(
-            v,
+        .wrap_message_in_envelope_for_user_by_key::<_, MoveEnvelope, _>(
+            mve,
             &keypair,
             secp.inner(),
             None,
@@ -118,21 +115,20 @@ pub(crate) async fn switch_to_game_inner(
     let db = db.inner().clone();
     let game = game.inner().clone();
     spawn(async move {
-        let game_setup = {
+        let genesis = {
             let db = db.state.lock().await;
             let db: &DatabaseInner = db.as_ref().ok_or("No Database Set Up")?;
             let handle = db.db.get_handle().await;
-            let genesis = handle
-                .get_message_at_height_for_user(key, 0)
-                .map_err(|_| "No Genesis found for selected Key")?;
-            if let Ok(Channelized {
-                data: BroadcastByHost::GameSetup(g),
-                channel: _,
-            }) = serde_json::from_value(genesis.msg().to_owned().into())
-            {
-                g
-            } else {
-                return Err("First Message was not a GameSetup");
+            handle
+                .get_message_at_height_for_user::<Channelized<BroadcastByHost>>(key, 0)
+                .map_err(|e| "Internal Databse Error")?
+                .ok_or("No Genesis found for selected Key")?
+        };
+        let game_setup = {
+            let m: &Channelized<BroadcastByHost> = genesis.msg();
+            match &m.data {
+                BroadcastByHost::GameSetup(g) => g,
+                _ => return Err("First Message was not a GameSetup"),
             }
         };
 

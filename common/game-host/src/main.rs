@@ -1,6 +1,8 @@
 use attest_database::setup_db;
 use attest_database::{connection::MsgDB, db_handle::create::TipControl};
-use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
+use attest_messages::{
+    Authenticated, CanonicalEnvelopeHash, Envelope, GenericEnvelope, WrappedJson,
+};
 use game_host_messages::{BroadcastByHost, Channelized};
 
 use sapio_bitcoin::secp256k1::All;
@@ -116,7 +118,8 @@ async fn game(
     // can know which messages we've sequenced previously.
     {
         let handle = db.get_handle().await;
-        let v = handle.load_all_messages_for_user_by_key_connected(&oracle_publickey)?;
+        let v: Vec<Authenticated<GenericEnvelope<WrappedJson>>> =
+            handle.load_all_messages_for_user_by_key_connected(&oracle_publickey)?;
         {
             for x in v {
                 let d =
@@ -137,16 +140,21 @@ async fn game(
     let mut all_unprocessed_messages = HashMap::new();
     let mut message_by_genesis = HashMap::<CanonicalEnvelopeHash, BTreeMap<i64, Envelope>>::new();
     let mut next_height_to_sequence: HashMap<CanonicalEnvelopeHash, i64> = Default::default();
-    let mut seq = None;
+    let mut seq = 0;
     loop {
         // Get All the messages that we've not yet seen, but incosistently
-        // Incosistency means that we may still be fetching priors.
+        // Incosistency means that we may still be fetching priors tips in our
+        // network stack.
+        //
+        // Only fetch the messages for our groups though
         {
             let handle = db.get_handle().await;
-            handle.get_all_messages_collect_into_inconsistent::<Authenticated<Envelope>>(
-                &mut seq,
-                &mut all_unprocessed_messages,
-            )?
+            handle
+                .get_all_chain_commit_group_members_new_envelopes_for_chain_into_inconsistent::<Authenticated<Envelope>, WrappedJson>(
+                    oracle_publickey,
+                    &mut seq,
+                    &mut all_unprocessed_messages,
+                )?
         }
         // Only on the first pass, remove the messages that have already been sequenced
         //
@@ -220,14 +228,14 @@ async fn game(
 
         info!(key=?keypair.x_only_public_key().0, n=to_sequence.len(), "Messages to Sequence");
         if !to_sequence.is_empty() {
-            let msg = ruma_serde::to_canonical_value(Channelized {
+            let msg = Channelized {
                 data: BroadcastByHost::Sequence(to_sequence),
                 channel: "default".into(),
-            })?;
+            };
             let mut handle = db.get_handle().await;
             // TODO: Run a tipcache
             let wrapped = handle
-                .wrap_message_in_envelope_for_user_by_key(
+                .wrap_message_in_envelope_for_user_by_key::<_, Channelized<BroadcastByHost>, _>(
                     msg,
                     &keypair,
                     &secp,

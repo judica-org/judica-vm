@@ -39,6 +39,10 @@ pub mod get {
         pub const SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_TIPS_FOR_CHAIN: &str = include_str!(
             "../sql/get/chain_commit_groups/all_chain_commit_group_members_tips_for_chain.sql"
         );
+
+        pub const SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_NEW_ENVELOPES_FOR_CHAIN: &str = include_str!(
+            "../sql/get/chain_commit_groups/all_chain_commit_group_members_new_envelopes_for_chain.sql"
+        );
     }
     pub mod hidden_services {
 
@@ -121,6 +125,7 @@ pub const CACHED: &[&str] = &[
     SQL_GET_ALL_CHAIN_COMMIT_GROUPS_FOR_CHAIN,
     SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_FOR_CHAIN,
     SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_TIPS_FOR_CHAIN,
+    SQL_GET_ALL_CHAIN_COMMIT_GROUP_MEMBERS_NEW_ENVELOPES_FOR_CHAIN,
     SQL_GET_ALL_HIDDEN_SERVICES,
     SQL_GET_MESSAGES_NEWER_THAN_FOR_GENESIS,
     SQL_GET_MESSAGES_BY_HEIGHT_AND_USER,

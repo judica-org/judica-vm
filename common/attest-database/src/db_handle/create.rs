@@ -3,12 +3,15 @@ use super::handle_type;
 use super::MsgDBHandle;
 use attest_messages::checkpoints::BitcoinCheckPoints;
 use attest_messages::Ancestors;
+use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::Envelope;
+use attest_messages::GenericEnvelope;
 use attest_messages::Header;
 use attest_messages::SigningError;
 use attest_messages::Unsigned;
-use ruma_serde::CanonicalJsonValue;
+use attest_messages::WrappedJson;
+
 use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
@@ -27,23 +30,30 @@ where
     /// given an arbitrary inner message, generates an envelope and signs it.
     ///
     /// Calling multiple times with a given nonce would result in nonce reuse.
-    pub fn wrap_message_in_envelope_for_user_by_key<C: Signing>(
+    pub fn wrap_message_in_envelope_for_user_by_key<
+        C: Signing,
+        M: AttestEnvelopable,
+        Im: Into<M>,
+    >(
         &self,
-        msg: CanonicalJsonValue,
+        msg: Im,
         keypair: &KeyPair,
         secp: &Secp256k1<C>,
         bitcoin_tipcache: Option<BitcoinCheckPoints>,
         dangerous_bypass_tip: Option<Envelope>,
         tip_groups: TipControl,
-    ) -> Result<Result<Envelope, SigningError>, rusqlite::Error> {
+    ) -> Result<Result<GenericEnvelope<M>, SigningError>, rusqlite::Error> {
         let key: XOnlyPublicKey = keypair.x_only_public_key().0;
         debug!(key=%key, "Creating new Envelope");
         // Side effect free...
         let mut tips = match tip_groups {
             TipControl::GroupsOnly => {
-                self.get_all_chain_commit_group_members_tips_for_chain(key)?
+                self.get_all_chain_commit_group_members_tips_for_chain(key, true)?
             }
-            TipControl::AllTips => self.get_tips_for_all_users::<Authenticated<Envelope>>()?,
+            TipControl::AllTips => {
+                // N.B. get the WrappedJson typed tips because we don't care what their inner message type was.
+                self.get_tips_for_all_users::<Authenticated<Envelope>, WrappedJson>()?
+            }
             TipControl::NoTips => vec![],
         };
         if let Some(p) = tips.iter().position(|x| x.header().key() == key) {
@@ -68,7 +78,7 @@ where
         let secret = self.get_secret_for_public_nonce(my_tip.header().next_nonce())?;
         // Has side effects!
         let next_nonce = self.generate_fresh_nonce_for_user_by_key(secp, key)?;
-        let mut msg = Envelope::new(
+        let mut msg = GenericEnvelope::new(
             Header::new(
                 key,
                 next_nonce,
@@ -82,7 +92,7 @@ where
                 Unsigned::new(Default::default()),
                 bitcoin_tipcache.unwrap_or_default(),
             ),
-            msg,
+            msg.into(),
         );
         Ok(msg.sign_with(keypair, secp, secret).map(move |_| msg))
     }

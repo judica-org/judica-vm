@@ -60,7 +60,7 @@ impl GameServer {
                 spawn(db_fetcher.run());
                 spawn({
                     let game_sequencer = game_sequencer.clone();
-                    game_sequencer.run()
+                    game_sequencer.0.run()
                 });
                 let _game_task = {
                     let g = g;
@@ -77,7 +77,7 @@ impl GameServer {
 pub(crate) fn start_game(
     _shutdown: Arc<AtomicBool>,
     g: GameStateInner,
-    sequencer: Arc<Sequencer>,
+    sequencer: Sequencer,
 ) -> JoinHandle<()> {
     spawn(async move {
         // TODO: Check which game the move is for?

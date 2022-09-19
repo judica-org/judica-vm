@@ -5,7 +5,7 @@ use crate::db_handle::MsgDBHandle;
 use super::connection::MsgDB;
 use super::*;
 
-use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, WrappedJson};
 use fallible_iterator::FallibleIterator;
 use ruma_serde::CanonicalJsonValue;
 use rusqlite::{params, Connection};
@@ -92,7 +92,7 @@ async fn test_reused_nonce() {
         );
         // Inserting more messages shouldn't change anything
         let envelope_i = handle
-            .wrap_message_in_envelope_for_user_by_key(
+            .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
                 CanonicalJsonValue::String(format!("distinct-{}", i)),
                 &kp,
                 &secp,
@@ -294,7 +294,7 @@ async fn test_envelope_creation() {
         }
         {
             let my_tip = handle
-                .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
+                .get_tip_for_user_by_key::<WrappedJson>(kps[user_id].x_only_public_key().0)
                 .unwrap();
             assert_eq!(
                 my_tip.canonicalized_hash_ref(),
@@ -314,7 +314,7 @@ async fn test_envelope_creation() {
     assert_eq!(tips_attached, 0);
 
     let known_tips: Vec<_> = handle
-        .get_tip_for_known_keys()
+        .get_tip_for_known_keys::<WrappedJson>()
         .unwrap()
         .iter()
         .map(|t| t.canonicalized_hash_ref())
@@ -322,7 +322,7 @@ async fn test_envelope_creation() {
     for user_id in 0..N_USERS {
         {
             let my_tip = handle
-                .get_tip_for_user_by_key(kps[user_id].x_only_public_key().0)
+                .get_tip_for_user_by_key::<WrappedJson>(kps[user_id].x_only_public_key().0)
                 .unwrap();
             assert_eq!(my_tip.canonicalized_hash_ref(), final_msg[user_id]);
         }
@@ -335,7 +335,7 @@ async fn test_envelope_creation() {
     let kp_2 = make_test_user(&secp, &mut handle, "TestUser2".into());
 
     let envelope_3 = handle
-        .wrap_message_in_envelope_for_user_by_key(
+        .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
             CanonicalJsonValue::Null,
             &kp_2,
             &secp,
@@ -352,7 +352,7 @@ async fn test_envelope_creation() {
         .unwrap();
 
     {
-        let known_tips = handle.get_tip_for_known_keys().unwrap();
+        let known_tips = handle.get_tip_for_known_keys::<WrappedJson>().unwrap();
         assert_eq!(known_tips.len(), kps.len() + 1);
         let mut tip_hashes: Vec<_> = known_tips
             .iter()
@@ -370,7 +370,8 @@ fn make_test_user(
     handle: &mut db_handle::MsgDBHandle<'_>,
     name: String,
 ) -> KeyPair {
-    let (kp, nonce, envelope) = generate_new_user(secp, None::<()>).unwrap();
+    let (kp, nonce, envelope) =
+        generate_new_user::<_, WrappedJson, _>(secp, CanonicalJsonValue::Null).unwrap();
     handle.save_keypair(kp).unwrap();
     let genesis = envelope.self_authenticate(secp).unwrap();
     handle
@@ -413,7 +414,7 @@ async fn test_chain_commit_groups() {
             }
             let kp = make_test_user(&secp, &mut handle, format!("u-{}", i));
             let genesis_hash = handle
-                .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                .get_tip_for_user_by_key::<WrappedJson>(kp.x_only_public_key().0)
                 .unwrap()
                 .get_genesis_hash();
             (kp, friends, genesis_hash)
@@ -446,7 +447,7 @@ async fn test_chain_commit_groups() {
             .map(|id| {
                 println!("Querying Message: {:?}", id);
                 handle
-                    .messages_by_id::<Envelope>(*id)
+                    .messages_by_id::<Envelope, WrappedJson>(*id)
                     .unwrap()
                     .header()
                     .key()
@@ -467,7 +468,7 @@ async fn test_chain_commit_groups() {
             .iter()
             .map(|(kp, _u, _g)| {
                 let e = handle
-                    .wrap_message_in_envelope_for_user_by_key(
+                    .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
                         CanonicalJsonValue::Null,
                         kp,
                         &secp,
@@ -485,7 +486,9 @@ async fn test_chain_commit_groups() {
             for friend_group in friend_groups {
                 for friend in friend_group {
                     let tip = handle
-                        .get_tip_for_user_by_key(users[*friend].0.x_only_public_key().0)
+                        .get_tip_for_user_by_key::<WrappedJson>(
+                            users[*friend].0.x_only_public_key().0,
+                        )
                         .unwrap();
                     println!("{} in {:?} for {}", friend, friend_group, i);
                     println!(

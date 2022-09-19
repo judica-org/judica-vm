@@ -7,7 +7,7 @@ use attest_database::{
     db_handle::{create::TipControl, get::PeerInfo},
     generate_new_user,
 };
-use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
+use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, WrappedJson};
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     http::Response,
@@ -51,7 +51,9 @@ async fn get_expensive_db_snapshot(
     let mut map = Default::default();
     let mut newer = None;
     handle
-        .get_all_messages_collect_into_inconsistent::<Envelope>(&mut newer, &mut map)
+        .get_all_messages_collect_into_inconsistent_skip_invalid::<Envelope, WrappedJson>(
+            &mut newer, &mut map, false,
+        )
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         Response::builder()
@@ -73,7 +75,7 @@ async fn get_status(
             .get_all_hidden_services()
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let tips = handle
-            .get_tips_for_all_users::<Authenticated<Envelope>>()
+            .get_tips_for_all_users::<Authenticated<Envelope>, WrappedJson>()
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         let tips = tips
             .into_iter()
@@ -180,7 +182,7 @@ async fn push_message_dangerous(
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
     let tips = bitcoin_tipcache.0.read_cache().await;
     let env = handle
-        .wrap_message_in_envelope_for_user_by_key(
+        .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
             msg,
             &kp,
             &secp.0,
@@ -228,7 +230,7 @@ async fn make_genesis(
     secp: Extension<Secp256k1<All>>,
     Json(NewGenesis { nickname, msg }): Json<NewGenesis>,
 ) -> Result<(Response<()>, Json<Envelope>), (StatusCode, String)> {
-    let (kp, pre, genesis) = generate_new_user(&secp.0, Some(msg)).map_err(|e| {
+    let (kp, pre, genesis) = generate_new_user::<_, WrappedJson, _>(&secp.0, msg).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Creating Genesis Message failed: {}", e),

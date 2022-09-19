@@ -1,9 +1,11 @@
 #[cfg(feature = "database_access")]
 use attest_database::connection::MsgDB;
+use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::AuthenticationError;
 use attest_messages::CanonicalEnvelopeHash;
-use attest_messages::Envelope;
+
+use attest_messages::GenericEnvelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
 
@@ -39,14 +41,18 @@ pub mod game_specific;
 pub use game_specific::*;
 
 #[derive(Serialize, Deserialize, JsonSchema)]
-pub struct UnauthenticatedRawSequencer {
-    sequencer_envelopes: Vec<Envelope>,
-    msg_cache: HashMap<CanonicalEnvelopeHash, Envelope>,
+#[serde(bound = "M: AttestEnvelopable")]
+pub struct UnauthenticatedRawSequencer<M>
+where
+    M: AttestEnvelopable,
+{
+    sequencer_envelopes: Vec<GenericEnvelope<Channelized<BroadcastByHost>>>,
+    msg_cache: HashMap<CanonicalEnvelopeHash, GenericEnvelope<M>>,
 }
-impl TryFrom<UnauthenticatedRawSequencer> for RawSequencer {
+impl<M: AttestEnvelopable> TryFrom<UnauthenticatedRawSequencer<M>> for RawSequencer<M> {
     type Error = AuthenticationError;
 
-    fn try_from(value: UnauthenticatedRawSequencer) -> Result<Self, Self::Error> {
+    fn try_from(value: UnauthenticatedRawSequencer<M>) -> Result<Self, Self::Error> {
         let secp = Secp256k1::verification_only();
         Ok(Self {
             sequencer_envelopes: value
@@ -64,11 +70,15 @@ impl TryFrom<UnauthenticatedRawSequencer> for RawSequencer {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(try_from = "UnauthenticatedRawSequencer")]
-#[schemars(with = "UnauthenticatedRawSequencer")]
-pub struct RawSequencer {
-    sequencer_envelopes: Vec<Authenticated<Envelope>>,
-    msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
+#[serde(try_from = "UnauthenticatedRawSequencer<M>")]
+#[schemars(with = "UnauthenticatedRawSequencer<M>")]
+#[serde(bound = "M: AttestEnvelopable")]
+pub struct RawSequencer<M>
+where
+    M: AttestEnvelopable,
+{
+    sequencer_envelopes: Vec<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>>,
+    msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
 }
 
 #[derive(Debug)]
@@ -87,10 +97,10 @@ impl Display for SequencerError {
 }
 impl std::error::Error for SequencerError {}
 
-impl TryFrom<RawSequencer> for OfflineSequencer {
+impl<M: AttestEnvelopable> TryFrom<RawSequencer<M>> for OfflineSequencer<M> {
     type Error = SequencerError;
 
-    fn try_from(value: RawSequencer) -> Result<Self, Self::Error> {
+    fn try_from(value: RawSequencer<M>) -> Result<Self, Self::Error> {
         if let Some(false) = value
             .sequencer_envelopes
             .first()
@@ -114,18 +124,12 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
         }
         let mut batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>> = vec![];
         for envelope in &value.sequencer_envelopes {
-            match serde_json::from_value::<Channelized<BroadcastByHost>>(
-                envelope.msg().to_owned().into(),
-            ) {
-                Ok(v) => match v.data {
-                    BroadcastByHost::Sequence(s) => batches_to_sequence.push(s),
-                    BroadcastByHost::NewPeer(_) => {}
-                    BroadcastByHost::Heartbeat => {}
-                    BroadcastByHost::GameSetup(_) => {}
-                },
-                Err(_) => {
-                    return Err(SequencerError::BadMessageType);
-                }
+            let v = envelope.msg();
+            match &v.data {
+                BroadcastByHost::Sequence(s) => batches_to_sequence.push(s.clone()),
+                BroadcastByHost::NewPeer(_) => {}
+                BroadcastByHost::Heartbeat => {}
+                BroadcastByHost::GameSetup(_) => {}
             }
         }
         Ok(OfflineSequencer {
@@ -136,11 +140,12 @@ impl TryFrom<RawSequencer> for OfflineSequencer {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(try_from = "RawSequencer")]
-#[schemars(with = "RawSequencer")]
-pub struct OfflineSequencer {
+#[serde(try_from = "RawSequencer<M>")]
+#[schemars(with = "RawSequencer<M>")]
+#[serde(bound = "M: AttestEnvelopable")]
+pub struct OfflineSequencer<M: AttestEnvelopable> {
     batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
-    msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
+    msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
 }
 #[derive(Debug)]
 pub enum SequenceingError<T> {
@@ -162,15 +167,15 @@ impl<E> std::error::Error for SequenceingError<E> where E: std::error::Error {}
 
 #[derive(Debug)]
 pub enum Void {}
-impl OfflineSequencer {
+impl<M: AttestEnvelopable> OfflineSequencer<M> {
     pub fn directly_sequence(
         &mut self,
-    ) -> Result<Vec<Authenticated<Envelope>>, SequenceingError<Void>> {
-        self.directly_sequence_map(Ok::<Authenticated<Envelope>, Void>)
+    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, SequenceingError<Void>> {
+        self.directly_sequence_map(Ok::<Authenticated<GenericEnvelope<M>>, Void>)
     }
     pub fn directly_sequence_map<F, R, E>(&mut self, f: F) -> Result<Vec<R>, SequenceingError<E>>
     where
-        F: Fn(Authenticated<Envelope>) -> Result<R, E>,
+        F: Fn(Authenticated<GenericEnvelope<M>>) -> Result<R, E>,
     {
         let mut v = vec![];
         for batch in &self.batches_to_sequence {
@@ -187,16 +192,19 @@ impl OfflineSequencer {
     }
 }
 
-impl From<OfflineSequencer> for OfflineDBFetcher {
-    fn from(o: OfflineSequencer) -> Self {
+impl<M: AttestEnvelopable> From<OfflineSequencer<M>> for OfflineDBFetcher<M> {
+    fn from(o: OfflineSequencer<M>) -> Self {
         OfflineDBFetcher::new(o.batches_to_sequence, o.msg_cache)
     }
 }
 
-impl TryFrom<OfflineDBFetcher> for OfflineSequencer {
+impl<M> TryFrom<OfflineDBFetcher<M>> for OfflineSequencer<M>
+where
+    M: AttestEnvelopable,
+{
     type Error = ();
 
-    fn try_from(value: OfflineDBFetcher) -> Result<Self, Self::Error> {
+    fn try_from(value: OfflineDBFetcher<M>) -> Result<Self, Self::Error> {
         let mut batches = value.batches_to_sequence.try_lock().map_err(|_| ())?;
         let mut cache = value.msg_cache.try_lock().map_err(|_| ())?;
         let mut c = HashMap::default();
@@ -212,16 +220,19 @@ impl TryFrom<OfflineDBFetcher> for OfflineSequencer {
     }
 }
 
-pub struct OfflineDBFetcher {
+pub struct OfflineDBFetcher<M: AttestEnvelopable> {
     batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
-    msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>,
+    msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>>>,
     new_msgs_in_cache: Arc<Notify>,
 }
 
-impl OfflineDBFetcher {
+impl<M> OfflineDBFetcher<M>
+where
+    M: AttestEnvelopable,
+{
     pub fn new(
         batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
-        msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>,
+        msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
     ) -> Self {
         let (tx, rx) = unbounded_channel();
         for batch in batches_to_sequence {
@@ -234,18 +245,22 @@ impl OfflineDBFetcher {
         }
     }
 
-    pub fn directly_sequence(self) -> Result<Vec<Authenticated<Envelope>>, SequenceingError<()>> {
+    pub fn directly_sequence(
+        self,
+    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, SequenceingError<()>> {
         OfflineSequencer::try_from(self)?.directly_sequence_map(Ok)
     }
 }
-impl DBFetcher for OfflineDBFetcher {
+impl<M: AttestEnvelopable> DBFetcher<M> for OfflineDBFetcher<M> {
     fn batches_to_sequence(
         &self,
     ) -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>> {
         self.batches_to_sequence.clone()
     }
 
-    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>> {
+    fn msg_cache(
+        &self,
+    ) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>>> {
         self.msg_cache.clone()
     }
 
@@ -255,20 +270,23 @@ impl DBFetcher for OfflineDBFetcher {
 }
 
 #[cfg(feature = "database_access")]
-pub struct OnlineDBFetcher {
+pub struct OnlineDBFetcher<M: AttestEnvelopable> {
     poll_sequencer_period: Duration,
     shutdown: Arc<AtomicBool>,
     db: MsgDB,
     schedule_batches_to_sequence: UnboundedSender<VecDeque<CanonicalEnvelopeHash>>,
     batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
     oracle_key: XOnlyPublicKey,
-    msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>,
+    msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>>>,
     rebuild_db_period: Duration,
     is_running: AtomicBool,
     new_msgs_in_cache: Arc<Notify>,
 }
 #[cfg(feature = "database_access")]
-impl OnlineDBFetcher {
+impl<M> OnlineDBFetcher<M>
+where
+    M: AttestEnvelopable + 'static,
+{
     pub fn new(
         shutdown: Arc<AtomicBool>,
         poll_sequencer_period: Duration,
@@ -313,50 +331,47 @@ impl OnlineDBFetcher {
             let mut count = 0;
             while !self.should_shutdown() {
                 'check: while !self.should_shutdown() {
-                    let msg = {
+                    let msg: Result<
+                        Option<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>>,
+                        _,
+                    > = {
                         let handle = self.db.get_handle().await;
                         handle.get_message_at_height_for_user(self.oracle_key, count)
                     };
                     match msg {
-                        Ok(envelope) => {
-                            match serde_json::from_value::<Channelized<BroadcastByHost>>(
-                                envelope.msg().to_owned().into(),
-                            ) {
-                                Ok(v) => {
-                                    match v.data {
-                                        BroadcastByHost::Heartbeat => {}
-                                        BroadcastByHost::Sequence(s) => {
-                                            info!(key=?self.oracle_key, n_msg = s.len(), "Got Batch to Sequence");
-                                            if self.schedule_batches_to_sequence.send(s).is_err() {
-                                                return;
-                                            };
-                                        }
-                                        BroadcastByHost::NewPeer(Peer { service_url, port }) => {
-                                            let handle = self.db.get_handle().await;
-                                            // idempotent
-                                            handle
-                                                .insert_hidden_service(
-                                                    service_url,
-                                                    port,
-                                                    true,
-                                                    true,
-                                                    true,
-                                                )
-                                                .ok();
-                                        }
-                                        BroadcastByHost::GameSetup(_) => {}
-                                    }
-                                    count += 1;
-                                }
-                                Err(_) => {
-                                    return;
-                                }
-                            }
-                            break 'check;
-                        }
-                        Err(_) => {
+                        Ok(None) => {
                             debug!(key=?self.oracle_key, sleep_for = ?self.poll_sequencer_period, "No New Messages Sleeping...");
                             sleep(self.poll_sequencer_period).await;
+                            continue 'check;
+                        }
+                        Ok(Some(envelope)) => {
+                            match &envelope.msg().data {
+                                BroadcastByHost::Heartbeat => {}
+                                BroadcastByHost::Sequence(s) => {
+                                    info!(key=?self.oracle_key, n_msg = s.len(), "Got Batch to Sequence");
+                                    if self.schedule_batches_to_sequence.send(s.clone()).is_err() {
+                                        return;
+                                    };
+                                }
+                                BroadcastByHost::NewPeer(Peer { service_url, port }) => {
+                                    let handle = self.db.get_handle().await;
+                                    // idempotent
+                                    handle
+                                        .insert_hidden_service(
+                                            service_url.clone(),
+                                            *port,
+                                            true,
+                                            true,
+                                            true,
+                                        )
+                                        .ok();
+                                }
+                                BroadcastByHost::GameSetup(_) => {}
+                            }
+                            count += 1;
+                        }
+                        Err(e) => {
+                            warn!(error=?e, "Database Failure")
                         }
                     }
                 }
@@ -372,9 +387,13 @@ impl OnlineDBFetcher {
                 {
                     let handle = self.db.get_handle().await;
                     let mut env = self.msg_cache.lock().await;
-                    if let Err(e) =
-                        handle.get_all_messages_collect_into_inconsistent(&mut newer, &mut env)
-                    {
+                    // it's fine for us to filter for *only* game moves in our
+                    // DB...  Ideally, we'd be able to use the group filter as
+                    // well, but currently we don't have that set up properly
+                    // for the host, so instead we load all moves.
+                    if let Err(e) = handle.get_all_messages_collect_into_inconsistent_skip_invalid(
+                        &mut newer, &mut env, true,
+                    ) {
                         warn!(error=?e, "DB Fetching Failed");
                         return;
                     }
@@ -393,13 +412,15 @@ impl OnlineDBFetcher {
 }
 
 #[cfg(feature = "database_access")]
-impl DBFetcher for OnlineDBFetcher {
+impl<M: AttestEnvelopable> DBFetcher<M> for OnlineDBFetcher<M> {
     fn batches_to_sequence(
         &self,
     ) -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>> {
         self.batches_to_sequence.clone()
     }
-    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>> {
+    fn msg_cache(
+        &self,
+    ) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>>> {
         self.msg_cache.clone()
     }
 
@@ -408,17 +429,22 @@ impl DBFetcher for OnlineDBFetcher {
     }
 }
 
-pub trait DBFetcher: Send + Sync {
+pub trait DBFetcher<M>: Send + Sync
+where
+    M: AttestEnvelopable,
+{
     fn batches_to_sequence(&self)
         -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>;
-    fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>;
+    fn msg_cache(
+        &self,
+    ) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>>>;
     fn notified(&self) -> Notified<'_>;
 }
-pub struct GenericSequencer<F, R, E> {
-    db_fetcher: Arc<dyn DBFetcher>,
+pub struct GenericSequencer<F, R, E, M: AttestEnvelopable> {
+    db_fetcher: Arc<dyn DBFetcher<M>>,
     shutdown: Arc<AtomicBool>,
-    push_next_envelope: UnboundedSender<Authenticated<Envelope>>,
-    output_envelope: Mutex<UnboundedReceiver<Authenticated<Envelope>>>,
+    push_next_envelope: UnboundedSender<Authenticated<GenericEnvelope<M>>>,
+    output_envelope: Mutex<UnboundedReceiver<Authenticated<GenericEnvelope<M>>>>,
     push_next_move: UnboundedSender<R>,
     output_move: Mutex<UnboundedReceiver<R>>,
     is_running: AtomicBool,
@@ -426,15 +452,16 @@ pub struct GenericSequencer<F, R, E> {
     _pd: PhantomData<E>,
 }
 
-impl<F, R, E> GenericSequencer<F, R, E>
+impl<F, R, E, M> GenericSequencer<F, R, E, M>
 where
-    F: Fn(Authenticated<Envelope>) -> Result<R, E> + Send + Sync + 'static,
+    F: Fn(Authenticated<GenericEnvelope<M>>) -> Result<R, E> + Send + Sync + 'static,
     E: Sync + Send + 'static + std::fmt::Debug,
     R: Send + 'static,
+    M: AttestEnvelopable + 'static,
 {
     pub fn new(
         shutdown: Arc<AtomicBool>,
-        db_fetcher: Arc<dyn DBFetcher>,
+        db_fetcher: Arc<dyn DBFetcher<M>>,
         envelope_extractor: F,
     ) -> Arc<Self> {
         let (push_next_envelope, output_envelope) = unbounded_channel();
@@ -500,7 +527,8 @@ where
                         match envs.entry(envelope) {
                             Occupied(e) => {
                                 // TODO: Batch size
-                                if self.push_next_envelope.send(e.remove()).is_err() {
+                                let envelope = e.remove();
+                                if self.push_next_envelope.send(envelope).is_err() {
                                     // quit if the channel is closed
                                     return;
                                 }
@@ -548,7 +576,7 @@ mod test {
     use crate::game_specific::Sequencer;
 
     use super::*;
-    use attest_messages::{nonce::PrecomittedNonce, Envelope, Header, Unsigned};
+    use attest_messages::{nonce::PrecomittedNonce, Header, Unsigned};
     use mine_with_friends_board::{
         game::game_move::{GameMove, Heartbeat},
         sanitize::Unsanitized,
@@ -560,7 +588,7 @@ mod test {
     };
     use std::collections::VecDeque;
 
-    fn make_random_moves() -> Vec<VecDeque<Authenticated<Envelope>>> {
+    fn make_random_moves() -> Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>> {
         let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
 
         (0..10)
@@ -579,7 +607,7 @@ mod test {
                         let checkpoints = Default::default();
                         let height = 0;
 
-                        let mut e1 = Envelope::new(
+                        let mut e1 = GenericEnvelope::new(
                             Header::new(
                                 key,
                                 next_nonce,
@@ -590,12 +618,11 @@ mod test {
                                 unsigned,
                                 checkpoints,
                             ),
-                            ruma_serde::to_canonical_value(MoveEnvelope::new(
+                            MoveEnvelope::new(
                                 Unsanitized(GameMove::Heartbeat(Heartbeat())),
                                 1,
                                 sent_time_ms as u64,
-                            ))
-                            .unwrap(),
+                            ),
                         );
                         e1.sign_with(
                             &KeyPair::from_secret_key(secp, &sk),
@@ -636,8 +663,8 @@ mod test {
         for batch in envelopes {
             for envelope in batch {
                 if let Some((m, x)) = s.output_move().await {
-                    let game_move = serde_json::from_value(envelope.msg().clone().into()).unwrap();
-                    assert_eq!(m, game_move);
+                    let game_move = envelope.msg();
+                    assert_eq!(m, *game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
                     unreachable!("Offline GenericSequencer did not sequence all messages")
@@ -646,14 +673,18 @@ mod test {
         }
     }
     struct TestDBFetcher {
-        to_seq: Vec<VecDeque<Authenticated<Envelope>>>,
+        to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>>,
         schedule_batches_to_sequence: UnboundedSender<VecDeque<CanonicalEnvelopeHash>>,
         batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
-        msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>>,
+        msg_cache: Arc<
+            Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<MoveEnvelope>>>>,
+        >,
         new_msgs_in_cache: Arc<Notify>,
     }
     impl TestDBFetcher {
-        pub fn new(to_seq: Vec<VecDeque<Authenticated<Envelope>>>) -> Arc<Self> {
+        pub fn new(
+            to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>>,
+        ) -> Arc<Self> {
             let (schedule_batches_to_sequence, batches_to_sequence) = unbounded_channel();
             let batches_to_sequence = Arc::new(Mutex::new(batches_to_sequence));
             Arc::new(Self {
@@ -728,14 +759,17 @@ mod test {
             }
         }
     }
-    impl DBFetcher for TestDBFetcher {
+    impl DBFetcher<MoveEnvelope> for TestDBFetcher {
         fn batches_to_sequence(
             &self,
         ) -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>> {
             self.batches_to_sequence.clone()
         }
 
-        fn msg_cache(&self) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<Envelope>>>> {
+        fn msg_cache(
+            &self,
+        ) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<MoveEnvelope>>>>>
+        {
             self.msg_cache.clone()
         }
 
@@ -756,8 +790,8 @@ mod test {
         for batch in envelopes {
             for envelope in batch {
                 if let Some((m, x)) = s.output_move().await {
-                    let game_move = serde_json::from_value(envelope.msg().clone().into()).unwrap();
-                    assert_eq!(m, game_move);
+                    let game_move = envelope.msg();
+                    assert_eq!(m, *game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
                     unreachable!("Online GenericSequencer did not sequence all messages")
