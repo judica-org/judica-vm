@@ -4,6 +4,7 @@ import countries_data from "./countries.json";
 import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent } from '@mui/material';
+import { emit } from '@tauri-apps/api/event';
 const { useState, useEffect } = React;
 
 const stub_plant_data = [{
@@ -36,9 +37,9 @@ const stub_plant_data = [{
 }]
 
 export default () => {
-    ;
     const [power_plants, set_power_plants] = useState([]); // use empty list for now so it will render
     const [countries, setCountries] = useState([]);
+
     useEffect(() => {
         setCountries(countries_data);
         const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
@@ -51,7 +52,7 @@ export default () => {
                 (await unlisten_power_plants)();
             })();
         }
-    }, [power_plants]);
+    }, [power_plants, location]);
 
     return <div className='globe-container'>
         <Card>
@@ -62,6 +63,10 @@ export default () => {
                 position: 'relative'
             }}>
                 <Globe
+                    onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
+                        console.log(['globe-click'], { lat, lng });
+                        emit('globe-click', { lat, lng });
+                    }}
                     globeImageUrl={earth}
                     width={500}
                     height={500}
