@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "common/mine-with-friends-board",
     "common/attest",
     "common/attest-messages",
     "common/attest-database",
@@ -10,7 +9,9 @@ members = [
     "common/game-host",
     "common/game-host-messages",
     "common/game-sequencer",
+    "common/mine-with-friends-board",
     "common/sapio-litigator",
+    "common/simps",
 ]
 
 exclude=["ux/src-tauri/"]

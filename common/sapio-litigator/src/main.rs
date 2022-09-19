@@ -30,7 +30,6 @@ use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Notify;
-mod simps;
 
 #[derive(Serialize, Deserialize)]
 enum Event {
