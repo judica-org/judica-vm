@@ -34,7 +34,7 @@ if tmux attach -t MySession; then
 else
 
   pushd ..
-  cargo build --release
+  cargo build --release || exit -1
   popd
 
   case "$USE_RELEASE_TAURI" in
@@ -42,7 +42,7 @@ else
 
   debug)
     pushd ../ux
-    yarn tauri build --debug
+    yarn tauri build --debug || exit -1
     popd
     ;;
   release)
