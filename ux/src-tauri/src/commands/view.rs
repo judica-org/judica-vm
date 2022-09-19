@@ -37,7 +37,10 @@ pub(crate) async fn game_synchronizer_inner(
                 .unwrap_or_default();
             let user_inventory = game
                 .as_mut()
-                .map(|g| g.board.get_ux_user_inventory(signing_key.unwrap().to_string()))
+                .map(|g| {
+                    g.board
+                        .get_ux_user_inventory(signing_key.unwrap().to_string())
+                })
                 .unwrap()
                 .unwrap();
             (
@@ -95,7 +98,7 @@ pub(crate) async fn game_synchronizer_inner(
 
         info!("Emitting State Updates");
         window.emit("available-sequencers", list_of_chains);
-       
+
         window.emit("chat-log", chat_log);
         window.emit("signing-key", signing_key);
         window.emit("host-key", key).unwrap();
