@@ -1,6 +1,5 @@
-use attest_messages::AttestEnvelopable;
 use game::game_move::GameMove;
-use ruma_serde::CanonicalJsonValue;
+
 use sanitize::Unsanitized;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

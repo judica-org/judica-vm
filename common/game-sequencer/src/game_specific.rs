@@ -109,10 +109,10 @@ impl DemuxedSequencer {
         }
     }
 
-    pub async fn run(&self) -> Result<(), JoinError> {
+    pub async fn run(self) -> Result<(), JoinError> {
         spawn(self.sequencer.clone().run());
         spawn({
-            let this = self.clone();
+            let this = self;
             async move {
                 match this.sequencer.output_move().await {
                     Some(e) => match e.msg() {
@@ -126,14 +126,10 @@ impl DemuxedSequencer {
                             this.send_psbt.send((c.data.0.clone(), c.channel.clone()));
                         }
                     },
-                    None => return,
+                    None => (),
                 }
             }
         });
         Ok(())
-    }
-
-    pub async fn output_move(&self) -> Option<(MoveEnvelope, XOnlyPublicKey)> {
-        todo!()
     }
 }

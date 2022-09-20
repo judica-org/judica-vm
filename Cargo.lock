@@ -300,6 +300,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitcoinconsensus"
+version = "0.19.0-3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a8aa43b5cd02f856cb126a9af819e77b8910fdd74dd1407be649f2f5fe3a1b5"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "bitcoincore-rpc-async"
 version = "4.0.1-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2376,6 +2386,7 @@ dependencies = [
  "base64-compat",
  "bech32",
  "bitcoin_hashes",
+ "bitcoinconsensus",
  "sapio-secp256k1",
  "schemars",
  "serde",
@@ -2400,11 +2411,15 @@ version = "0.1.0"
 dependencies = [
  "attest-database",
  "attest-util",
+ "bitcoinconsensus",
  "bitcoincore-rpc-async",
  "ctv_emulators",
  "directories",
  "event-log",
+ "game-host-messages",
+ "game-sequencer",
  "jsonschema-valid",
+ "mine-with-friends-board",
  "ruma-serde",
  "sapio",
  "sapio-base",
