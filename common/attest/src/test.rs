@@ -45,40 +45,28 @@ where
     let mut unord = FuturesUnordered::new();
     let mut quits = vec![];
     let mut ports = vec![];
-    for test_id in 0..nodes {
+    let mut client_globals = None;
+    for test_id in 0..nodes + 1 {
         let (shutdown, config) = create_test_config(&mut quits, test_id).await;
         ports.push((config.attestation_port, config.control.port));
-        let task_one = spawn({
-            let secp = secp.clone();
-            async move {
-                let msg_db = config.setup_db().await?;
-                init_main(Arc::new(Globals {
-                    config: Arc::new(config),
-                    shutdown,
-                    secp,
-                    client: Default::default(),
-                    msg_db,
-                    socket_state: GlobalSocketState::default(),
-                }))
-                .await
-            }
+        let secp = secp.clone();
+        let msg_db = config.setup_db().await.unwrap();
+        let globals = Arc::new(Globals {
+            config: Arc::new(config),
+            shutdown,
+            secp,
+            client: Default::default(),
+            msg_db,
+            socket_state: GlobalSocketState::default(),
         });
-        unord.push(task_one);
+        if test_id == nodes {
+            client_globals = Some(globals.clone());
+        }
+        unord.push(init_main(globals));
     }
 
-    let (shutdown, config) = create_test_config(&mut quits, nodes + 1).await;
-    let msg_db = config.setup_db().await.unwrap();
-    let client_globals = Arc::new(Globals {
-        config: Arc::new(config),
-        shutdown,
-        secp,
-        client: Default::default(),
-        msg_db,
-        socket_state: GlobalSocketState::default(),
-    });
-
     let fail = tokio::select! {
-        _ = code(ports, client_globals) => {
+        _ = code(ports, client_globals.unwrap()) => {
             tracing::debug!("Main Task Completed");
             None
         }
@@ -93,7 +81,7 @@ where
     // Wait for tasks to finish
     while (unord.next().await).is_some() {}
     if fail.is_some() {
-        fail.unwrap().unwrap().unwrap()
+        fail.unwrap().unwrap()
     }
 }
 
