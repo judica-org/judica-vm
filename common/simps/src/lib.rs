@@ -1,3 +1,4 @@
+use bitcoin::{hashes::sha256, XOnlyPublicKey};
 use sapio_base::simp::SIMP;
 use schemars::JsonSchema;
 use serde::*;
@@ -65,4 +66,18 @@ impl SIMP for EventRecompiler {
     {
         serde_json::from_value(value)
     }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+struct XOnlyPublicKeyString(#[schemars(with = "sha256::Hash")] XOnlyPublicKey);
+impl Into<XOnlyPublicKey> for XOnlyPublicKeyString {
+    fn into(self) -> XOnlyPublicKey {
+        self.0
+    }
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct AttestContinuationPointSubscription {
+    #[schemars(with = "XOnlyPublicKeyString")]
+    pub oracle_key: XOnlyPublicKey,
 }
