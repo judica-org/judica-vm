@@ -8,6 +8,7 @@ use attest_database::db_handle::create::TipControl;
 use attest_database::generate_new_user;
 use game_host_messages::BroadcastByHost;
 use game_host_messages::Channelized;
+use game_player_messages::ParticipantAction;
 use mine_with_friends_board::entity::EntityID;
 use mine_with_friends_board::game::game_move::GameMove;
 use mine_with_friends_board::game::game_move::Heartbeat;
@@ -39,7 +40,7 @@ pub(crate) async fn make_new_chain_inner(
     secp: State<'_, Secp256k1<All>>,
     db: State<'_, Database>,
 ) -> Result<String, String> {
-    let (kp, next_nonce, genesis) = generate_new_user::<_, MoveEnvelope, _>(
+    let (kp, next_nonce, genesis) = generate_new_user::<_, ParticipantAction, _>(
         secp.inner(),
         MoveEnvelope {
             d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
@@ -72,13 +73,35 @@ pub(crate) async fn make_move_inner_inner(
     let xpubkey = sk.inner().lock().await.ok_or("No Key Selected")?;
     let msgdb = db.get().await.map_err(|_e| "No DB Available")?;
     let mut handle = msgdb.get_handle().await;
-    let tip = handle
-        .get_tip_for_user_by_key::<MoveEnvelope>(xpubkey)
-        .or(Err("No Tip Found"))?;
-    let last: &MoveEnvelope = tip.msg();
+    // Seek the last game move -- in *most* cases should be the immediate prior
+    // message, but this isn't quite ideal.
+    let last = {
+        let mut h = None;
+        loop {
+            let tip = if let Some(prev) = h {
+                let mut v = handle
+                    .messages_by_hash::<_, _, ParticipantAction>([prev].iter())
+                    .or(Err("No Tip Found"))?;
+                v.pop().unwrap()
+            } else {
+                handle
+                    .get_tip_for_user_by_key::<ParticipantAction>(xpubkey)
+                    .or(Err("No Tip Found"))?
+            };
+            match tip.msg() {
+                ParticipantAction::MoveEnvelope(m) => break m.sequence,
+                ParticipantAction::Custom(_) => {
+                    if tip.header().ancestors().is_none() {
+                        return Err("No MoveEnvelope Found");
+                    }
+                    h = tip.header().ancestors().map(|a| a.prev_msg())
+                }
+            }
+        }
+    };
     let mve = MoveEnvelope {
         d: Unsanitized(next_move),
-        sequence: last.sequence + 1,
+        sequence: last + 1,
         time: attest_util::now() as u64,
     };
     let keys = handle.get_keymap().or(Err("Could not get keys"))?;
@@ -86,7 +109,7 @@ pub(crate) async fn make_move_inner_inner(
     let keypair = KeyPair::from_secret_key(secp.inner(), sk);
     // TODO: Runa tipcache
     let msg = handle
-        .wrap_message_in_envelope_for_user_by_key::<_, MoveEnvelope, _>(
+        .wrap_message_in_envelope_for_user_by_key::<_, ParticipantAction, _>(
             mve,
             &keypair,
             secp.inner(),

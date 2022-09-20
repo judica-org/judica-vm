@@ -31,6 +31,9 @@ optional=true
 [dependencies.game-host-messages]
 path = "../game-host-messages"
 
+[dependencies.game-player-messages]
+path = "../game-player-messages"
+
 [features]
 default = ["database_access"]
 database_access = ["attest-database"]

@@ -8,6 +8,7 @@ members = [
     "common/event-log",
     "common/game-host",
     "common/game-host-messages",
+    "common/game-player-messages",
     "common/game-sequencer",
     "common/mine-with-friends-board",
     "common/sapio-litigator",
