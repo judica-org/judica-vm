@@ -73,7 +73,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
             .await
             .map_err(|_| AttestProtocolError::FailedToAuthenticate)?;
         if let Ok(Some(Ok(msg))) =
-            tokio::time::timeout(Duration::from_secs(10), socket.t_recv()).await
+            tokio::time::timeout(Duration::from_secs(2), socket.t_recv()).await
         {
             if let Message::Binary(v) = msg {
                 if v[..] == r {
@@ -113,7 +113,8 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     } else {
         ("127.0.0.1".into(), g.config.attestation_port)
     };
-    trace!(?me, "Identifying Self to Peer");
+    let protocol = "handshake";
+    trace!(protocol, role=?Role::Client, ?me, "Identifying Self to Peer");
     if socket
         .t_send(Message::Text(serde_json::to_string(&me)?))
         .await
@@ -122,23 +123,39 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
         socket.t_close().await.ok();
         Err(AttestProtocolError::SocketClosed)
     } else if let Some(Ok(Message::Binary(v))) = socket.t_recv().await {
+        trace!(protocol, role=?Role::Client, ?me, "Claimed Identity of Self to Peer");
         if v.len() == 32 {
+            trace!(protocol, role=?Role::Client, ?me, "Recieved Challenge");
             let cookie: [u8; 32] = v.try_into().unwrap();
             let h = sha256::Hash::from_inner(cookie);
             let expect = gss.expect_a_cookie(h).await;
             if socket.t_send(Message::Binary(vec![])).await.is_err() {
-                trace!("Failed to Confirm Receipt of Challenge");
+                trace!(protocol, role=?Role::Client, ?me, "Failed to confirm receipt of Challenge");
                 return Err(AttestProtocolError::TimedOut);
-            }
-            let cookie = expect.await;
-            if let Ok(cookie) = cookie {
-                if socket.t_send(Message::Binary(cookie.into())).await.is_err() {
-                    Err(AttestProtocolError::SocketClosed)
-                } else {
-                    Ok(socket)
-                }
             } else {
-                Err(AttestProtocolError::TimedOut)
+                trace!(protocol, role=?Role::Client, ?me, "Confirmed Receipt of Challenge");
+            }
+            trace!(protocol, role=?Role::Client, ?me, "Waiting to Learn Secret");
+            let cookie = tokio::time::timeout(Duration::from_secs(2), expect).await;
+            match cookie {
+                Ok(cookie) => {
+                    if let Ok(cookie) = cookie {
+                        trace!(protocol, role=?Role::Client, ?me, "Secret Learned");
+                        trace!(protocol, role=?Role::Client, "Sending Cookie to Server");
+                        if socket.t_send(Message::Binary(cookie.into())).await.is_err() {
+                            Err(AttestProtocolError::SocketClosed)
+                        } else {
+                            Ok(socket)
+                        }
+                    } else {
+                        trace!(protocol, role=?Role::Client, ?me, "Timed Out Learning Cookie");
+                        Err(AttestProtocolError::TimedOut)
+                    }
+                }
+                Err(_) => {
+                    trace!(protocol, role=?Role::Client, ?me, "Timed Out Learning Cookie");
+                    Err(AttestProtocolError::TimedOut)
+                }
             }
         } else {
             Err(AttestProtocolError::IncorrectMessage)
@@ -158,16 +175,22 @@ pub async fn handshake_protocol<W: WebSocketFunctionality>(
     role: Role,
     new_request: Option<InternalRequest>,
 ) -> Result<(W, InternalRequest), AttestProtocolError> {
+    trace!(protocol = "handshake", ?role, "Starting Handshake");
     let res = match (role, new_request) {
         (Role::Server, None) => handshake_protocol_server(g, socket, gss).await,
         (Role::Client, Some(r)) => Ok((handshake_protocol_client(g, socket, gss).await?, r)),
         _ => {
-            warn!("Invalid Combo of Client/Server Role and Channel");
+            warn!(
+                protocol = "handshake",
+                "Invalid Combo of Client/Server Role and Channel"
+            );
             Err(AttestProtocolError::InvalidSetup)
         }
     };
     if let Err(e) = &res {
-        tracing::trace!(error=?e, ?role, "Handshake Protocol Failed");
+        trace!(protocol="handshake", error=?e, ?role, "Handshake Protocol Failed");
+    } else {
+        trace!(protocol = "handshake", ?role, "Handshake Successful");
     }
     res
 }

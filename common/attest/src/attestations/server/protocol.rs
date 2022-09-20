@@ -52,7 +52,7 @@ pub enum AttestResponse {
     PostResult(Vec<Outcome>),
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct ResponseCode(u64);
 
 impl AttestRequest {
@@ -210,6 +210,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     let mut seq = 0;
     'runner: loop {
         seq += 1;
+        trace!(seq, "waiting for request from peer or internal");
         tokio::select! {
             msg = socket.t_recv() => {
                 if let Some(Ok(msg)) = msg {
@@ -259,6 +260,7 @@ async fn handle_internal_request<W: WebSocketFunctionality>(
     msg: AttestRequest,
     response_chan: oneshot::Sender<AttestResponse>,
 ) -> Result<(), AttestProtocolError> {
+    trace!(code=?msg.response_code_of(), seq, "new internal request");
     inflight_requests.insert(
         seq,
         ResponseRouter {
@@ -266,7 +268,6 @@ async fn handle_internal_request<W: WebSocketFunctionality>(
             sender: response_chan,
         },
     );
-
     socket.t_send(msg.into_protocol_and_log(seq)?).await?;
 
     Ok(())
