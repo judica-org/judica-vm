@@ -74,7 +74,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
                 if challenge_response == challenge_secret.to_hex() {
                     // Authenticated!
                     let (tx, rx) = unbounded_channel();
-                    if client
+                    if !client
                         .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
                         .await
                     {

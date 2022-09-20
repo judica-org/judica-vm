@@ -228,6 +228,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     )
                     .await?;
                 } else {
+                    trace!(seq, ?role, "socket quit: TCP Socket is Disconnected");
                     break 'runner;
                 }
             }
@@ -245,6 +246,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     )
                     .await?;
                 } else {
+                    trace!(seq, ?role, "socket quit: Internal Connection Dropped");
                     break 'runner;
                 }
             }

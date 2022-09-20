@@ -43,6 +43,7 @@ pub struct ClientWebSocket {
     inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
     protocol: Option<HeaderValue>,
 }
+// TODO: Tor Support
 impl ClientWebSocket {
     pub async fn connect(url: String) -> ClientWebSocket {
         let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");

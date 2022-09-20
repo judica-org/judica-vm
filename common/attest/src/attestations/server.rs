@@ -12,6 +12,7 @@ use axum::{
 use std::{net::SocketAddr, sync::Arc};
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tower_http::trace::TraceLayer;
+use tracing::trace;
 pub mod generic_websocket;
 pub mod protocol;
 pub mod tungstenite_client_adaptor;
@@ -30,7 +31,8 @@ async fn handle_socket_symmetric_server(
     gss: GlobalSocketState,
     db: MsgDB,
 ) -> () {
-    protocol::run_protocol(g, socket, gss, db, Role::Server, None).await;
+    let res = protocol::run_protocol(g, socket, gss, db, Role::Server, None).await;
+    trace!(?res, role=?Role::Server,"socket quit");
 }
 pub async fn handle_authenticate(
     Extension(gss): Extension<GlobalSocketState>,
