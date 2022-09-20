@@ -577,10 +577,10 @@ mod test {
 
     use super::*;
     use attest_messages::{nonce::PrecomittedNonce, Header, Unsigned};
+    use game_player_messages::ParticipantAction;
     use mine_with_friends_board::{
         game::game_move::{GameMove, Heartbeat},
         sanitize::Unsanitized,
-        MoveEnvelope,
     };
     use sapio_bitcoin::{
         secp256k1::{rand, SecretKey},
@@ -588,7 +588,7 @@ mod test {
     };
     use std::collections::VecDeque;
 
-    fn make_random_moves() -> Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>> {
+    fn make_random_moves() -> Vec<VecDeque<Authenticated<GenericEnvelope<ParticipantAction>>>> {
         let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
 
         (0..10)
@@ -618,7 +618,7 @@ mod test {
                                 unsigned,
                                 checkpoints,
                             ),
-                            MoveEnvelope::new(
+                            ParticipantAction::new(
                                 Unsanitized(GameMove::Heartbeat(Heartbeat())),
                                 1,
                                 sent_time_ms as u64,
@@ -673,17 +673,19 @@ mod test {
         }
     }
     struct TestDBFetcher {
-        to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>>,
+        to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<ParticipantAction>>>>,
         schedule_batches_to_sequence: UnboundedSender<VecDeque<CanonicalEnvelopeHash>>,
         batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
         msg_cache: Arc<
-            Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<MoveEnvelope>>>>,
+            Mutex<
+                HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<ParticipantAction>>>,
+            >,
         >,
         new_msgs_in_cache: Arc<Notify>,
     }
     impl TestDBFetcher {
         pub fn new(
-            to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>>,
+            to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<ParticipantAction>>>>,
         ) -> Arc<Self> {
             let (schedule_batches_to_sequence, batches_to_sequence) = unbounded_channel();
             let batches_to_sequence = Arc::new(Mutex::new(batches_to_sequence));
@@ -759,7 +761,7 @@ mod test {
             }
         }
     }
-    impl DBFetcher<MoveEnvelope> for TestDBFetcher {
+    impl DBFetcher<ParticipantAction> for TestDBFetcher {
         fn batches_to_sequence(
             &self,
         ) -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>> {
@@ -768,8 +770,11 @@ mod test {
 
         fn msg_cache(
             &self,
-        ) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<MoveEnvelope>>>>>
-        {
+        ) -> Arc<
+            Mutex<
+                HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<ParticipantAction>>>,
+            >,
+        > {
             self.msg_cache.clone()
         }
 

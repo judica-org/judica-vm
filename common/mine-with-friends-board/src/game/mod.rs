@@ -11,7 +11,6 @@ use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::instances::powerplant::PlantType;
-
 use crate::nfts::instances::powerplant::PowerPlantPrices;
 use crate::nfts::instances::powerplant::PowerPlantProducer;
 use crate::nfts::sale::NFTSaleRegistry;

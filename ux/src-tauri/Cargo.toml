@@ -45,6 +45,9 @@ path = "../../common/attest-messages"
 [dependencies.game-host-messages]
 path = "../../common/game-host-messages"
 
+[dependencies.game-player-messages]
+path = "../../common/game-player-messages"
+
 [dependencies.game-sequencer]
 path = "../../common/game-sequencer"
 features = ["database_access"]

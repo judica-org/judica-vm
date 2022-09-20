@@ -1,14 +1,9 @@
 use crate::nfts::instances::powerplant::PlantType;
 use crate::nfts::NftPtr;
+use crate::tokens::token_swap::TradingPairID;
 use crate::util::Currency;
 use crate::{entity::EntityID, util::Price};
-
-use crate::sanitize;
-
-use crate::tokens::token_swap::TradingPairID;
-
-use super::super::MoveEnvelope;
-
+use crate::{sanitize, MoveEnvelope};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
