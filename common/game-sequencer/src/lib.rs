@@ -171,17 +171,21 @@ impl<M: AttestEnvelopable> OfflineSequencer<M> {
     pub fn directly_sequence(
         &mut self,
     ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, SequenceingError<Void>> {
-        self.directly_sequence_map(Ok::<Authenticated<GenericEnvelope<M>>, Void>)
+        self.directly_sequence_map(|a| {
+            Ok::<Option<Authenticated<GenericEnvelope<M>>>, Void>(Some(a))
+        })
     }
     pub fn directly_sequence_map<F, R, E>(&mut self, f: F) -> Result<Vec<R>, SequenceingError<E>>
     where
-        F: Fn(Authenticated<GenericEnvelope<M>>) -> Result<R, E>,
+        F: Fn(Authenticated<GenericEnvelope<M>>) -> Result<Option<R>, E>,
     {
         let mut v = vec![];
         for batch in &self.batches_to_sequence {
             for h in batch {
                 if let Some(e) = self.msg_cache.remove(h) {
-                    v.push(f(e)?);
+                    if let Some(r) = f(e)? {
+                        v.push(r);
+                    }
                 } else {
                     return Err(SequenceingError::MissingEnvelope);
                 }
@@ -248,7 +252,7 @@ where
     pub fn directly_sequence(
         self,
     ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, SequenceingError<()>> {
-        OfflineSequencer::try_from(self)?.directly_sequence_map(Ok)
+        OfflineSequencer::try_from(self)?.directly_sequence_map(|a| Ok(Some(a)))
     }
 }
 impl<M: AttestEnvelopable> DBFetcher<M> for OfflineDBFetcher<M> {
@@ -664,7 +668,7 @@ mod test {
             for envelope in batch {
                 if let Some((m, x)) = s.output_move().await {
                     let game_move = envelope.msg();
-                    assert_eq!(m, *game_move);
+                    assert_eq!(ParticipantAction::MoveEnvelope(m), *game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
                     unreachable!("Offline GenericSequencer did not sequence all messages")
@@ -796,7 +800,7 @@ mod test {
             for envelope in batch {
                 if let Some((m, x)) = s.output_move().await {
                     let game_move = envelope.msg();
-                    assert_eq!(m, *game_move);
+                    assert_eq!(ParticipantAction::MoveEnvelope(m), *game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
                     unreachable!("Online GenericSequencer did not sequence all messages")

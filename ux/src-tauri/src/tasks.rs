@@ -83,18 +83,13 @@ pub(crate) fn start_game(
         // TODO: Check which game the move is for?
         while let Some((game_move, s)) = sequencer.output_move().await {
             info!(move_ = ?game_move, "New Move Recieved");
-            match game_move {
-                ParticipantAction::Custom(j) => {}
-                ParticipantAction::MoveEnvelope(game_move) => {
-                    let mut game = g.lock().await;
+            let mut game = g.lock().await;
 
-                    if let Some(game) = game.as_mut() {
-                        game.board.play(game_move, s.to_hex());
-                        // TODO: Maybe notify less often?
-                        game.should_notify.notify_waiters();
-                        info!("NOTIFYING Waiters of New State");
-                    }
-                }
+            if let Some(game) = game.as_mut() {
+                game.board.play(game_move, s.to_hex());
+                // TODO: Maybe notify less often?
+                game.should_notify.notify_waiters();
+                info!("NOTIFYING Waiters of New State");
             }
         }
     })
