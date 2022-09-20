@@ -63,16 +63,10 @@ impl AppState {
     }
 }
 
-/// Traverses a Compiled object and outputs all ContinuationPoints
-// TODO: Do away with allocations?
-struct ContractContinuations<'a> {
-    remaining_objects: Vec<&'a Compiled>,
-    remainint_continuations: Option<Values<'a, SArc<EffectPath>, ContinuationPoint>>,
-}
-
 trait CompiledExt {
     fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a>;
 }
+// TODO: Do away with allocations?
 impl CompiledExt for Compiled {
     fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a> {
         Box::new(
