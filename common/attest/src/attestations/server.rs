@@ -17,9 +17,9 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tower_http::trace::TraceLayer;
 use tracing::{info, trace};
-pub mod tungstenite_client_adaptor;
 pub mod generic_websocket;
 pub mod protocol;
+pub mod tungstenite_client_adaptor;
 
 pub async fn get_newest_tip_handler(
     Extension(db): Extension<MsgDB>,
@@ -132,13 +132,12 @@ async fn handle_socket_symmetric_server(
     gss: GlobalSocketState,
     db: MsgDB,
 ) -> () {
-    protocol::run_protocol(g, socket, gss, db, Role::Server).await;
+    protocol::run_protocol(g, socket, gss, db, Role::Server, None).await;
 }
 pub async fn handle_authenticate(
     Extension(gss): Extension<GlobalSocketState>,
     Json(cookie): Json<[u8; 32]>,
 ) -> Result<(Response<()>, Json<()>), (StatusCode, &'static str)> {
-
     gss.add_a_cookie(cookie).await;
     Ok((
         Response::builder()

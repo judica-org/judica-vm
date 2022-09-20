@@ -1,4 +1,8 @@
-use crate::{attestations::client::AttestationClient, configuration::Config};
+use crate::{
+    attestations::{client::AttestationClient, server::protocol::GlobalSocketState},
+    configuration::Config,
+};
+use attest_database::connection::MsgDB;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -12,6 +16,8 @@ pub struct Globals {
     pub shutdown: AppShutdown,
     pub secp: Arc<Secp256k1<All>>,
     pub client: OnceCell<AttestationClient>,
+    pub socket_state: GlobalSocketState,
+    pub msg_db: MsgDB,
 }
 impl Globals {
     pub async fn get_client(self: &Arc<Self>) -> Result<AttestationClient, reqwest::Error> {
@@ -38,7 +44,7 @@ impl Globals {
                     bld = bld.proxy(proxy);
                 }
                 let inner_client = bld.build()?;
-                let client = AttestationClient::new(inner_client);
+                let client = AttestationClient::new(inner_client, self.clone());
                 Ok(client)
             })
             .await

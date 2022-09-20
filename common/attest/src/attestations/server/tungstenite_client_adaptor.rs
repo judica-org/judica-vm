@@ -44,7 +44,7 @@ pub struct ClientWebSocket {
     protocol: Option<HeaderValue>,
 }
 impl ClientWebSocket {
-    async fn connect(url: String) -> ClientWebSocket {
+    pub async fn connect(url: String) -> ClientWebSocket {
         let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
         ClientWebSocket {
             inner: ws_stream,

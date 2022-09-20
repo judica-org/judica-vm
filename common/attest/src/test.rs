@@ -1,5 +1,5 @@
 use crate::{
-    attestations::client::AttestationClient,
+    attestations::{client::AttestationClient, server::protocol::GlobalSocketState},
     configuration::{Config, PeerServicesTimers},
     configuration::{ControlConfig, PeerServiceConfig},
     control::{
@@ -15,7 +15,10 @@ use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
 use ruma_serde::CanonicalJsonValue;
-use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
+use sapio_bitcoin::{
+    secp256k1::{All, Secp256k1},
+    XOnlyPublicKey,
+};
 use std::{collections::BTreeSet, env::temp_dir, sync::Arc, time::Duration};
 use test_log::test;
 use tokio::spawn;
@@ -33,50 +36,29 @@ fn get_btc_config() -> BitcoinConfig {
         },
     }
 }
-async fn test_context<T, F>(nodes: u8, code: F)
+async fn test_context<T, F>(nodes: u8, secp: Arc<Secp256k1<All>>, code: F)
 where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
-    F: Fn(Vec<(u16, u16)>) -> T,
+    F: Fn(Vec<(u16, u16)>, Arc<Globals>) -> T,
 {
     let mut unord = FuturesUnordered::new();
     let mut quits = vec![];
     let mut ports = vec![];
-    let secp = Arc::new(Secp256k1::new());
     for test_id in 0..nodes {
-        let btc_config = get_btc_config();
-        let shutdown = AppShutdown::new();
-        quits.push(shutdown.clone());
-        let mut dir = temp_dir();
-        let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
-        use sapio_bitcoin::secp256k1::rand::Rng;
-        let bytes: [u8; 16] = rng.gen();
-        use sapio_bitcoin::hashes::hex::ToHex;
-        dir.push(format!("test-rust-{}", bytes.to_hex()));
-        tracing::debug!("Using tmpdir: {}", dir.display());
-        let dir = attest_util::ensure_dir(dir, None).await.unwrap();
-        let timer_override = PeerServicesTimers::scaled_default(0.001);
-        let config = Config {
-            bitcoin: btc_config.clone(),
-            subname: format!("subname-{}", test_id),
-            attestation_port: 12556 + test_id as u16,
-            tor: None,
-            control: ControlConfig {
-                port: 14556 + test_id as u16,
-            },
-            prefix: Some(dir),
-            peer_service: PeerServiceConfig { timer_override },
-            test_db: true,
-        };
+        let (shutdown, config) = create_test_config(&mut quits, test_id).await;
         ports.push((config.attestation_port, config.control.port));
         let task_one = spawn({
             let secp = secp.clone();
             async move {
+                let msg_db = config.setup_db().await?;
                 init_main(Arc::new(Globals {
                     config: Arc::new(config),
                     shutdown,
                     secp,
-                    client: Default::default()
+                    client: Default::default(),
+                    msg_db,
+                    socket_state: GlobalSocketState::default(),
                 }))
                 .await
             }
@@ -84,8 +66,19 @@ where
         unord.push(task_one);
     }
 
+    let (shutdown, config) = create_test_config(&mut quits, nodes + 1).await;
+    let msg_db = config.setup_db().await.unwrap();
+    let client_globals = Arc::new(Globals {
+        config: Arc::new(config),
+        shutdown,
+        secp,
+        client: Default::default(),
+        msg_db,
+        socket_state: GlobalSocketState::default(),
+    });
+
     let fail = tokio::select! {
-        _ = code(ports) => {
+        _ = code(ports, client_globals) => {
             tracing::debug!("Main Task Completed");
             None
         }
@@ -104,14 +97,44 @@ where
     }
 }
 
+async fn create_test_config(quits: &mut Vec<AppShutdown>, test_id: u8) -> (AppShutdown, Config) {
+    let btc_config = get_btc_config();
+    let shutdown = AppShutdown::new();
+    quits.push(shutdown.clone());
+    let mut dir = temp_dir();
+    let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
+    use sapio_bitcoin::secp256k1::rand::Rng;
+    let bytes: [u8; 16] = rng.gen();
+    use sapio_bitcoin::hashes::hex::ToHex;
+    dir.push(format!("test-rust-{}", bytes.to_hex()));
+    tracing::debug!("Using tmpdir: {}", dir.display());
+    let dir = attest_util::ensure_dir(dir, None).await.unwrap();
+    let timer_override = PeerServicesTimers::scaled_default(0.001);
+    let config = Config {
+        bitcoin: btc_config.clone(),
+        subname: format!("subname-{}", test_id),
+        attestation_port: 12556 + test_id as u16,
+        tor: None,
+        control: ControlConfig {
+            port: 14556 + test_id as u16,
+        },
+        prefix: Some(dir),
+        peer_service: PeerServiceConfig { timer_override },
+        test_db: true,
+    };
+    (shutdown, config)
+}
+
 #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
 async fn connect_and_test_nodes() {
-    const NODES: u8 = 5;
-    test_context(NODES, |ports| async move {
+    const NODES: u8 = 3;
+    let secp = Arc::new(Secp256k1::new());
+    test_context(NODES, secp.clone(), |ports, test_node| async move {
         tokio::time::sleep(Duration::from_millis(10)).await;
+
         // TODO: Guarantee all clients are started?
         let base = Client::new();
-        let client = AttestationClient::new(base.clone());
+        let client = AttestationClient::new(base.clone(), test_node);
         let control_client = ControlClient(base.clone());
         // Initial fetch should show no tips posessed
         loop {
@@ -121,11 +144,11 @@ async fn connect_and_test_nodes() {
             });
             let resp = join_all(it).await;
             let empty = (0..NODES).map(|_| Some(vec![])).collect::<Vec<_>>();
-            if resp.iter().any(Result::is_err) {
+            if resp.iter().any(Option::is_none) {
                 // Wait until all services are online
                 continue;
             }
-            assert_eq!(resp.into_iter().map(|r| r.ok()).collect::<Vec<_>>(), empty);
+            assert_eq!(resp.into_iter().collect::<Vec<_>>(), empty);
             break;
         }
         // Create a genesis envelope for each node
@@ -162,7 +185,7 @@ async fn connect_and_test_nodes() {
             debug!("Got {:?}", resp);
             assert_eq!(
                 resp.into_iter()
-                    .flat_map(|r| r.ok().unwrap())
+                    .flat_map(|r| r.unwrap())
                     .collect::<Vec<_>>(),
                 genesis_envelopes
             );
@@ -387,7 +410,7 @@ async fn check_synched(
         let resp = join_all(it).await;
         info!("Initial Check that all nodes know their own message");
         for (r, (port, _)) in resp.iter().zip(ports.iter()) {
-            let tips = r.as_ref().ok().unwrap();
+            let tips = r.as_ref().unwrap();
             let needle = nth_msg_per_port(*port, n);
             info!(?port, response = ?tips.iter().map(|t| t.msg()).collect::<Vec<_>>(), seeking = ?needle, "Node Got Response");
 
@@ -398,7 +421,7 @@ async fn check_synched(
         }
         if require_full {
             for r in resp {
-                let tips = r.ok().unwrap();
+                let tips = r.unwrap();
                 let mut msgs = tips
                     .into_iter()
                     .map(|m| m.msg().clone())

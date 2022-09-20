@@ -9,6 +9,8 @@ use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::mpsc::channel;
 use tokio::task::JoinHandle;
+
+use crate::attestations::server::protocol::GlobalSocketState;
 mod attestations;
 mod configuration;
 mod control;
@@ -33,11 +35,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             config
         }
     };
+    tracing::debug!("Opening DB");
+    let msg_db = config.setup_db().await?;
+    tracing::debug!("Database Connection Setup");
     let g = Arc::new(Globals {
         config,
         shutdown: AppShutdown::new(),
         secp: Default::default(),
-        client: Default::default()
+        client: Default::default(),
+        msg_db,
+        socket_state: GlobalSocketState::default(),
     });
     init_main(g).await
 }
@@ -52,15 +59,17 @@ async fn init_main(g: Arc<Globals>) -> Result<(), Box<dyn Error + Send + Sync>> 
         .run_cache_service()
         .ok_or("Checkpoint service already started")?;
     tracing::debug!("Checkpoint Service Started");
-    tracing::debug!("Opening DB");
-    let mdb = g.config.setup_db().await?;
-    tracing::debug!("Database Connection Setup");
-    let mut attestation_server = attestations::server::run(g.clone(), mdb.clone()).await;
+    let mut attestation_server = attestations::server::run(g.clone(), g.msg_db.clone()).await;
     let mut tor_service = tor::start(g.clone()).await?;
     let (tx_peer_status, rx_peer_status) = channel(1);
-    let mut fetching_client = peer_services::startup(g.clone(), mdb.clone(), rx_peer_status);
-    let mut control_server =
-        control::server::run(g.clone(), mdb.clone(), tx_peer_status, bitcoin_checkpoints).await;
+    let mut fetching_client = peer_services::startup(g.clone(), g.msg_db.clone(), rx_peer_status);
+    let mut control_server = control::server::run(
+        g.clone(),
+        g.msg_db.clone(),
+        tx_peer_status,
+        bitcoin_checkpoints,
+    )
+    .await;
 
     tracing::debug!("Starting Subservices");
     let mut skip = None;

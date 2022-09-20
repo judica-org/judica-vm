@@ -221,7 +221,10 @@ pub(crate) fn latest_tip_fetcher(
             );
             let _ = sp.enter();
             let (url, port) = &service;
-            let resp: Vec<Envelope> = client.get_latest_tips(url, *port).await?;
+            let resp: Vec<Envelope> = client
+                .get_latest_tips(url, *port)
+                .await
+                .ok_or("Latest Tips Not Received")?;
             envelopes_to_process.send((resp, NotifyOnDrop::empty()))?;
             g.config.peer_service.timer_override.tip_fetch_delay().await;
         }
@@ -244,8 +247,10 @@ pub(crate) fn missing_envelope_fetcher(
             info!(?service, "waiting for tips to fetch");
             if let Some(tips) = tips_to_resolve.recv().await {
                 info!(?service, n = tips.len(), "got tips to fetch");
-                let (resp, remove_inflight) =
-                    client.get_tips(Tips { tips }, url, *port, true).await?;
+                let (resp, remove_inflight) = client
+                    .get_tips(Tips { tips }, url, *port, true)
+                    .await
+                    .ok_or("Tips Not Fetched")?;
                 info!(?service, n = resp.len(), "got tips in response");
                 envelopes_to_process.send((resp, remove_inflight))?;
             } else {

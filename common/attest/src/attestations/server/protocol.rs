@@ -1,5 +1,6 @@
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
+use crate::attestations::client::ServiceUrl;
 use crate::control::query::Outcome;
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
@@ -21,6 +22,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::select;
+use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::protocol::Role;
@@ -85,6 +88,8 @@ pub enum AttestProtocolError {
     AlreadyRunning,
     SocketClosed,
     FailedToAuthenticate,
+    AlreadyConnected,
+    InvalidSetup,
 }
 
 unsafe impl Send for AttestProtocolError {}
@@ -173,7 +178,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     mut socket: W,
     gss: GlobalSocketState,
-) -> Result<W, AttestProtocolError> {
+) -> Result<(W, InternalRequest), AttestProtocolError> {
     if let Some(Ok(Message::Text(t))) = socket.t_recv().await {
         let s: ServiceID = serde_json::from_str(&t)?;
         let mut services = gss.services.lock().await;
@@ -221,7 +226,15 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
             if let Message::Binary(v) = msg {
                 if v[..] == r {
                     // Authenticated!
-                    Ok(socket)
+                    let (tx, rx) = unbounded_channel();
+                    if client
+                        .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
+                        .await
+                    {
+                        Ok((socket, rx))
+                    } else {
+                        Err(AttestProtocolError::AlreadyConnected)
+                    }
                 } else {
                     Err(AttestProtocolError::CookieMissMatch)
                 }
@@ -280,15 +293,21 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
         Err(AttestProtocolError::IncorrectMessage)
     }
 }
+type InternalRequest = UnboundedReceiver<(AttestRequest, oneshot::Sender<AttestResponse>)>;
 pub async fn handshake_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     socket: W,
     gss: GlobalSocketState,
     role: Role,
-) -> Result<W, AttestProtocolError> {
-    match role {
-        Role::Server => handshake_protocol_server(g, socket, gss).await,
-        Role::Client => handshake_protocol_client(g, socket, gss).await,
+    new_request: Option<InternalRequest>,
+) -> Result<(W, InternalRequest), AttestProtocolError> {
+    match (role, new_request) {
+        (Role::Server, None) => handshake_protocol_server(g, socket, gss).await,
+        (Role::Client, Some(r)) => Ok((handshake_protocol_client(g, socket, gss).await?, r)),
+        _ => {
+            warn!("Invalid Combo of Client/Server Role and Channel");
+            Err(AttestProtocolError::InvalidSetup)
+        }
     }
 }
 
@@ -298,8 +317,10 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     gss: GlobalSocketState,
     db: MsgDB,
     role: Role,
+    new_request: Option<UnboundedReceiver<(AttestRequest, oneshot::Sender<AttestResponse>)>>,
 ) -> Result<(), AttestProtocolError> {
-    let mut socket = handshake_protocol(g, socket, gss, role).await?;
+    let (mut socket, mut new_request) =
+        handshake_protocol(g, socket, gss, role, new_request).await?;
     let inflight_requests: BTreeMap<u64, ResponseCode> = Default::default();
     while let Some(msg) = socket.t_recv().await {
         match msg {

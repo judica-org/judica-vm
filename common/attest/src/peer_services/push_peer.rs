@@ -36,7 +36,8 @@ pub async fn push_to_peer(
                 // Get the tips this client claims to have
                 let tips: Vec<_> = client
                     .get_latest_tips(&url, port)
-                    .await?
+                    .await
+                    .ok_or("Failed to Fetch Latest Tips")?
                     .iter()
                     .flat_map(|e| e.self_authenticate(&g.secp))
                     .collect();
@@ -171,7 +172,8 @@ pub async fn push_to_peer(
                             &url,
                             port,
                         )
-                        .await?;
+                        .await
+                        .ok_or("Messages Failed To Post")?;
 
                     info!(
                         accepted = res.iter().filter(|s| s.success).count(),
