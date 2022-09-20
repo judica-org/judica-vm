@@ -29,7 +29,7 @@ fn new_cookie() -> [u8; 32] {
 pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     mut socket: W,
-    gss: GlobalSocketState,
+    gss: &mut GlobalSocketState,
 ) -> Result<(W, InternalRequest), AttestProtocolError> {
     if let Some(Ok(Message::Text(t))) = socket.t_recv().await {
         let s: ServiceID = serde_json::from_str(&t)?;
@@ -104,7 +104,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
 pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     mut socket: W,
-    gss: GlobalSocketState,
+    gss: &mut GlobalSocketState,
 ) -> Result<W, AttestProtocolError> {
     let me = if let Some(conf) = g.config.tor.as_ref() {
         conf.get_hostname()
@@ -154,7 +154,7 @@ pub(crate) type InternalRequest =
 pub async fn handshake_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     socket: W,
-    gss: GlobalSocketState,
+    gss: &mut GlobalSocketState,
     role: Role,
     new_request: Option<InternalRequest>,
 ) -> Result<(W, InternalRequest), AttestProtocolError> {
