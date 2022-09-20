@@ -1,6 +1,5 @@
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
-use crate::attestations::client::ServiceUrl;
 use crate::control::query::Outcome;
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
@@ -8,8 +7,6 @@ use attest_messages::Envelope;
 use axum::extract::ws::Message;
 use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::hashes::Hash;
-use sapio_bitcoin::secp256k1::rand;
-use sapio_bitcoin::secp256k1::rand::Rng;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use serde::Deserialize;
 use serde::Serialize;
@@ -20,9 +17,6 @@ use std::fmt::Display;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
-
-use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -69,7 +63,7 @@ impl AttestResponse {
             AttestResponse::PostResult(_) => 2,
         })
     }
-    pub(crate) fn to_protocol_and_log(self, seq: u64) -> Result<Message, serde_json::Error> {
+    pub(crate) fn into_protocol_and_log(self, seq: u64) -> Result<Message, serde_json::Error> {
         let msg = &AttestSocketProtocol::Response(seq, self);
         trace!(?msg, seq, "Sending Response");
         Ok(Message::Binary(serde_json::to_vec(msg)?))
@@ -130,14 +124,19 @@ impl Service {
     }
 }
 
+type Challenge = sha256::Hash;
+type Timeout = i64;
+type Secret = [u8; 32];
+type ChallengeResponse = (oneshot::Sender<Secret>, Timeout);
+
 #[derive(Clone, Default)]
 pub struct GlobalSocketState {
     services: ServiceDB,
-    cookies: Arc<Mutex<BTreeMap<sha256::Hash, (oneshot::Sender<[u8; 32]>, i64)>>>,
+    cookies: Arc<Mutex<BTreeMap<Challenge, ChallengeResponse>>>,
 }
 
 impl GlobalSocketState {
-    pub async fn expect_a_cookie(&self, cookie: sha256::Hash) -> oneshot::Receiver<[u8; 32]> {
+    pub async fn expect_a_cookie(&self, cookie: Challenge) -> oneshot::Receiver<[u8; 32]> {
         let mut cookiejar = self.cookies.lock().await;
         if cookiejar.len() > 100 {
             let stale = attest_util::now() - 1000 * 20;
@@ -155,7 +154,7 @@ impl GlobalSocketState {
             .or_insert_with(|| (tx, attest_util::now()));
         rx
     }
-    pub async fn add_a_cookie(&self, cookie: [u8; 32]) {
+    pub async fn add_a_cookie(&self, cookie: Secret) {
         let mut cookiejar = self.cookies.lock().await;
         if cookiejar.len() > 100 {
             let stale = attest_util::now() - 1000 * 20;
@@ -174,140 +173,7 @@ impl GlobalSocketState {
     }
 }
 
-pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
-    g: Arc<Globals>,
-    mut socket: W,
-    gss: GlobalSocketState,
-) -> Result<(W, InternalRequest), AttestProtocolError> {
-    if let Some(Ok(Message::Text(t))) = socket.t_recv().await {
-        let s: ServiceID = serde_json::from_str(&t)?;
-        let mut services = gss.services.lock().await;
-        let svc = services
-            .entry(s.clone())
-            .or_insert_with(|| {
-                Arc::new(Service {
-                    is_running: false.into(),
-                })
-            })
-            .clone();
-        drop(services);
-        if svc.already_running() {
-            return Err(AttestProtocolError::AlreadyRunning);
-        }
-        let r = new_cookie();
-        let client = g.get_client().await?;
-        let h = sha256::Hash::hash(&r[..]);
-        socket
-            .t_send(Message::Binary(h.into_inner().into()))
-            .await
-            .map_err(|_e| AttestProtocolError::SocketClosed)?;
-
-        if let Message::Binary(v) = socket
-            .t_recv()
-            .await
-            .ok_or(AttestProtocolError::SocketClosed)?
-            .map_err(|_| AttestProtocolError::SocketClosed)?
-        {
-            if !v.is_empty() {
-                return Err(AttestProtocolError::NonZeroSync);
-            }
-            // Ready to go!
-        } else {
-            return Err(AttestProtocolError::IncorrectMessage);
-        }
-
-        client
-            .authenticate(&r, &s.0, s.1)
-            .await
-            .map_err(|_| AttestProtocolError::FailedToAuthenticate)?;
-        if let Ok(Some(Ok(msg))) =
-            tokio::time::timeout(Duration::from_secs(10), socket.t_recv()).await
-        {
-            if let Message::Binary(v) = msg {
-                if v[..] == r {
-                    // Authenticated!
-                    let (tx, rx) = unbounded_channel();
-                    if client
-                        .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
-                        .await
-                    {
-                        Ok((socket, rx))
-                    } else {
-                        Err(AttestProtocolError::AlreadyConnected)
-                    }
-                } else {
-                    Err(AttestProtocolError::CookieMissMatch)
-                }
-            } else {
-                Err(AttestProtocolError::IncorrectMessage)
-            }
-        } else {
-            Err(AttestProtocolError::TimedOut)
-        }
-    } else {
-        Err(AttestProtocolError::IncorrectMessage)
-    }
-}
-
-pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
-    g: Arc<Globals>,
-    mut socket: W,
-    gss: GlobalSocketState,
-) -> Result<W, AttestProtocolError> {
-    let me = if let Some(conf) = g.config.tor.as_ref() {
-        conf.get_hostname()
-            .await
-            .map_err(|_| AttestProtocolError::HostnameUnknown)?
-    } else {
-        ("127.0.0.1".into(), g.config.attestation_port)
-    };
-    if socket
-        .t_send(Message::Text(serde_json::to_string(&me)?))
-        .await
-        .is_err()
-    {
-        socket.t_close().await.ok();
-        Err(AttestProtocolError::SocketClosed)
-    } else if let Some(Ok(Message::Binary(v))) = socket.t_recv().await {
-        if v.len() == 32 {
-            let cookie: [u8; 32] = v.try_into().unwrap();
-            let h = sha256::Hash::from_inner(cookie);
-            let expect = gss.expect_a_cookie(h).await;
-            socket.t_send(Message::Binary(vec![]));
-            let cookie = expect.await;
-            if let Ok(cookie) = cookie {
-                if socket.t_send(Message::Binary(cookie.into())).await.is_err() {
-                    Err(AttestProtocolError::SocketClosed)
-                } else {
-                    Ok(socket)
-                }
-            } else {
-                Err(AttestProtocolError::TimedOut)
-            }
-        } else {
-            Err(AttestProtocolError::IncorrectMessage)
-        }
-    } else {
-        Err(AttestProtocolError::IncorrectMessage)
-    }
-}
-type InternalRequest = UnboundedReceiver<(AttestRequest, oneshot::Sender<AttestResponse>)>;
-pub async fn handshake_protocol<W: WebSocketFunctionality>(
-    g: Arc<Globals>,
-    socket: W,
-    gss: GlobalSocketState,
-    role: Role,
-    new_request: Option<InternalRequest>,
-) -> Result<(W, InternalRequest), AttestProtocolError> {
-    match (role, new_request) {
-        (Role::Server, None) => handshake_protocol_server(g, socket, gss).await,
-        (Role::Client, Some(r)) => Ok((handshake_protocol_client(g, socket, gss).await?, r)),
-        _ => {
-            warn!("Invalid Combo of Client/Server Role and Channel");
-            Err(AttestProtocolError::InvalidSetup)
-        }
-    }
-}
+pub mod authentication_handshake;
 
 pub async fn run_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
@@ -317,7 +183,8 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     role: Role,
     new_request: Option<UnboundedReceiver<(AttestRequest, oneshot::Sender<AttestResponse>)>>,
 ) -> Result<(), AttestProtocolError> {
-    let (mut socket, _new_request) = handshake_protocol(g, socket, gss, role, new_request).await?;
+    let (mut socket, _new_request) =
+        authentication_handshake::handshake_protocol(g, socket, gss, role, new_request).await?;
     let inflight_requests: BTreeMap<u64, ResponseCode> = Default::default();
     while let Some(msg) = socket.t_recv().await {
         match msg {
@@ -337,7 +204,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                                     if socket
                                         .t_send(
                                             AttestResponse::LatestTips(v)
-                                                .to_protocol_and_log(seq)?,
+                                                .into_protocol_and_log(seq)?,
                                         )
                                         .await
                                         .is_err()
@@ -366,7 +233,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                                 if socket
                                     .t_send(
                                         AttestResponse::SpecificTips(all_tips)
-                                            .to_protocol_and_log(seq)?,
+                                            .into_protocol_and_log(seq)?,
                                     )
                                     .await
                                     .is_err()
@@ -419,7 +286,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                                 if socket
                                     .t_send(
                                         AttestResponse::PostResult(outcomes)
-                                            .to_protocol_and_log(seq)?,
+                                            .into_protocol_and_log(seq)?,
                                     )
                                     .await
                                     .is_err()
@@ -452,11 +319,4 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     }
     socket.t_close().await;
     Ok(())
-}
-
-fn new_cookie() -> [u8; 32] {
-    let mut rng = rand::thread_rng();
-    let r: [u8; 32] = rng.gen();
-    drop(rng);
-    r
 }

@@ -21,7 +21,6 @@ use sapio_bitcoin::{
 };
 use std::{collections::BTreeSet, env::temp_dir, sync::Arc, time::Duration};
 use test_log::test;
-use tokio::spawn;
 use tracing::{debug, info};
 const HOME: &str = "127.0.0.1";
 
