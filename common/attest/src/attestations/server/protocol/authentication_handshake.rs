@@ -31,29 +31,18 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
     mut socket: W,
     gss: &mut GlobalSocketState,
 ) -> Result<(W, InternalRequest), AttestProtocolError> {
+    let protocol = "handshake";
     if let Some(Ok(Message::Text(t))) = socket.t_recv().await {
         let s: ServiceID = serde_json::from_str(&t)?;
-        let mut services = gss.services.lock().await;
-        let svc = services
-            .entry(s.clone())
-            .or_insert_with(|| {
-                Arc::new(Service {
-                    is_running: false.into(),
-                })
-            })
-            .clone();
-        drop(services);
-        if svc.already_running() {
-            return Err(AttestProtocolError::AlreadyRunning);
-        }
         let r = new_cookie();
         let client = g.get_client().await?;
         let h = sha256::Hash::hash(&r[..]);
+
         socket
             .t_send(Message::Binary(h.into_inner().into()))
             .await
             .map_err(|_e| AttestProtocolError::SocketClosed)?;
-
+        trace!(protocol, role=?Role::Server, "Challenge Sent, awaiting Acknowledgement");
         if let Message::Binary(v) = socket
             .t_recv()
             .await
@@ -61,13 +50,17 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
             .map_err(|_| AttestProtocolError::SocketClosed)?
         {
             if !v.is_empty() {
+                trace!(protocol, role=?Role::Server, "Challenge Rejected (non zero ack)");
                 return Err(AttestProtocolError::NonZeroSync);
             }
+            trace!(protocol, role=?Role::Server, "Challenge Acknowledged");
             // Ready to go!
         } else {
+            trace!(protocol, role=?Role::Server, "Challenge Rejected (wrong message)");
             return Err(AttestProtocolError::IncorrectMessage);
         }
 
+        trace!(protocol, role=?Role::Server, "Sending Secret");
         client
             .authenticate(&r, &s.0, s.1)
             .await
@@ -136,7 +129,7 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
                 trace!(protocol, role=?Role::Client, ?me, "Confirmed Receipt of Challenge");
             }
             trace!(protocol, role=?Role::Client, ?me, "Waiting to Learn Secret");
-            let cookie = tokio::time::timeout(Duration::from_secs(2), expect).await;
+            let cookie = tokio::time::timeout(Duration::from_secs(10), expect).await;
             match cookie {
                 Ok(cookie) => {
                     if let Ok(cookie) = cookie {
@@ -148,7 +141,7 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
                             Ok(socket)
                         }
                     } else {
-                        trace!(protocol, role=?Role::Client, ?me, "Timed Out Learning Cookie");
+                        trace!(protocol, role=?Role::Client, ?me, "Cookie Channel Dropped");
                         Err(AttestProtocolError::TimedOut)
                     }
                 }

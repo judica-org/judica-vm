@@ -154,7 +154,6 @@ type ChallengeResponse = (oneshot::Sender<Secret>, Timeout);
 
 #[derive(Clone, Default)]
 pub struct GlobalSocketState {
-    services: ServiceDB,
     cookies: Arc<Mutex<BTreeMap<Challenge, ChallengeResponse>>>,
 }
 
@@ -181,10 +180,12 @@ impl GlobalSocketState {
     }
     pub async fn add_a_cookie(&self, cookie: Secret) {
         let k = sha256::Hash::hash(&cookie);
-        trace!(challenge =?k, secret = ?cookie, "Resolved Authentication Challenge");
+        trace!(protocol="handshake", challenge =?k, secret = ?cookie, "Resolved Authentication Challenge");
         let mut cookiejar = self.cookies.lock().await;
         if let Some(f) = cookiejar.remove(&k) {
-            f.0.send(cookie).ok();
+            if f.0.send(cookie).is_err() {
+                trace!(protocol="handshake", challenge =?k, secret = ?cookie, "Cookie Could Not Be Sent");
+            }
         }
     }
 }
