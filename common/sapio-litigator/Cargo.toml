@@ -16,8 +16,6 @@ bitcoincore-rpc-async = "4.0.1-alpha.1"
 ruma-serde = "0.6.0"
 
 
-
-
 [dependencies.bitcoin]
 package = "sapio-bitcoin"
 version = "0.28.0"
@@ -37,10 +35,6 @@ path = "../../submodule/sapio/ctv_emulators"
 version = "0.2.0"
 
 
-
-
-
-
 [dependencies.sapio-wasm-plugin]
 path = "../../submodule/sapio/plugins"
 version = "0.2.0"
@@ -54,4 +48,7 @@ path = "../event-log"
 
 [dependencies.attest-util]
 path = "../attest-util"
-features=["bitcoin"]
+features = ["bitcoin"]
+
+[dependencies.simps]
+path = "../simps"
