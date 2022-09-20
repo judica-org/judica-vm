@@ -1,8 +1,8 @@
 use super::{
     query::Tips,
     server::{
-        protocol::{self, AttestRequest, AttestSocketProtocol, GlobalSocketState},
-        tungstenite_client_adaptor::{self, ClientWebSocket},
+        protocol::{self, AttestRequest, GlobalSocketState},
+        tungstenite_client_adaptor::{self},
     },
 };
 use crate::{control::query::Outcome, globals::Globals};
@@ -72,7 +72,7 @@ impl AttestationClient {
     pub async fn conn_already_exists_or_create(&self, svc: &ServiceUrl, tx: ProtocolChan) -> bool {
         {
             let f = self.connections.read().await;
-            if let Some(s) = f.get(&svc) {
+            if let Some(s) = f.get(svc) {
                 if !s.is_closed() {
                     trace!(?svc, "Client Connection Found to be Open");
                     return true;
@@ -101,7 +101,7 @@ impl AttestationClient {
                 }
             })
             .or_insert_with(|| tx.clone());
-            return ret;
+            ret
         }
     }
     pub async fn get_conn(&self, svc: ServiceUrl) -> ProtocolChan {

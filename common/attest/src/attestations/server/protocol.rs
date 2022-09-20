@@ -21,7 +21,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::select;
+
 use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::oneshot;
@@ -141,7 +141,7 @@ impl GlobalSocketState {
         let mut cookiejar = self.cookies.lock().await;
         if cookiejar.len() > 100 {
             let stale = attest_util::now() - 1000 * 20;
-            cookiejar.retain(|k, x| x.1 > stale);
+            cookiejar.retain(|_k, x| x.1 > stale);
             if cookiejar.len() > 100 {
                 if let Some(k) = cookiejar.keys().cloned().next() {
                     cookiejar.remove(&k);
@@ -150,7 +150,7 @@ impl GlobalSocketState {
         }
         let (tx, rx) = oneshot::channel();
 
-        let e = cookiejar
+        let _e = cookiejar
             .entry(cookie)
             .or_insert_with(|| (tx, attest_util::now()));
         rx
@@ -159,7 +159,7 @@ impl GlobalSocketState {
         let mut cookiejar = self.cookies.lock().await;
         if cookiejar.len() > 100 {
             let stale = attest_util::now() - 1000 * 20;
-            cookiejar.retain(|k, x| x.1 > stale);
+            cookiejar.retain(|_k, x| x.1 > stale);
             if cookiejar.len() > 100 {
                 if let Some(k) = cookiejar.keys().cloned().next() {
                     cookiejar.remove(&k);
@@ -200,7 +200,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
         socket
             .t_send(Message::Binary(h.into_inner().into()))
             .await
-            .map_err(|e| AttestProtocolError::SocketClosed)?;
+            .map_err(|_e| AttestProtocolError::SocketClosed)?;
 
         if let Message::Binary(v) = socket
             .t_recv()
@@ -255,11 +255,9 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     gss: GlobalSocketState,
 ) -> Result<W, AttestProtocolError> {
     let me = if let Some(conf) = g.config.tor.as_ref() {
-        let h = conf
-            .get_hostname()
+        conf.get_hostname()
             .await
-            .map_err(|_| AttestProtocolError::HostnameUnknown)?;
-        h
+            .map_err(|_| AttestProtocolError::HostnameUnknown)?
     } else {
         ("127.0.0.1".into(), g.config.attestation_port)
     };
@@ -319,13 +317,12 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     role: Role,
     new_request: Option<UnboundedReceiver<(AttestRequest, oneshot::Sender<AttestResponse>)>>,
 ) -> Result<(), AttestProtocolError> {
-    let (mut socket, mut new_request) =
-        handshake_protocol(g, socket, gss, role, new_request).await?;
+    let (mut socket, _new_request) = handshake_protocol(g, socket, gss, role, new_request).await?;
     let inflight_requests: BTreeMap<u64, ResponseCode> = Default::default();
     while let Some(msg) = socket.t_recv().await {
         match msg {
             Ok(m) => match m {
-                Message::Text(t) => break,
+                Message::Text(_t) => break,
                 Message::Binary(b) => {
                     let a: AttestSocketProtocol = serde_json::from_slice(&b[..])?;
                     match a {
@@ -437,9 +434,9 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                                     break;
                                 }
                                 match r {
-                                    AttestResponse::LatestTips(tips) => todo!(),
-                                    AttestResponse::SpecificTips(tips) => todo!(),
-                                    AttestResponse::PostResult(outcomes) => todo!(),
+                                    AttestResponse::LatestTips(_tips) => todo!(),
+                                    AttestResponse::SpecificTips(_tips) => todo!(),
+                                    AttestResponse::PostResult(_outcomes) => todo!(),
                                 }
                             } else {
                                 break;
@@ -447,10 +444,10 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                         }
                     }
                 }
-                Message::Ping(p) | Message::Pong(p) => {}
-                Message::Close(c) => break,
+                Message::Ping(_p) | Message::Pong(_p) => {}
+                Message::Close(_c) => break,
             },
-            Err(e) => break,
+            Err(_e) => break,
         }
     }
     socket.t_close().await;

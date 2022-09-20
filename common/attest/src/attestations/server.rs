@@ -1,22 +1,21 @@
 use self::protocol::GlobalSocketState;
 
-use super::query::Tips;
-use crate::{control::query::Outcome, globals::Globals};
+use crate::globals::Globals;
 use attest_database::connection::MsgDB;
-use attest_messages::Envelope;
+
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
-    extract::{ws::WebSocket, ConnectInfo, WebSocketUpgrade},
+    extract::{ws::WebSocket, WebSocketUpgrade},
     http::Response,
     http::StatusCode,
     routing::{get, post},
     Extension, Json, Router,
 };
-use sapio_bitcoin::secp256k1::Secp256k1;
+
 use std::{net::SocketAddr, sync::Arc};
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tower_http::trace::TraceLayer;
-use tracing::{info, trace};
+
 pub mod generic_websocket;
 pub mod protocol;
 pub mod tungstenite_client_adaptor;
@@ -34,7 +33,7 @@ async fn handle_socket_symmetric_server(
     socket: WebSocket,
     gss: GlobalSocketState,
     db: MsgDB,
-) -> () {
+) {
     protocol::run_protocol(g, socket, gss, db, Role::Server, None).await;
 }
 pub async fn handle_authenticate(
