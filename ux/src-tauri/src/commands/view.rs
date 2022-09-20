@@ -22,8 +22,9 @@ pub(crate) async fn game_synchronizer_inner(
         // that the lifetime is 'static and we can successfully wait on it outside
         // the lock.
         let mut arc_cheat = None;
-        let (gamestring, wait_on, key, chat_log) = {
-            let game = s.inner().lock().await;
+        let signing_key: Option<_> = *signing_key.inner().lock().await;
+        let (gamestring, wait_on, key, chat_log, user_inventory) = {
+            let mut game = s.inner().lock().await;
             let s = game
                 .as_ref()
                 .map(|g| serde_json::to_string(&g.board).unwrap_or("null".into()))
@@ -34,7 +35,21 @@ pub(crate) async fn game_synchronizer_inner(
                 .as_ref()
                 .map(|g| g.board.get_ux_chat_log())
                 .unwrap_or_default();
-            (s, w, game.as_ref().map(|g| g.host_key), chat_log)
+            let user_inventory = game
+                .as_mut()
+                .map(|g| {
+                    g.board
+                        .get_ux_user_inventory(signing_key.unwrap().to_string())
+                })
+                .unwrap()
+                .unwrap();
+            (
+                s,
+                w,
+                game.as_ref().map(|g| g.host_key),
+                chat_log,
+                user_inventory,
+            )
         };
         let (appName, prefix, list_of_chains, user_keys) = {
             let l = d.inner().state.lock().await;
@@ -83,7 +98,7 @@ pub(crate) async fn game_synchronizer_inner(
 
         info!("Emitting State Updates");
         window.emit("available-sequencers", list_of_chains);
-        let signing_key: Option<_> = *signing_key.inner().lock().await;
+
         window.emit("chat-log", chat_log);
         window.emit("signing-key", signing_key);
         window.emit("host-key", key).unwrap();
@@ -93,6 +108,7 @@ pub(crate) async fn game_synchronizer_inner(
         window.emit("materials-price-data", raw_price_data).unwrap();
         window.emit("power-plants", power_plants).unwrap();
         window.emit("energy-exchange", listings.listings).unwrap();
+        window.emit("user-inventory", user_inventory).unwrap();
         if let Some(w) = wait_on {
             w.await;
         } else {

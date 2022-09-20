@@ -8,6 +8,7 @@ import RawMaterialsMarket from './raw-materials';
 import { tauri_host } from './tauri_host';
 import { Chat } from './chat/Chat';
 import { AppHeader } from './header/AppHeader';
+import { Inventory } from './inventory/inventory';
 
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
@@ -141,6 +142,7 @@ function App() {
         <WorkingGlobe></WorkingGlobe>
         {<EnergyExchange></EnergyExchange>}
         <RawMaterialsMarket></RawMaterialsMarket>
+        <Inventory></Inventory>
         <MoveForm></MoveForm>
         <Chat></Chat>
         {game_board && <GameBoard g={game_board}></GameBoard>}
