@@ -30,13 +30,14 @@ use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Notify;
+mod universe;
 
 #[derive(Serialize, Deserialize)]
-enum Event {
+pub enum Event {
     Initialization(CreateArgs<Value>),
     ExternalEvent(simps::Event),
     Rebind(OutPoint),
-    SyntheticPeriodicActions,
+    SyntheticPeriodicActions(i64),
 }
 
 impl ToOccurrence for Event {
@@ -139,6 +140,7 @@ impl Config {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
     do_main().await
 }
 
@@ -189,61 +191,32 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
         let evlog = evlog.clone();
         let new_synthetic_event = new_synthetic_event.clone();
         tokio::spawn(async move {
-            let mut last = None;
-            loop {
-                let wait_for_new_synth = {
-                    let accessor = evlog.get_accessor().await;
-                    let to_process = if let Some(last) = last {
-                        accessor.get_occurrences_for_group_after_id(evlog_group_id, last)
-                    } else {
-                        accessor.get_occurrences_for_group(evlog_group_id)
-                    }?;
-
-                    for (occurrence_id, occurrence) in to_process {
-                        let ev = Event::from_occurrence(occurrence)?;
-                        if tx.send(ev).await.is_err() {
-                            return Ok(());
-                        }
-                        last = Some(occurrence_id);
-                    }
-                    new_synthetic_event.notified()
-                };
-                tokio::select! {
-                    _ = wait_for_new_synth => {}
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => {}
-                }
-            }
+            universe::linearized::event_log_processor(
+                evlog,
+                evlog_group_id,
+                tx,
+                new_synthetic_event,
+            )
+            .await?;
             OK_T
         });
     }
-    let periodic_action_complete = Arc::new(Notify::new());
     {
-        let periodic_action_complete = periodic_action_complete.clone();
         let evlog = evlog.clone();
         tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_secs(30)).await;
-                // order is important here: wait registers to get the signal before
-                // tx.send enables the periodic call, guaranteeing it will see
-                // the corresponding wake up
-                //
-                // we do this so that we don't ever have more than one active Periodic Action
-                let wait = periodic_action_complete.notified();
-                {
-                    let accessor = evlog.get_accessor().await;
-                    let o: &dyn ToOccurrence = &Event::SyntheticPeriodicActions;
-                    accessor.insert_new_occurrence_now_from(evlog_group_id, o)?;
-                    new_synthetic_event.notify_one();
-                }
-                wait.await;
-            }
+            universe::extractors::time::time_event_extractor(
+                evlog,
+                evlog_group_id,
+                new_synthetic_event,
+            )
+            .await?;
             OK_T
         });
     }
     let mut state = AppState::Uninitialized;
     loop {
         match rx.recv().await {
-            Some(Event::SyntheticPeriodicActions) => {
+            Some(Event::SyntheticPeriodicActions(t)) => {
                 match &mut state {
                     AppState::Uninitialized => (),
                     AppState::Initialized {
@@ -280,8 +253,6 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-
-                periodic_action_complete.notify_waiters()
             }
             Some(Event::Initialization(x)) => {
                 if state.is_uninitialized() {
