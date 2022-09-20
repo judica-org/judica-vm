@@ -68,14 +68,22 @@ impl Drop for NotifyOnDrop {
         }
     }
 }
+pub enum OpenState {
+    AlreadyOpened,
+    NewlyOpened,
+}
 impl AttestationClient {
-    pub async fn conn_already_exists_or_create(&self, svc: &ServiceUrl, tx: ProtocolChan) -> bool {
+    pub async fn conn_already_exists_or_create(
+        &self,
+        svc: &ServiceUrl,
+        tx: ProtocolChan,
+    ) -> OpenState {
         {
             let f = self.connections.read().await;
             if let Some(s) = f.get(svc) {
                 if !s.is_closed() {
                     trace!(?svc, "Client Connection Found to be Open");
-                    return true;
+                    return OpenState::AlreadyOpened;
                 } else {
                     trace!(?svc, "Client Connection Found to be Closed");
                 }
@@ -87,7 +95,7 @@ impl AttestationClient {
         {
             let mut f = self.connections.write().await;
             let e = f.entry(svc.clone());
-            let mut ret = false;
+            let mut ret = OpenState::NewlyOpened;
             e.and_modify(|tx| {
                 if tx.is_closed() {
                     trace!(?svc, "Removing Closed Connection");
@@ -97,7 +105,7 @@ impl AttestationClient {
                         ?svc,
                         "Client Connection Found to be Opened by some other Thread"
                     );
-                    ret = true;
+                    ret = OpenState::AlreadyOpened;
                 }
             })
             .or_insert_with(|| tx.clone());

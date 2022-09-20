@@ -5,6 +5,7 @@ use super::AttestResponse;
 use super::GlobalSocketState;
 use super::Service;
 use super::ServiceID;
+use crate::attestations::client::OpenState;
 use crate::attestations::client::ServiceUrl;
 use crate::globals::Globals;
 use axum::extract::ws::Message;
@@ -74,7 +75,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
                 if challenge_response == challenge_secret.to_hex() {
                     // Authenticated!
                     let (tx, rx) = unbounded_channel();
-                    if !client
+                    if let OpenState::NewlyOpened = client
                         .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
                         .await
                     {
