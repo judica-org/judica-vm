@@ -60,6 +60,7 @@ pub struct Trade {
     pub pair: TradingPairID,
     pub amount_a: u128,
     pub amount_b: u128,
+    pub simulate: bool,
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

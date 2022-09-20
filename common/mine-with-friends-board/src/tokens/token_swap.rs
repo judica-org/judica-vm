@@ -8,6 +8,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::fmt::Display;
+use tracing::Instrument;
 
 /// Data for a single trading pair (e.g. Apples to Oranges tokens)
 ///
@@ -97,6 +99,23 @@ pub(crate) struct ConstantFunctionMarketMaker {
     pub(crate) markets: BTreeMap<TradingPairID, ConstantFunctionMarketMakerPair>,
 }
 
+#[derive(Debug, Serialize)]
+pub(crate) enum TradeError {
+    InvalidTrade(String),
+    InsufficientTokens(String),
+}
+
+impl Display for TradeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TradeError::InvalidTrade(msg) => write!(f, "Error: Invalid trade. {:?}", msg),
+            TradeError::InsufficientTokens(msg) => {
+                write!(f, "Error: Insufficient tokens to complete trade.{:?}", msg)
+            }
+        }
+    }
+}
+
 impl ConstantFunctionMarketMaker {
     // TODO: Better math in this whole module
 
@@ -173,7 +192,7 @@ impl ConstantFunctionMarketMaker {
         mut amount_b: u128,
         simulate: bool,
         CallContext { ref sender }: &CallContext,
-    ) -> Result<TradeOutcome, ()> {
+    ) -> Result<TradeOutcome, TradeError> {
         let unnormalized_id = id;
         id.normalize();
         if id != unnormalized_id {
@@ -181,7 +200,9 @@ impl ConstantFunctionMarketMaker {
         }
         // the zero is the one to be computed
         if !(amount_a == 0 || amount_b == 0) {
-            return;
+            return Err(TradeError::InvalidTrade(
+                "Both token amounts cannot be zero".into(),
+            ));
         }
         let id = ConstantFunctionMarketMakerPair::ensure(game, id);
         let mkt = &game.swap.markets[&id];
@@ -191,11 +212,15 @@ impl ConstantFunctionMarketMaker {
         if !(tokens[id.asset_a].balance_check(sender) >= amount_a
             && tokens[id.asset_b].balance_check(sender) >= amount_b)
         {
-            return;
+            return Err(TradeError::InsufficientTokens(
+                "Sender has insufficient tokens".into(),
+            ));
         }
 
         if !(amount_a <= mkt.amt_a(tokens) && amount_b <= mkt.amt_b(tokens)) {
-            return;
+            return Err(TradeError::InsufficientTokens(
+                "Market has insufficient tokens".into(),
+            ));
         }
 
         let (
@@ -223,7 +248,7 @@ impl ConstantFunctionMarketMaker {
                     let _ = tokens[id.asset_a].transfer(sender, &mkt.id, amount_a);
                     let _ = tokens[id.asset_b].transfer(&mkt.id, sender, new_amount_b);
                 }
-                (asset_b_name, amount_b, asset_a_name, new_amount_a)
+                (asset_b_name, new_amount_b, asset_a_name, amount_a)
             }
         };
         tokens[id.asset_a].end_transaction();
