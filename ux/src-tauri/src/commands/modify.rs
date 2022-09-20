@@ -90,7 +90,7 @@ pub(crate) async fn make_move_inner_inner(
             };
             match tip.msg() {
                 ParticipantAction::MoveEnvelope(m) => break m.sequence,
-                ParticipantAction::Custom(_) => {
+                ParticipantAction::PsbtSigningCoordination(_) | ParticipantAction::Custom(_) => {
                     if tip.header().ancestors().is_none() {
                         return Err("No MoveEnvelope Found");
                     }
