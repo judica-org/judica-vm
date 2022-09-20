@@ -100,13 +100,11 @@ impl Sanitizable for Trade {
             pair,
             amount_a,
             amount_b,
-            simulate,
         } = self;
         Ok(Self {
             pair: pair.sanitize(())?,
             amount_a,
             amount_b,
-            simulate,
         })
     }
 }

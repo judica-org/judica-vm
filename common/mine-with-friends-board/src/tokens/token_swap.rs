@@ -100,7 +100,7 @@ pub(crate) struct ConstantFunctionMarketMaker {
 }
 
 #[derive(Debug, Serialize)]
-pub(crate) enum TradeError {
+pub enum TradeError {
     InvalidTrade(String),
     InsufficientTokens(String),
 }

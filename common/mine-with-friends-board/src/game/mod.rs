@@ -33,6 +33,8 @@ use crate::tokens::instances::steel::Steel;
 use crate::tokens::instances::steel::SteelSmelter;
 use crate::tokens::token_swap;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::token_swap::TradeError;
+use crate::tokens::token_swap::TradeOutcome;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::token_swap::UXMaterialsPriceData;
 use crate::MoveEnvelope;
@@ -346,10 +348,9 @@ impl GameBoard {
                 pair,
                 amount_a,
                 amount_b,
-                simulate,
             }) => {
                 ConstantFunctionMarketMaker::do_trade(
-                    self, pair, amount_a, amount_b, simulate, &context,
+                    self, pair, amount_a, amount_b, false, &context,
                 );
             }
             GameMove::MintPowerPlant(MintPowerPlant {
@@ -604,6 +605,26 @@ impl GameBoard {
         // normalization step
         res.iter_mut().for_each(|(_, v)| v.0 /= total);
         res
+    }
+
+    pub fn simulate_trade(
+        game: &mut GameBoard,
+        pair: TradingPairID,
+        amount_a: u128,
+        amount_b: u128,
+        sender: EntityID,
+    ) -> Result<TradeOutcome, TradeError> {
+        match ConstantFunctionMarketMaker::do_trade(
+            game,
+            pair,
+            amount_a,
+            amount_b,
+            true,
+            &CallContext { sender },
+        ) {
+            Ok(outcome) => Ok(outcome),
+            Err(e) => Err(e),
+        }
     }
 }
 
