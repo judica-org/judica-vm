@@ -18,7 +18,7 @@ use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::protocol::Role;
-use tracing::warn;
+use tracing::{trace, warn};
 
 fn new_cookie() -> [u8; 32] {
     let mut rng = rand::thread_rng();
@@ -113,6 +113,7 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     } else {
         ("127.0.0.1".into(), g.config.attestation_port)
     };
+    trace!(?me, "Identifying Self to Peer");
     if socket
         .t_send(Message::Text(serde_json::to_string(&me)?))
         .await
@@ -125,7 +126,10 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
             let cookie: [u8; 32] = v.try_into().unwrap();
             let h = sha256::Hash::from_inner(cookie);
             let expect = gss.expect_a_cookie(h).await;
-            socket.t_send(Message::Binary(vec![]));
+            if socket.t_send(Message::Binary(vec![])).await.is_err() {
+                trace!("Failed to Confirm Receipt of Challenge");
+                return Err(AttestProtocolError::TimedOut);
+            }
             let cookie = expect.await;
             if let Ok(cookie) = cookie {
                 if socket.t_send(Message::Binary(cookie.into())).await.is_err() {
@@ -154,12 +158,16 @@ pub async fn handshake_protocol<W: WebSocketFunctionality>(
     role: Role,
     new_request: Option<InternalRequest>,
 ) -> Result<(W, InternalRequest), AttestProtocolError> {
-    match (role, new_request) {
+    let res = match (role, new_request) {
         (Role::Server, None) => handshake_protocol_server(g, socket, gss).await,
         (Role::Client, Some(r)) => Ok((handshake_protocol_client(g, socket, gss).await?, r)),
         _ => {
             warn!("Invalid Combo of Client/Server Role and Channel");
             Err(AttestProtocolError::InvalidSetup)
         }
+    };
+    if let Err(e) = &res {
+        tracing::trace!(error=?e, ?role, "Handshake Protocol Failed");
     }
+    res
 }
