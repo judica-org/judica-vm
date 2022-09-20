@@ -66,7 +66,7 @@ impl AttestRequest {
     pub(crate) fn into_protocol_and_log(self, seq: u64) -> Result<Message, serde_json::Error> {
         let msg = &AttestSocketProtocol::Request(seq, self);
         trace!(?msg, seq, "Sending Response");
-        Ok(Message::Binary(serde_json::to_vec(msg)?))
+        Ok(Message::Text(serde_json::to_string(msg)?))
     }
 }
 impl AttestResponse {
@@ -80,7 +80,7 @@ impl AttestResponse {
     pub(crate) fn into_protocol_and_log(self, seq: u64) -> Result<Message, serde_json::Error> {
         let msg = &AttestSocketProtocol::Response(seq, self);
         trace!(?msg, seq, "Sending Response");
-        Ok(Message::Binary(serde_json::to_vec(msg)?))
+        Ok(Message::Text(serde_json::to_string(msg)?))
     }
 }
 
@@ -287,9 +287,9 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
 ) -> Result<(), AttestProtocolError> {
     match msg {
         Message::Ping(_p) | Message::Pong(_p) => Ok(()),
-        Message::Close(_) | Message::Text(_) => Err(AttestProtocolError::IncorrectMessage),
-        Message::Binary(b) => {
-            let a: AttestSocketProtocol = serde_json::from_slice(&b[..])?;
+        Message::Close(_) | Message::Binary(_) => Err(AttestProtocolError::IncorrectMessage),
+        Message::Text(b) => {
+            let a: AttestSocketProtocol = serde_json::from_str(&b)?;
             match a {
                 AttestSocketProtocol::Request(seq, m) => match m {
                     AttestRequest::LatestTips => {
