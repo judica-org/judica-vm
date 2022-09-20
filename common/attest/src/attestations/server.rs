@@ -1,8 +1,6 @@
 use self::protocol::GlobalSocketState;
-
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
-
 use attest_util::{AbstractResult, INFER_UNIT};
 use axum::{
     extract::{ws::WebSocket, WebSocketUpgrade},
@@ -11,11 +9,9 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-
 use std::{net::SocketAddr, sync::Arc};
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tower_http::trace::TraceLayer;
-
 pub mod generic_websocket;
 pub mod protocol;
 pub mod tungstenite_client_adaptor;
@@ -33,7 +29,7 @@ async fn handle_socket_symmetric_server(
     socket: WebSocket,
     gss: GlobalSocketState,
     db: MsgDB,
-) {
+) -> () {
     protocol::run_protocol(g, socket, gss, db, Role::Server, None).await;
 }
 pub async fn handle_authenticate(
@@ -61,7 +57,7 @@ pub async fn run(g: Arc<Globals>, db: MsgDB) -> tokio::task::JoinHandle<Abstract
             .route("/authenticate", post(handle_authenticate))
             .layer(Extension(db))
             .layer(Extension(g.clone()))
-            .layer(Extension(GlobalSocketState::default()))
+            .layer(Extension(g.socket_state.clone()))
             .layer(TraceLayer::new_for_http());
 
         // run our app with hyper
