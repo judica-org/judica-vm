@@ -65,44 +65,25 @@ impl AppState {
 
 /// Traverses a Compiled object and outputs all ContinuationPoints
 // TODO: Do away with allocations?
-struct ContractContinuations<'a>(
-    Vec<&'a Compiled>,
-    Option<Values<'a, SArc<EffectPath>, ContinuationPoint>>,
-);
+struct ContractContinuations<'a> {
+    remaining_objects: Vec<&'a Compiled>,
+    remainint_continuations: Option<Values<'a, SArc<EffectPath>, ContinuationPoint>>,
+}
 
 trait CompiledExt {
-    fn continuation_points(&self) -> ContractContinuations;
+    fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a>;
 }
 impl CompiledExt for Compiled {
-    fn continuation_points(&self) -> ContractContinuations {
-        ContractContinuations(vec![], Some(self.continue_apis.values()))
-    }
-}
-impl<'a> Iterator for ContractContinuations<'a> {
-    type Item = &'a ContinuationPoint;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(ref mut value) = self.1 {
-            let next = value.next();
-            if next.is_some() {
-                next
-            } else {
-                if let Some(contract) = self.0.pop() {
-                    self.1 = Some(contract.continue_apis.values());
-                    self.0.extend(
-                        contract
-                            .suggested_txs
-                            .values()
-                            .chain(contract.ctv_to_tx.values())
-                            .flat_map(|t| t.outputs.iter())
-                            .map(|out| &out.contract),
-                    );
-                }
-                self.next()
-            }
-        } else {
-            None
-        }
+    fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a> {
+        Box::new(
+            self.continue_apis.values().chain(
+                self.suggested_txs
+                    .values()
+                    .chain(self.ctv_to_tx.values())
+                    .flat_map(|x| &x.outputs)
+                    .flat_map(|x| x.contract.continuation_points()),
+            ),
+        )
     }
 }
 
