@@ -171,53 +171,9 @@ impl ConstantFunctionMarketMaker {
         mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
+        simulate: bool,
         CallContext { ref sender }: &CallContext,
-    ) {
-        let unnormalized_id = id;
-        id.normalize();
-        if id != unnormalized_id {
-            std::mem::swap(&mut amount_a, &mut amount_b);
-        }
-        // the zero is the one to be computed
-        if !(amount_a == 0 || amount_b == 0) {
-            return;
-        }
-        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
-        let mkt = &game.swap.markets[&id];
-        let tokens: &mut TokenRegistry = &mut game.tokens;
-        tokens[id.asset_a].transaction();
-        tokens[id.asset_b].transaction();
-        if !(tokens[id.asset_a].balance_check(sender) >= amount_a
-            && tokens[id.asset_b].balance_check(sender) >= amount_b)
-        {
-            return;
-        }
-
-        if !(amount_a <= mkt.amt_a(tokens) && amount_b <= mkt.amt_b(tokens)) {
-            return;
-        }
-
-        if amount_a == 0 {
-            let new_amount_a = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
-            let _ = tokens[id.asset_b].transfer(sender, &mkt.id, amount_b);
-            let _ = tokens[id.asset_a].transfer(&mkt.id, sender, new_amount_a);
-        } else {
-            let new_amount_b = (mkt.amt_b(tokens) * amount_a) / mkt.amt_a(tokens);
-            let _ = tokens[id.asset_a].transfer(sender, &mkt.id, amount_a);
-            let _ = tokens[id.asset_b].transfer(&mkt.id, sender, new_amount_b);
-        }
-
-        tokens[id.asset_a].end_transaction();
-        tokens[id.asset_b].end_transaction();
-    }
-
-    pub(crate) fn simulate_trade(
-        game: &mut GameBoard,
-        mut id: TradingPairID,
-        mut amount_a: u128,
-        mut amount_b: u128,
-        CallContext { ref sender }: &CallContext,
-    ) -> Result<SimulateTradeOutcome, ()> {
+    ) -> Result<TradeOutcome, ()> {
         let unnormalized_id = id;
         id.normalize();
         if id != unnormalized_id {
@@ -255,18 +211,25 @@ impl ConstantFunctionMarketMaker {
             if amount_a == 0 {
                 // the amount player receives of a
                 let new_amount_a = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
-                // do not actually transfer, just return values.
+                if !simulate {
+                    let _ = tokens[id.asset_b].transfer(sender, &mkt.id, amount_b);
+                    let _ = tokens[id.asset_a].transfer(&mkt.id, sender, new_amount_a);
+                }
                 (asset_a_name, new_amount_a, asset_b_name, amount_b)
             } else {
                 // otherwise b is token being "purchased"
                 let new_amount_b = (mkt.amt_b(tokens) * amount_a) / mkt.amt_a(tokens);
+                if !simulate {
+                    let _ = tokens[id.asset_a].transfer(sender, &mkt.id, amount_a);
+                    let _ = tokens[id.asset_b].transfer(&mkt.id, sender, new_amount_b);
+                }
                 (asset_b_name, amount_b, asset_a_name, new_amount_a)
             }
         };
         tokens[id.asset_a].end_transaction();
         tokens[id.asset_b].end_transaction();
 
-        Ok(SimulateTradeOutcome {
+        Ok(TradeOutcome {
             trading_pair: id,
             asset_player_purchased,
             amount_player_purchased,
@@ -302,7 +265,7 @@ pub struct UXMaterialsPriceData {
 }
 
 #[derive(Serialize, Clone)]
-pub struct SimulateTradeOutcome {
+pub struct TradeOutcome {
     pub trading_pair: TradingPairID,
     pub asset_player_purchased: String,
     pub amount_player_purchased: u128,
