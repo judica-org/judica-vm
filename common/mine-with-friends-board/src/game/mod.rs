@@ -161,15 +161,27 @@ impl GameBoard {
         let mut plant_prices = HashMap::new();
         plant_prices.insert(
             PlantType::Solar,
-            Vec::from([(steel_token_id, 57), (silicon_token_id, 437)]),
+            Vec::from([
+                (steel_token_id, 57),
+                (silicon_token_id, 437),
+                (concrete_token_id, 62),
+            ]),
         );
         plant_prices.insert(
             PlantType::Hydro,
-            Vec::from([(steel_token_id, 247), (silicon_token_id, 96)]),
+            Vec::from([
+                (steel_token_id, 247),
+                (silicon_token_id, 96),
+                (concrete_token_id, 144),
+            ]),
         );
         plant_prices.insert(
             PlantType::Flare,
-            Vec::from([(steel_token_id, 76), (silicon_token_id, 84)]),
+            Vec::from([
+                (steel_token_id, 76),
+                (silicon_token_id, 84),
+                (concrete_token_id, 54),
+            ]),
         );
 
         let mut g = GameBoard {
