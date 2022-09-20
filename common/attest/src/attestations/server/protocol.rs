@@ -159,7 +159,7 @@ pub struct GlobalSocketState {
 
 impl GlobalSocketState {
     pub async fn expect_a_cookie(&self, challenge: Challenge) -> oneshot::Receiver<Secret> {
-        trace!(challenge = ?challenge, "New Authentication Challenge");
+        let (tx, rx) = oneshot::channel();
         let mut cookiejar = self.cookies.lock().await;
         if cookiejar.len() > 100 {
             trace!("Garbage Collecting Authentication Challenges");
@@ -171,21 +171,24 @@ impl GlobalSocketState {
                 }
             }
         }
-        let (tx, rx) = oneshot::channel();
 
-        let _e = cookiejar
-            .entry(challenge)
-            .or_insert_with(|| (tx, attest_util::now()));
+        trace!(challenge = ?challenge, "New Authentication Challenge");
+        let _e = cookiejar.insert(challenge, (tx, attest_util::now()));
         rx
     }
     pub async fn add_a_cookie(&self, cookie: Secret) {
         let k = sha256::Hash::hash(&cookie);
         trace!(protocol="handshake", challenge =?k, secret = ?cookie, "Resolved Authentication Challenge");
         let mut cookiejar = self.cookies.lock().await;
+        trace!(cookiejar=?cookiejar, looking_for=?k, "CookieJar");
         if let Some(f) = cookiejar.remove(&k) {
             if f.0.send(cookie).is_err() {
                 trace!(protocol="handshake", challenge =?k, secret = ?cookie, "Cookie Could Not Be Sent");
+            } else {
+                trace!(protocol="handshake", challenge =?k, secret = ?cookie, "Cookie Forwarded to Application");
             }
+        } else {
+            trace!(protocol="handshake", challenge =?k, secret = ?cookie, "Cookie Not Found");
         }
     }
 }
