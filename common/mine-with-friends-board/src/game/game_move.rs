@@ -32,6 +32,8 @@ pub enum GameMove {
     Chat(Chat),
     /// # Mint Power Plant NFT
     MintPowerPlant(MintPowerPlant),
+    /// # Purchase Materials, then Mint Power Plant NFT
+    SuperMintPowerPlant(MintPowerPlant),
 }
 
 // Convenience to marshall a move into a GameMove

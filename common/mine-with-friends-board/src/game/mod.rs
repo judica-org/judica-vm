@@ -366,6 +366,13 @@ impl GameBoard {
                     context.sender,
                 );
             }
+            GameMove::SuperMintPowerPlant(MintPowerPlant {
+                scale,
+                location,
+                plant_type,
+            }) => {
+                PowerPlantProducer::super_mint(self, scale, location, plant_type, context.sender);
+            }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,
                 limit_price,
@@ -625,6 +632,19 @@ impl GameBoard {
             Ok(outcome) => Ok(outcome),
             Err(e) => Err(e),
         }
+    }
+
+    pub fn get_power_plant_cost(
+        game: &mut GameBoard,
+        scale: u64,
+        location: (u64, u64),
+        plant_type: PlantType,
+        owner: EntityID,
+    ) -> Result<u128, ()> {
+        Ok(
+            PowerPlantProducer::estimate_materials_cost(game, scale, location, plant_type, owner)
+                .unwrap(),
+        )
     }
 }
 
