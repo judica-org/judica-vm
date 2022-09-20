@@ -60,6 +60,7 @@ where
         });
         if test_id == nodes {
             client_globals = Some(globals.clone());
+            ports.pop();
         }
         unord.push(init_main(globals));
     }
