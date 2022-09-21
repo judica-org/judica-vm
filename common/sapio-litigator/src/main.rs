@@ -2,7 +2,7 @@ use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_util::bitcoin::BitcoinConfig;
 use bitcoin::psbt::PartiallySignedTransaction;
-use bitcoin::{OutPoint, Transaction, Txid};
+use bitcoin::{OutPoint, Transaction, Txid, XOnlyPublicKey};
 use bitcoincore_rpc_async::Client;
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::connection::EventLog;
@@ -12,7 +12,7 @@ use ruma_serde::CanonicalJsonValue;
 use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::{CompilationError, Compiled};
-use sapio_base::effects::{EditableMapEffectDB, EffectPath, PathFragment};
+use sapio_base::effects::{EditableMapEffectDB, PathFragment};
 use sapio_base::serialization_helpers::SArc;
 use sapio_base::txindex::TxIndexLogger;
 use sapio_wasm_plugin::host::PluginHandle;
@@ -21,14 +21,15 @@ use sapio_wasm_plugin::CreateArgs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use simps::AutoBroadcast;
-use std::collections::btree_map::Values;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
+
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::spawn;
 use tokio::sync::Notify;
 mod universe;
 
@@ -36,6 +37,7 @@ mod universe;
 pub enum Event {
     Initialization(CreateArgs<Value>),
     ExternalEvent(simps::Event),
+    TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
 }
@@ -109,6 +111,7 @@ struct Config {
     app_instance: String,
     logfile: PathBuf,
     event_log: EventLogConfig,
+    oracle_key: XOnlyPublicKey,
 }
 
 #[derive(Deserialize)]
@@ -147,7 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Arc::new(Config::from_env()?);
     let evlog = config.get_event_log().await?;
-    let _db = config.get_db().await?;
+    let msg_db = config.get_db().await?;
     let _bitcoin = config.get_bitcoin_rpc().await?;
     let typ = "org";
     let org = "judica";
@@ -203,6 +206,7 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     }
     {
         let evlog = evlog.clone();
+        let new_synthetic_event = new_synthetic_event.clone();
         tokio::spawn(async move {
             universe::extractors::time::time_event_extractor(
                 evlog,
@@ -213,10 +217,24 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
             OK_T
         });
     }
+
+    {
+        let config = config.clone();
+        let evlog = evlog.clone();
+        let new_synthetic_event = new_synthetic_event.clone();
+        spawn(universe::extractors::sequencer::sequencer_extractor(
+            config.oracle_key,
+            msg_db,
+            evlog,
+            evlog_group_id,
+            new_synthetic_event,
+        ));
+    }
     let mut state = AppState::Uninitialized;
     loop {
         match rx.recv().await {
-            Some(Event::SyntheticPeriodicActions(t)) => {
+            Some(Event::TransactionFinalized(_s, _tx)) => {}
+            Some(Event::SyntheticPeriodicActions(_t)) => {
                 match &mut state {
                     AppState::Uninitialized => (),
                     AppState::Initialized {
