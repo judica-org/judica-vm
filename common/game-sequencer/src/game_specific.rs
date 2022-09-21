@@ -1,6 +1,5 @@
 use attest_messages::{Authenticated, GenericEnvelope};
 use game_player_messages::ParticipantAction;
-use attest_messages::{Authenticated, Envelope};
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
