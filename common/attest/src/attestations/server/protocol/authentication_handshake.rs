@@ -4,7 +4,7 @@ use super::AttestRequest;
 use super::AttestResponse;
 use super::GlobalSocketState;
 
-use super::ServiceID;
+use super::ServiceIDBuilder;
 use crate::attestations::client::OpenState;
 use crate::attestations::client::ServiceUrl;
 use crate::globals::Globals;
@@ -27,7 +27,6 @@ use tracing::{trace, warn};
 fn new_cookie() -> [u8; 32] {
     let mut rng = rand::thread_rng();
     let challenge_secret: [u8; 32] = rng.gen();
-    drop(rng);
     challenge_secret
 }
 pub trait MessageExt {
@@ -68,11 +67,12 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
         .ok_or(AttestProtocolError::SocketClosed)??
         .only_text("Expected Text Message to initiate protocol")?;
     {
-        let s: ServiceID = serde_json::from_str(&t)?;
+        let s: ServiceIDBuilder = serde_json::from_str(&t)?;
+        let s = ServiceUrl(Arc::new(s.0), s.1);
         let challenge_secret = new_cookie();
         let client = g.get_client().await?;
         if client
-            .conn_already_exists(&ServiceUrl(s.0.clone(), s.1))
+            .conn_already_exists(&s)
             .await
             .is_some()
         {

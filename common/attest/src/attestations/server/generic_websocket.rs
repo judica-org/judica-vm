@@ -1,19 +1,13 @@
+use super::tungstenite_client_adaptor::ClientWebSocket;
+use axum;
+use axum::extract::ws::Message;
 use axum::extract::ws::WebSocket;
-
 use futures::Future;
-
+use futures::Sink;
+use futures::Stream;
 use std::pin::Pin;
 
-use futures::Sink;
-
-use axum;
-
-use axum::extract::ws::Message;
-
-use futures::Stream;
-
-use super::tungstenite_client_adaptor::ClientWebSocket;
-
+type RecvOutput = Option<Result<Message, axum::Error>>;
 pub trait WebSocketFunctionality
 where
     Self: Stream<Item = Result<Message, axum::Error>>
@@ -24,9 +18,7 @@ where
     /// Receive another message.
     ///
     /// Returns `None` if the stream has closed.
-    fn t_recv<'a>(
-        &'a mut self,
-    ) -> Pin<Box<dyn Future<Output = Option<Result<Message, axum::Error>>> + Send + 'a>>;
+    fn t_recv<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = RecvOutput> + Send + 'a>>;
 
     /// Send a message.
     fn t_send<'a>(

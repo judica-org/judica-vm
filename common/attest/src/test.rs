@@ -1,5 +1,8 @@
 use crate::{
-    attestations::{client::AttestationClient, server::protocol::GlobalSocketState},
+    attestations::{
+        client::{AttestationClient, ServiceUrl},
+        server::protocol::GlobalSocketState,
+    },
     configuration::{Config, PeerServicesTimers},
     configuration::{ControlConfig, PeerServiceConfig},
     control::{
@@ -128,7 +131,11 @@ async fn connect_and_test_nodes() {
         loop {
             let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
-                async move { client.get_latest_tips(&HOME.into(), *port).await }
+                async move {
+                    client
+                        .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                        .await
+                }
             });
             let resp = join_all(it).await;
             let empty = (0..NODES).map(|_| Some(vec![])).collect::<Vec<_>>();
@@ -172,7 +179,11 @@ async fn connect_and_test_nodes() {
         {
             let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
-                async move { client.get_latest_tips(&HOME.into(), *port).await }
+                async move {
+                    client
+                        .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                        .await
+                }
             });
             let resp = join_all(it).await;
             debug!("Got {:?}", resp);
@@ -306,7 +317,11 @@ async fn get_all_tips(
 ) -> BTreeSet<CanonicalEnvelopeHash> {
     let it = ports.iter().map(|(port, _ctrl)| {
         let client = client.clone();
-        async move { client.get_latest_tips(&HOME.into(), *port).await }
+        async move {
+            client
+                .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                .await
+        }
     });
     let resp = join_all(it).await;
     resp.iter()
@@ -328,7 +343,11 @@ async fn test_envelope_inner_tips(
     // Attempt to check that the latest tips of all clients Envelopes are in sync
     let it = ports.iter().map(|(port, _ctrl)| {
         let client = client.clone();
-        async move { client.get_latest_tips(&HOME.into(), *port).await }
+        async move {
+            client
+                .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                .await
+        }
     });
     let resp = join_all(it).await;
 
@@ -407,7 +426,11 @@ async fn check_synched(
         );
         let it = ports.iter().map(|(port, _ctrl)| {
             let client = client.clone();
-            async move { client.get_latest_tips(&HOME.into(), *port).await }
+            async move {
+                client
+                    .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                    .await
+            }
         });
         let resp = join_all(it).await;
         info!("Initial Check that all nodes know their own message");

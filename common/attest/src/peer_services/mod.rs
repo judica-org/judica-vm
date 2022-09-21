@@ -7,7 +7,7 @@ use tokio::{
 use attest_util::INFER_UNIT;
 use tracing::{debug, info};
 
-use crate::attestations::client::AttestationClient;
+use crate::attestations::client::{AttestationClient, ServiceUrl};
 
 use super::*;
 
@@ -21,7 +21,7 @@ pub enum PeerType {
 pub struct Global;
 pub type TaskType = PeerType;
 
-pub type TaskID = (String, u16, TaskType, bool);
+pub type TaskID = (ServiceUrl, TaskType, bool);
 
 pub enum PeerQuery {
     RunningTasks(Sender<Vec<TaskID>>),
@@ -85,21 +85,12 @@ pub fn startup(
                 .into_iter()
                 .flat_map(|p| {
                     let mut v = [None, None];
+                    let service = ServiceUrl(p.service_url.into(), p.port);
                     if p.fetch_from {
-                        v[0] = Some((
-                            p.service_url.clone(),
-                            p.port,
-                            PeerType::Fetch,
-                            p.allow_unsolicited_tips,
-                        ))
+                        v[0] = Some((service.clone(), PeerType::Fetch, p.allow_unsolicited_tips))
                     }
                     if p.push_to {
-                        v[1] = Some((
-                            p.service_url,
-                            p.port,
-                            PeerType::Push,
-                            p.allow_unsolicited_tips,
-                        ))
+                        v[1] = Some((service, PeerType::Push, p.allow_unsolicited_tips))
                     }
                     v
                 })
@@ -132,28 +123,37 @@ pub fn startup(
             for task_id in create_services.into_iter() {
                 info!("Starting Task: {:?}", task_id);
                 let client = client.clone();
-                match task_id.2 {
+                match task_id.1 {
                     PeerType::Push => {
                         task_set.insert(
                             task_id.clone(),
-                            tokio::spawn(push_peer::push_to_peer(
-                                g.clone(),
-                                client,
-                                (task_id.0, task_id.1),
-                                db.clone(),
-                            )),
+                            tokio::spawn({
+                                let g = g.clone();
+                                let db = db.clone();
+                                async move {
+                                    push_peer::push_to_peer(g, client, &task_id.0, db).await
+                                }
+                            }),
                         );
                     }
                     PeerType::Fetch => {
                         task_set.insert(
                             task_id.clone(),
-                            tokio::spawn(fetch_peer::fetch_from_peer(
-                                g.clone(),
-                                client,
-                                (task_id.0, task_id.1),
-                                db.clone(),
-                                task_id.3,
-                            )),
+                            tokio::spawn({
+                                let g = g.clone();
+                                let db = 
+                                        db.clone();
+                                async move {
+                                    fetch_peer::fetch_from_peer(
+                                        g,
+                                        client,
+                                        &task_id.0,
+                                        db,
+                                        task_id.2,
+                                    )
+                                    .await
+                                }
+                            }),
                         );
                     }
                 }

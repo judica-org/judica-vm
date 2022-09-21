@@ -14,13 +14,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use std;
 use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::fmt::Display;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
-
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::protocol::Role;
@@ -94,7 +90,6 @@ pub enum AttestProtocolError {
     SocketError(axum::Error),
     HostnameUnknown,
     NonZeroSync,
-    IncorrectMessage(&'static str),
     IncorrectMessageOwned(String),
     CookieMissMatch,
     TimedOut,
@@ -136,21 +131,7 @@ impl From<serde_json::Error> for AttestProtocolError {
 
 impl std::error::Error for AttestProtocolError {}
 
-type ServiceID = (String, u16);
-type ServiceState = Arc<Service>;
-type ServiceDB = Arc<Mutex<HashMap<ServiceID, ServiceState>>>;
-struct Service {
-    is_running: AtomicBool,
-}
-
-impl Service {
-    fn already_running(&self) -> bool {
-        self.is_running
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-    }
-}
-
+type ServiceIDBuilder = (String, u16);
 type Challenge = sha256::Hash;
 type Timeout = i64;
 type Secret = [u8; 32];
@@ -220,7 +201,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     let mut inflight_requests: BTreeMap<u64, ResponseRouter> = Default::default();
     let mut seq = 0;
     let mut defecit = 0;
-    'runner: loop {
+    loop {
         seq += 1;
         trace!(seq, "waiting for request from peer or internal");
         tokio::select! {
@@ -254,12 +235,12 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     .await?;
                 } else {
                     trace!(seq, ?role, "socket quit: Internal Connection Dropped");
+                    socket.t_close().await.ok();
                     return Ok("Server Internally Dropped Request Connection");
                 }
             }
         }
     }
-    socket.t_close().await;
 }
 async fn handle_internal_request<W: WebSocketFunctionality>(
     defecit: &mut i64,

@@ -3,6 +3,7 @@ use crate::globals::Globals;
 use attest_database::connection::MsgDB;
 use attest_messages::CanonicalEnvelopeHash;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::Display,
@@ -29,8 +30,9 @@ pub struct AttestationClient {
     gss: GlobalSocketState,
 }
 
-#[derive(Eq, Hash, PartialEq, Clone)]
-pub struct ServiceUrl(pub String, pub u16);
+#[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize)]
+pub struct ServiceUrl(pub Arc<String>, pub u16);
+
 impl Display for ServiceUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ws://{}:{}/socket", self.0, self.1)
@@ -61,5 +63,4 @@ impl Drop for NotifyOnDrop {
 pub enum OpenState {
     Already,
     Newly,
-    Closed,
 }
