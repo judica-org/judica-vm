@@ -9,6 +9,7 @@ import { tauri_host } from './tauri_host';
 import { Chat } from './chat/Chat';
 import { AppHeader } from './header/AppHeader';
 import { Inventory } from './inventory/inventory';
+import DrawerAppBar from './menu-bar/MenuDrawer';
 
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
@@ -137,17 +138,26 @@ function App() {
 
   return (
     <div>
-      <AppHeader></AppHeader>
       <div className="App">
-        <WorkingGlobe></WorkingGlobe>
-        {<EnergyExchange></EnergyExchange>}
-        <RawMaterialsMarket></RawMaterialsMarket>
-        <Inventory></Inventory>
-        <MoveForm></MoveForm>
-        <Chat></Chat>
-        {game_board && <GameBoard g={game_board}></GameBoard>}
+        <DrawerAppBar></DrawerAppBar>
+        <div className="Content">
+          <Inventory></Inventory>
+          <div className="Assets">
+            <WorkingGlobe></WorkingGlobe>
+            <div className="Markets">
+              {<EnergyExchange></EnergyExchange>}
+              <RawMaterialsMarket></RawMaterialsMarket>
+            </div>
+          </div>
+          <div className="Interact">
+            <MoveForm></MoveForm>
+            <Chat></Chat>
+          </div>
+          {game_board && <GameBoard g={game_board}></GameBoard>}
+        </div>
       </div>
     </div>
+
   );
 }
 

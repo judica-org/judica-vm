@@ -1,14 +1,31 @@
 .App {
     text-align: center;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
+    /* grid-template-columns: 1fr 1fr; */
     height: 100%;
 }
 
+.Content {
+    display: flex;
+    flex-direction: column;
+}
+
+.Assets {
+    display: flex;
+    flex-direction: row;
+}
+
+.Interact {
+    display: flex;
+    flex-direction: row;
+}
+
+
 .MoveForm {
-    height: 100vh;
+    min-height: 20vh;
 }
 
 .MoveForm>form {
-    height: 100vh;
+    min-height: 20vh;
 }

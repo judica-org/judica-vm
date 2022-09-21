@@ -55,16 +55,16 @@ export default () => {
 
     return <div className='globe-container'>
         <Card>
-            <CardHeader title={'Map'}
-                subheader={'Current Energy Grid'}
+            <CardHeader title={'World Energy Grid'}
+                subheader={'Selected Location: 12,3463456, 46,23457345'}
             />
             <CardContent className={'content'} style={{
                 position: 'relative'
             }}>
                 <Globe
                     globeImageUrl={earth}
-                    width={500}
-                    height={500}
+                    width={600}
+                    height={600}
                     labelsData={power_plants}
                     labelText={'text'}
                     labelSize={2}

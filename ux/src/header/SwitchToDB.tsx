@@ -31,6 +31,7 @@ export function SwitchToDB() {
       <TextField label="FS Prefix" required={false} onChange={(ev) => set_db_prefix(ev.target.value)}></TextField>
       <TextField label="Name" required={true} onChange={(ev) => set_db_appname(ev.target.value)}></TextField>
       <Button type="submit"
+      variant="contained"
         onClick={handle_submit}
       >Switch DB</Button>
     </FormControl>

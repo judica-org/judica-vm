@@ -12,36 +12,35 @@ export type UserPowerPlant = PowerPlant & {
 
 export type UserInventory = {
   user_power_plants: UserPowerPlant[]
-  user_token_balances: [string, number][]
+  user_token_balances: (string | number)[][]
+}
+
+const user_inventory_stub = {
+  user_power_plants: [],
+  user_token_balances: [['Bitcoin', 400], ['Steel', 398], ['Silicon', 201], ['Concrete', 267]]
 }
 
 export const Inventory = () => {
   const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
 
   useEffect(() => {
-    const unlisten_user_inventory = appWindow.listen("user-inventory", (ev) => {
-      console.log(['user-inventory'], ev);
-      setUserInventory(ev.payload as UserInventory);
-    });
+    setUserInventory(user_inventory_stub);
+    // const unlisten_user_inventory = appWindow.listen("user-inventory", (ev) => {
+    //   console.log(['user-inventory'], ev);
+    //   setUserInventory(ev.payload as UserInventory);
+    // });
 
-    return () => {
-      (async () => {
-        (await unlisten_user_inventory)();
-      })();
-    }
+    // return () => {
+    //   (async () => {
+    //     (await unlisten_user_inventory)();
+    //   })();
+    // }
   }, [userInventory]);
 
   return (
     <div>
-      <div className='my-inventory-container'>
-        <Card className={'card'}>
-          <CardHeader
-            className={'root'}
-            title={'Inventory'}
-            subheader={'All assets owned'}
-          />
-          <CardContent className={'content'}>
-            <Typography variant='h4'>Power Plants</Typography>
+
+      {/* <Typography variant='h4'>Power Plants</Typography>
             <Table>
               <TableHead>
                 <TableRow>
@@ -68,30 +67,30 @@ export const Inventory = () => {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-            <Typography variant='h4'>Tokens</Typography>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Asset</TableCell>
-                  <TableCell align="right">Quantity</TableCell>
+            </Table> */}
+      <Table size="small" sx={{ borderTop: 1, borderBottom: 1 }}>
+        <TableHead>
+          <TableRow key="titles">
+            {/* make row headers */}
+            {userInventory?.user_token_balances && userInventory?.user_token_balances.map((token, index) => (
+              <TableCell variant="head">
+                {token[0]}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          <TableRow key="values">
+            {/* make cells */}
+            {userInventory?.user_token_balances && userInventory?.user_token_balances.map((token, index) => (
+              <TableCell component="td" scope="row">
+                {token[1]}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableBody>
+      </Table>
 
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {userInventory?.user_token_balances && userInventory?.user_token_balances.map((token, index) => (
-                  <TableRow key={index}>
-                    <TableCell component="th" scope="row">
-                      {token[0]}
-                    </TableCell>
-                    <TableCell align="right">{token[1]}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 };

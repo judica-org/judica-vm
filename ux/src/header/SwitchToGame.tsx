@@ -46,9 +46,9 @@ export function SwitchToGame() {
       <Select onChange={(ev) => set_which_game(ev.target.value as string)}>
         {options}
       </Select>
-      <Button type="submit"
+      <Button type="submit" variant="contained"
         onClick={handle_submit}
-      >Switch</Button>
+      >Switch Game</Button>
     </FormControl>
   </div>;
 }

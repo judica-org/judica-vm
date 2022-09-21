@@ -51,13 +51,13 @@ export const KeySelector = () => {
   })
 
   return <div>
-    <h4>Signing With: {signing_key}</h4>
+    <h6>Signing With: {signing_key}</h6>
     <FormControl >
       <Select label="Public Key" onChange={(ev) => set_selected_key(ev.target.value as string)}>
         <MenuItem value={""} selected={selected_key == null}>No Key</MenuItem>
         {key_options}
       </Select>
-      <Button type="submit" onClick={handle_submit}>Select This Key</Button>
+      <Button variant="contained" type="submit" onClick={handle_submit}>Select This Key</Button>
     </FormControl>
   </div>
 }
