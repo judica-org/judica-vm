@@ -18,7 +18,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::UnboundedReceiver;
+
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::protocol::Role;
@@ -204,7 +204,7 @@ pub const MAX_MESSAGE_DEFECIT: i64 = 10;
 
 pub async fn run_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    mut socket: W,
+    socket: W,
     mut gss: GlobalSocketState,
     mut db: MsgDB,
     role: Role,
@@ -282,10 +282,10 @@ async fn handle_internal_request<W: WebSocketFunctionality>(
 async fn handle_message_from_peer<W: WebSocketFunctionality>(
     defecit: &mut i64,
     socket: &mut W,
-    gss: &mut GlobalSocketState,
+    _gss: &mut GlobalSocketState,
     db: &mut MsgDB,
     inflight_requests: &mut BTreeMap<u64, ResponseRouter>,
-    role: Role,
+    _role: Role,
     msg: Message,
 ) -> Result<(), AttestProtocolError> {
     match msg {
@@ -318,7 +318,7 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
                         k.sender.send(r).ok();
                         Ok(())
                     } else {
-                        return Err(AttestProtocolError::UnrequestedResponse);
+                        Err(AttestProtocolError::UnrequestedResponse)
                     }
                 }
             }

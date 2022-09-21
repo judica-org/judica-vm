@@ -1,7 +1,4 @@
-use super::server::{
-    protocol::{self, GlobalSocketState},
-    tungstenite_client_adaptor::{self},
-};
+use super::server::protocol::{self, GlobalSocketState};
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
 use attest_messages::CanonicalEnvelopeHash;

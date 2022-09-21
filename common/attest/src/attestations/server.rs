@@ -30,7 +30,7 @@ async fn handle_socket_symmetric_server(
     socket: WebSocket,
     gss: GlobalSocketState,
     db: MsgDB,
-) -> () {
+) {
     let res = protocol::run_protocol(g, socket, gss, db, Role::Server, None).await;
     trace!(?res, role=?Role::Server,"socket quit");
 }

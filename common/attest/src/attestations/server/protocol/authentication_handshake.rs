@@ -3,7 +3,7 @@ use super::AttestProtocolError;
 use super::AttestRequest;
 use super::AttestResponse;
 use super::GlobalSocketState;
-use super::Service;
+
 use super::ServiceID;
 use crate::attestations::client::OpenState;
 use crate::attestations::client::ServiceUrl;
@@ -17,9 +17,9 @@ use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc::unbounded_channel;
+
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::UnboundedReceiver;
+
 use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing::{trace, warn};
@@ -33,7 +33,7 @@ fn new_cookie() -> [u8; 32] {
 pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     mut socket: W,
-    gss: &mut GlobalSocketState,
+    _gss: &mut GlobalSocketState,
 ) -> Result<(W, InternalRequest), AttestProtocolError> {
     let protocol = "handshake";
     if let Some(Ok(Message::Text(t))) = socket.t_recv().await {
