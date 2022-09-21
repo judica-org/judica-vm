@@ -66,10 +66,11 @@ pub async fn run(g: Arc<Globals>, db: MsgDB) -> tokio::task::JoinHandle<Abstract
         // `axum::Server` is a re-export of `hyper::Server`
         let addr = SocketAddr::from(([127, 0, 0, 1], g.config.attestation_port));
         tracing::debug!("Attestation Server Listening on {}", addr);
-        axum::Server::bind(&addr)
+        let s = axum::Server::bind(&addr)
             .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-            .await
-            .unwrap();
+            .await;
+        tracing::warn!("The HTTP Server Quit") ;
+        s.unwrap();
         INFER_UNIT
     })
 }

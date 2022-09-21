@@ -92,7 +92,8 @@ pub enum AttestProtocolError {
     SocketError(axum::Error),
     HostnameUnknown,
     NonZeroSync,
-    IncorrectMessage,
+    IncorrectMessage(&'static str),
+    IncorrectMessageOwned(String),
     CookieMissMatch,
     TimedOut,
     SocketClosed,
@@ -102,6 +103,7 @@ pub enum AttestProtocolError {
     DatabaseError,
     ResponseTypeIncorrect,
     UnrequestedResponse,
+    InvalidChallengeHashString,
 }
 
 unsafe impl Send for AttestProtocolError {}
@@ -291,7 +293,9 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
     match msg {
         Message::Ping(_p) | Message::Pong(_p) => Ok(()),
         Message::Close(_) => Ok(()),
-        Message::Binary(_) => Err(AttestProtocolError::IncorrectMessage),
+        Message::Binary(_) => Err(AttestProtocolError::IncorrectMessage(
+            "Expected Non Binary Message",
+        )),
         Message::Text(b) => {
             let a: AttestSocketProtocol = serde_json::from_str(&b)?;
             match a {

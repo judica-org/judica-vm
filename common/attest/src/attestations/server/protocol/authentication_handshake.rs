@@ -30,13 +30,44 @@ fn new_cookie() -> [u8; 32] {
     drop(rng);
     challenge_secret
 }
+trait MessageExt {
+    fn only_text(self, s: &str) -> Result<String, AttestProtocolError>;
+}
+impl MessageExt for Message {
+    fn only_text(self, s: &str) -> Result<String, AttestProtocolError> {
+        match self {
+            Message::Text(s) => Ok(s),
+            Message::Binary(_) => Err(AttestProtocolError::IncorrectMessageOwned(format!(
+                "Incorrect Message Type Binary, expected Text {}",
+                s
+            ))),
+            Message::Ping(_) => Err(AttestProtocolError::IncorrectMessageOwned(format!(
+                "Incorrect Message Type Ping, expected Text {}",
+                s
+            ))),
+            Message::Pong(_) => Err(AttestProtocolError::IncorrectMessageOwned(format!(
+                "Incorrect Message Type Pong, expected Text {}",
+                s
+            ))),
+            Message::Close(_) => Err(AttestProtocolError::IncorrectMessageOwned(format!(
+                "Incorrect Message Type Close, expected Text {}",
+                s
+            ))),
+        }
+    }
+}
 pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     mut socket: W,
     _gss: &mut GlobalSocketState,
 ) -> Result<(W, InternalRequest), AttestProtocolError> {
     let protocol = "handshake";
-    if let Some(Ok(Message::Text(t))) = socket.t_recv().await {
+    let t = socket
+        .t_recv()
+        .await
+        .ok_or(AttestProtocolError::SocketClosed)??
+        .only_text("Expected Text Message to initiate protocol")?;
+    {
         let s: ServiceID = serde_json::from_str(&t)?;
         let challenge_secret = new_cookie();
         let client = g.get_client().await?;
@@ -55,54 +86,45 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
             .await
             .map_err(|_e| AttestProtocolError::SocketClosed)?;
         trace!(protocol, role=?Role::Server, "Challenge Sent, awaiting Acknowledgement");
-        if let Message::Text(challenge_ack) = socket
+        let challenge_ack = socket
             .t_recv()
             .await
-            .ok_or(AttestProtocolError::SocketClosed)?
-            .map_err(|_| AttestProtocolError::SocketClosed)?
-        {
-            if !challenge_ack.is_empty() {
-                trace!(protocol, role=?Role::Server, "Challenge Rejected (non zero ack)");
-                return Err(AttestProtocolError::NonZeroSync);
-            }
-            trace!(protocol, role=?Role::Server, "Challenge Acknowledged");
-            // Ready to go!
-        } else {
-            trace!(protocol, role=?Role::Server, "Challenge Rejected (wrong message)");
-            return Err(AttestProtocolError::IncorrectMessage);
+            .ok_or(AttestProtocolError::SocketClosed)??
+            .only_text("for challenge ack")?;
+        if !challenge_ack.is_empty() {
+            trace!(protocol, role=?Role::Server, "Challenge Rejected (non zero ack)");
+            return Err(AttestProtocolError::NonZeroSync);
         }
+        trace!(protocol, role=?Role::Server, "Challenge Acknowledged");
+        // Ready to go!
 
         trace!(protocol, role=?Role::Server, "Sending Secret");
         client
             .authenticate(&challenge_secret, &s.0, s.1)
             .await
             .map_err(|_| AttestProtocolError::FailedToAuthenticate)?;
-        if let Ok(Some(Ok(msg))) =
-            tokio::time::timeout(Duration::from_secs(2), socket.t_recv()).await
-        {
-            if let Message::Text(challenge_response) = msg {
-                if challenge_response == challenge_secret.to_hex() {
-                    // Authenticated!
-                    let (tx, rx) = tokio::sync::mpsc::channel(100);
-                    if let (OpenState::Newly, _) = client
-                        .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
-                        .await
-                    {
-                        Ok((socket, rx))
-                    } else {
-                        Err(AttestProtocolError::AlreadyConnected)
-                    }
+        tokio::time::timeout(Duration::from_secs(2), socket.t_recv())
+            .await
+            .map_err(|_| AttestProtocolError::TimedOut)?
+            .ok_or(AttestProtocolError::SocketClosed)??
+            .only_text("for challenge_response")
+            .and_then(|c| {
+                if c == challenge_secret.to_hex() {
+                    Ok(())
                 } else {
                     Err(AttestProtocolError::CookieMissMatch)
                 }
-            } else {
-                Err(AttestProtocolError::IncorrectMessage)
-            }
+            })?;
+        // Authenticated!
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let new_conn = client
+            .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
+            .await;
+        if let (OpenState::Newly, _) = new_conn {
+            Ok((socket, rx))
         } else {
-            Err(AttestProtocolError::TimedOut)
+            Err(AttestProtocolError::AlreadyConnected)
         }
-    } else {
-        Err(AttestProtocolError::IncorrectMessage)
     }
 }
 
@@ -111,64 +133,54 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     mut socket: W,
     gss: &mut GlobalSocketState,
 ) -> Result<W, AttestProtocolError> {
-    let me = if let Some(conf) = g.config.tor.as_ref() {
-        conf.get_hostname()
-            .await
+    let me = if let Some(conf) = g.config.tor.as_ref().map(|conf| conf.get_hostname()) {
+        conf.await
             .map_err(|_| AttestProtocolError::HostnameUnknown)?
     } else {
         ("127.0.0.1".into(), g.config.attestation_port)
     };
+
     let protocol = "handshake";
     trace!(protocol, role=?Role::Client, ?me, "Identifying Self to Peer");
-    if socket
+    socket
         .t_send(Message::Text(serde_json::to_string(&me)?))
         .await
-        .is_err()
-    {
-        socket.t_close().await.ok();
-        Err(AttestProtocolError::SocketClosed)
-    } else if let Some(Ok(Message::Text(challenge_hash_string))) = socket.t_recv().await {
-        trace!(protocol, role=?Role::Client, ?me, "Claimed Identity of Self to Peer");
-        let challenge_hash = sha256::Hash::from_hex(&challenge_hash_string);
-        if let Ok(challenge_hash) = challenge_hash {
-            trace!(protocol, ?challenge_hash, role=?Role::Client, ?me, "Recieved Challenge");
-            let expect = gss.expect_a_cookie(challenge_hash).await;
-            if socket.t_send(Message::Text("".into())).await.is_err() {
-                trace!(protocol, role=?Role::Client, ?me, "Failed to confirm receipt of Challenge");
-                return Err(AttestProtocolError::TimedOut);
-            } else {
-                trace!(protocol, role=?Role::Client, ?me, "Confirmed Receipt of Challenge");
-            }
-            trace!(protocol, role=?Role::Client, ?me, "Waiting to Learn Secret");
-            let cookie = tokio::time::timeout(Duration::from_secs(10), expect).await;
-            match cookie {
-                Ok(cookie) => {
-                    if let Ok(cookie) = cookie {
-                        trace!(protocol, role=?Role::Client, ?me, "Secret Learned");
-                        trace!(protocol, role=?Role::Client, "Sending Cookie to Server");
-                        if socket.t_send(Message::Text(cookie.to_hex())).await.is_err() {
-                            Err(AttestProtocolError::SocketClosed)
-                        } else {
-                            Ok(socket)
-                        }
-                    } else {
-                        trace!(protocol, role=?Role::Client, ?me, "Cookie Channel Dropped");
-                        Err(AttestProtocolError::TimedOut)
-                    }
-                }
-                Err(_) => {
-                    trace!(protocol, role=?Role::Client, ?me, "Timed Out Learning Cookie");
-                    Err(AttestProtocolError::TimedOut)
-                }
-            }
-        } else {
-            Err(AttestProtocolError::IncorrectMessage)
-        }
-    } else {
-        Err(AttestProtocolError::IncorrectMessage)
-    }
-}
+        .map_err(|_| AttestProtocolError::SocketClosed)?;
+    let challenge_hash_string = socket
+        .t_recv()
+        .await
+        .ok_or(AttestProtocolError::SocketClosed)??
+        .only_text("for challenge hash type")?;
+    trace!(protocol, role=?Role::Client, ?me, "Claimed Identity of Self to Peer");
+    let challenge_hash = sha256::Hash::from_hex(&challenge_hash_string)
+        .map_err(|_| AttestProtocolError::InvalidChallengeHashString)?;
+    trace!(protocol, ?challenge_hash, role=?Role::Client, ?me, "Recieved Challenge");
+    let expect = gss.expect_a_cookie(challenge_hash).await;
+    socket.t_send(Message::Text("".into())).await.map_err(|_| {
+        trace!(protocol, role=?Role::Client, ?me, "Failed to confirm receipt of Challenge");
+        AttestProtocolError::TimedOut
+    })?;
+    trace!(protocol, role=?Role::Client, ?me, "Confirmed Receipt of Challenge");
+    trace!(protocol, role=?Role::Client, ?me, "Waiting to Learn Secret");
+    let cookie = tokio::time::timeout(Duration::from_secs(10), expect)
+        .await
+        .map_err(|_| {
+            trace!(protocol, role=?Role::Client, ?me, "Timed Out Learning Cookie");
+            AttestProtocolError::TimedOut
+        })?
+        .map_err(|_| {
+            trace!(protocol, role=?Role::Client, ?me, "Cookie Channel Dropped");
+            AttestProtocolError::TimedOut
+        })?;
 
+    trace!(protocol, role=?Role::Client, ?me, "Secret Learned");
+    trace!(protocol, role=?Role::Client, "Sending Cookie to Server");
+    socket
+        .t_send(Message::Text(cookie.to_hex()))
+        .await
+        .map_err(|_| AttestProtocolError::SocketClosed)?;
+    Ok(socket)
+}
 pub(crate) type InternalRequest = Receiver<(AttestRequest, oneshot::Sender<AttestResponse>)>;
 
 pub async fn handshake_protocol<W: WebSocketFunctionality>(
