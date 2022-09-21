@@ -76,7 +76,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
                 if challenge_response == challenge_secret.to_hex() {
                     // Authenticated!
                     let (tx, rx) = tokio::sync::mpsc::channel(100);
-                    if let (OpenState::NewlyOpened, _) = client
+                    if let (OpenState::Newly, _) = client
                         .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
                         .await
                     {
