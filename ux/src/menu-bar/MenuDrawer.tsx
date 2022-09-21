@@ -8,9 +8,10 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import Inventory from '../inventory/inventory';
 import { AppHeader } from '../header/AppHeader';
 import Close from '@mui/icons-material/Close';
+import { List, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
+import { Bolt, Handyman, Sell, Send, ShoppingCart } from '@mui/icons-material';
 
 interface Props {
   /**
@@ -20,20 +21,33 @@ interface Props {
   window?: () => Window;
 }
 
-const drawerWidth = '100vw';
-const navItems = ['Build', 'Buy', 'Sell'];
+const settingsDrawerWidth = '100vw';
+
 
 export default function DrawerAppBar(props: Props) {
   const { window } = props;
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [moveMenuOpen, setMoveMenuOpen] = React.useState(false);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
+  const toggleMoveDrawer =
+    (open: boolean) =>
+      (event: React.KeyboardEvent | React.MouseEvent) => {
+        if (
+          event.type === 'keydown' &&
+          ((event as React.KeyboardEvent).key === 'Tab' ||
+            (event as React.KeyboardEvent).key === 'Shift')
+        ) {
+          return;
+        }
+        setMoveMenuOpen(open);
+      };
+
   const drawer = (
     <Box sx={{ textAlign: 'center' }}>
-
       <Typography variant="h6" sx={{ my: 2 }}>
         <IconButton
           color="inherit"
@@ -50,6 +64,69 @@ export default function DrawerAppBar(props: Props) {
       <AppHeader></AppHeader>
     </Box>
   );
+
+  const moveList = () => (
+    <Box
+      sx={{ width: 250 }}
+      role="presentation"
+      onKeyDown={toggleMoveDrawer(false)}
+    >
+      <List>
+        <ListItem>
+          <IconButton
+            color="inherit"
+            aria-label="close drawer"
+            edge="start"
+            onClick={toggleMoveDrawer(false)}
+            sx={{ ml: 1 }}
+          >
+            <Close />
+          </IconButton>
+        </ListItem>
+      </List>
+      <Divider />
+      <List>
+      <ListItem>
+          <ListItemButton>
+            <ListItemIcon>
+              <Send />
+            </ListItemIcon>
+            <ListItemText primary={'Send Tokens'} />
+          </ListItemButton>
+        </ListItem>
+        {['Buy Materials or Hashboards', 'Sell Materials or Hashboards'].map((text, index) => (
+          <ListItem>
+            <ListItemButton>
+              <ListItemIcon>
+                {index === 0 ? <ShoppingCart /> : <Sell />}
+              </ListItemIcon>
+              <ListItemText primary={text} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+      <List>
+        {['Mint a Power Plant', 'SuperMint a Power Plant'].map((text, index) => (
+          <ListItem>
+            <ListItemButton>
+              <ListItemIcon>
+                {index === 0 ? <Handyman /> : <Bolt />}
+              </ListItemIcon>
+              <ListItemText primary={text} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+        <ListItem>
+          <ListItemButton>
+            <ListItemIcon>
+              <SettingsIcon />
+            </ListItemIcon>
+            <ListItemText primary={'Manage your Plower Plants'} />
+          </ListItemButton>
+        </ListItem>
+      </List>
+    </Box>
+  )
 
   const container = window !== undefined ? () => window().document.body : undefined;
 
@@ -71,14 +148,15 @@ export default function DrawerAppBar(props: Props) {
             component="div"
             sx={{ flexGrow: 1, display: { xs: 'none', sm: 'block' } }}
           >
-            Mine With Friends!
+            MINE WITH FRIENDS!
           </Typography>
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-            {navItems.map((item) => (
-              <Button key={item} sx={{ color: '#fff' }}>
-                {item}
-              </Button>
-            ))}
+            <Button key={"moves"} sx={{ color: '#fff' }} onClick={toggleMoveDrawer(true)}>
+              {'GAME MOVES'}
+            </Button>
+            <Drawer anchor='right' open={moveMenuOpen} onClose={toggleMoveDrawer(false)}>
+              {moveList()}
+            </Drawer>
           </Box>
         </Toolbar>
       </AppBar>
@@ -93,7 +171,7 @@ export default function DrawerAppBar(props: Props) {
             keepMounted: true, // Better open performance on mobile.
           }}
           sx={{
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: settingsDrawerWidth },
           }}
         >
           {drawer}
