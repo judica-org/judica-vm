@@ -2,6 +2,8 @@ use self::authentication_handshake::MessageExt;
 
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
+use crate::attestations::client::AnySender;
+use crate::attestations::client::ProtocolReceiver;
 use crate::control::query::Outcome;
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
@@ -38,17 +40,52 @@ pub struct AuthenticationCookie {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum AttestRequest {
-    LatestTips,
-    SpecificTips(Tips),
-    Post(Vec<Envelope>),
+pub struct Post {
+    pub(crate) envelopes: Vec<Envelope>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct LatestTips {}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SpecificTips {
+    pub tips: Tips,
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub enum AttestRequest {
+    LatestTips(LatestTips),
+    SpecificTips(SpecificTips),
+    Post(Post),
+}
+
+impl From<LatestTips> for AttestRequest {
+    fn from(l: LatestTips) -> Self {
+        AttestRequest::LatestTips(l)
+    }
+}
+impl From<Post> for AttestRequest {
+    fn from(l: Post) -> Self {
+        AttestRequest::Post(l)
+    }
+}
+impl From<SpecificTips> for AttestRequest {
+    fn from(l: SpecificTips) -> Self {
+        AttestRequest::SpecificTips(l)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LatestTipsResponse(pub Vec<Envelope>);
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SpecificTipsResponse(pub Vec<Envelope>);
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PostResponse(pub Vec<Outcome>);
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum AttestResponse {
-    LatestTips(Vec<Envelope>),
-    SpecificTips(Vec<Envelope>),
-    PostResult(Vec<Outcome>),
+    LatestTips(LatestTipsResponse),
+    SpecificTips(SpecificTipsResponse),
+    Post(PostResponse),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -57,7 +94,7 @@ pub struct ResponseCode(u64);
 impl AttestRequest {
     pub(crate) fn response_code_of(&self) -> ResponseCode {
         ResponseCode(match self {
-            AttestRequest::LatestTips => 0,
+            AttestRequest::LatestTips(_) => 0,
             AttestRequest::SpecificTips(_) => 1,
             AttestRequest::Post(_) => 2,
         })
@@ -73,7 +110,7 @@ impl AttestResponse {
         ResponseCode(match self {
             AttestResponse::LatestTips(_) => 0,
             AttestResponse::SpecificTips(_) => 1,
-            AttestResponse::PostResult(_) => 2,
+            AttestResponse::Post(_) => 2,
         })
     }
     pub(crate) fn into_protocol_and_log(self, seq: u64) -> Result<Message, serde_json::Error> {
@@ -182,7 +219,7 @@ pub mod authentication_handshake;
 
 struct ResponseRouter {
     code: ResponseCode,
-    sender: oneshot::Sender<AttestResponse>,
+    sender: AnySender,
 }
 // Only allow 10 outstanding messages
 pub const MAX_MESSAGE_DEFECIT: i64 = 10;
@@ -193,11 +230,17 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     mut gss: GlobalSocketState,
     mut db: MsgDB,
     role: Role,
-    new_request: Option<Receiver<(AttestRequest, oneshot::Sender<AttestResponse>)>>,
+    new_request: Option<ProtocolReceiver>,
 ) -> Result<&'static str, AttestProtocolError> {
-    let (mut socket, mut new_request) =
-        authentication_handshake::handshake_protocol(g, socket, &mut gss, role, new_request)
-            .await?;
+    let (
+        mut socket,
+        ProtocolReceiver {
+            mut latest_tips,
+            mut specific_tips,
+            mut post,
+        },
+    ) = authentication_handshake::handshake_protocol(g, socket, &mut gss, role, new_request)
+        .await?;
     let mut inflight_requests: BTreeMap<u64, ResponseRouter> = Default::default();
     let mut seq = 0;
     let mut defecit = 0;
@@ -222,40 +265,68 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     return Ok("Peer Disconnected from us");
                 }
             }
-            m = new_request.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
-                if let Some((request, response_chan)) = m {
-                    handle_internal_request(
-                        &mut defecit,
-                        &mut socket,
-                        &mut inflight_requests,
-                        seq,
-                        request,
-                        response_chan,
-                    )
-                    .await?;
-                } else {
-                    trace!(seq, ?role, "socket quit: Internal Connection Dropped");
-                    socket.t_close().await.ok();
-                    return Ok("Server Internally Dropped Request Connection");
-                }
+            Some((request, chan)) = post.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
+                handle_internal_request(
+                    &mut defecit,
+                    &mut socket,
+                    &mut inflight_requests,
+                    seq,
+                    request,
+                    chan,
+                )
+                .await?;
+            }
+            Some((request, chan)) = specific_tips.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
+                handle_internal_request(
+                    &mut defecit,
+                    &mut socket,
+                    &mut inflight_requests,
+                    seq,
+                    request,
+                    chan,
+                )
+                .await?;
+            }
+            Some((request, chan)) = latest_tips.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
+                handle_internal_request(
+                    &mut defecit,
+                    &mut socket,
+                    &mut inflight_requests,
+                    seq,
+                    request,
+                    chan,
+                )
+                .await?;
+            }
+            else => {
+                trace!(seq, ?role, "socket quit: Internal Connection Dropped");
+                socket.t_close().await.ok();
+                return Ok("Exiting...");
             }
         }
     }
 }
-async fn handle_internal_request<W: WebSocketFunctionality>(
+async fn handle_internal_request<W, IChan, IReq>(
     defecit: &mut i64,
     socket: &mut W,
     inflight_requests: &mut BTreeMap<u64, ResponseRouter>,
     seq: u64,
-    msg: AttestRequest,
-    response_chan: oneshot::Sender<AttestResponse>,
-) -> Result<(), AttestProtocolError> {
+    msg: IReq,
+    response_chan: IChan,
+) -> Result<(), AttestProtocolError>
+where
+    W: WebSocketFunctionality,
+    IChan: Into<AnySender>,
+    IReq: Into<AttestRequest>,
+    W: WebSocketFunctionality,
+{
+    let msg = msg.into();
     trace!(code=?msg.response_code_of(), seq, "new internal request");
     inflight_requests.insert(
         seq,
         ResponseRouter {
             code: msg.response_code_of(),
-            sender: response_chan,
+            sender: response_chan.into(),
         },
     );
     *defecit += 1;
@@ -280,11 +351,15 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
         AttestSocketProtocol::Request(seq, m) => {
             trace!(request=?m, seq, "Processing Request...");
             match m {
-                AttestRequest::LatestTips => fetch_latest_tips(db, socket, seq).await,
-                AttestRequest::SpecificTips(tips) => {
+                AttestRequest::LatestTips(LatestTips {}) => {
+                    fetch_latest_tips(db, socket, seq).await
+                }
+                AttestRequest::SpecificTips(SpecificTips { tips }) => {
                     fetch_specific_tips(tips, db, socket, seq).await
                 }
-                AttestRequest::Post(envelopes) => post_envelope(envelopes, db, socket, seq).await,
+                AttestRequest::Post(Post { envelopes }) => {
+                    post_envelope(envelopes, db, socket, seq).await
+                }
             }
         }
         AttestSocketProtocol::Response(seq, r) => {
@@ -295,14 +370,19 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
                     return Err(AttestProtocolError::ResponseTypeIncorrect);
                 }
                 // we don't care if the sender dropped
-                match k.sender.send(r) {
-                    Ok(_) => {
-                        trace!("Successfully sent response to oneshot::reciever")
-                    }
-                    Err(_) => {
-                        trace!("Did not send response to oneshot::reciever, closed")
+                match (k.sender, r) {
+                    (AnySender::LatestTips(s), AttestResponse::LatestTips(m)) => s.send(m).ok(),
+                    (AnySender::Post(s), AttestResponse::Post(m)) => s.send(m).ok(),
+                    (AnySender::SpecificTips(s), AttestResponse::SpecificTips(m)) => s.send(m).ok(),
+                    _ => {
+                        warn!("Message Mismatch");
+                        return Err(AttestProtocolError::ResponseTypeIncorrect);
                     }
                 }
+                .map_or_else(
+                    || trace!("Did not send response to oneshot::reciever, closed"),
+                    |_| trace!("Successfully sent response to oneshot::reciever"),
+                );
                 Ok(())
             } else {
                 Err(AttestProtocolError::UnrequestedResponse)
@@ -355,7 +435,7 @@ where
         }
     }
     if socket
-        .t_send(AttestResponse::PostResult(outcomes).into_protocol_and_log(seq)?)
+        .t_send(AttestResponse::Post(PostResponse(outcomes)).into_protocol_and_log(seq)?)
         .await
         .is_err()
     {
@@ -387,7 +467,10 @@ where
         }
     };
     if socket
-        .t_send(AttestResponse::SpecificTips(all_tips).into_protocol_and_log(seq)?)
+        .t_send(
+            AttestResponse::SpecificTips(SpecificTipsResponse(all_tips))
+                .into_protocol_and_log(seq)?,
+        )
         .await
         .is_err()
     {
@@ -410,7 +493,7 @@ where
         handle.get_tips_for_all_users()
     };
     if let Ok(v) = r {
-        let msg = AttestResponse::LatestTips(v).into_protocol_and_log(seq)?;
+        let msg = AttestResponse::LatestTips(LatestTipsResponse(v)).into_protocol_and_log(seq)?;
         if socket.t_send(msg).await.is_err() {
             trace!(seq, "peer rejected message");
             Err(AttestProtocolError::SocketClosed)

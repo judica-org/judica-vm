@@ -4,6 +4,7 @@ use super::AttestationClient;
 use super::OpenState;
 use super::ProtocolChan;
 use super::ServiceUrl;
+use super::new_protocol_chan;
 use crate::globals::Globals;
 use reqwest::Client;
 use std::sync::Arc;
@@ -57,7 +58,7 @@ impl AttestationClient {
         }
     }
     pub async fn get_conn(&self, svc: &ServiceUrl) -> ProtocolChan {
-        let (tx, rx) = channel(100);
+        let (tx, rx) = new_protocol_chan(100);
         let (s, tx) = self.conn_already_exists_or_create(&svc, tx).await;
         let svc_url = svc.to_string();
         if let OpenState::Newly = s {

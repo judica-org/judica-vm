@@ -5,7 +5,9 @@ use super::AttestResponse;
 use super::GlobalSocketState;
 
 use super::ServiceIDBuilder;
+use crate::attestations::client::new_protocol_chan;
 use crate::attestations::client::OpenState;
+use crate::attestations::client::ProtocolReceiver;
 use crate::attestations::client::ServiceUrl;
 use crate::globals::Globals;
 use axum::extract::ws::Message;
@@ -59,7 +61,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     mut socket: W,
     _gss: &mut GlobalSocketState,
-) -> Result<(W, InternalRequest), AttestProtocolError> {
+) -> Result<(W, ProtocolReceiver), AttestProtocolError> {
     let protocol = "handshake";
     let t = socket
         .t_recv()
@@ -71,11 +73,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
         let s = ServiceUrl(Arc::new(s.0), s.1);
         let challenge_secret = new_cookie();
         let client = g.get_client().await?;
-        if client
-            .conn_already_exists(&s)
-            .await
-            .is_some()
-        {
+        if client.conn_already_exists(&s).await.is_some() {
             trace!(protocol, role=?Role::Server, svc=?s, "Already connected to service");
             socket.t_close();
             return Err(AttestProtocolError::AlreadyConnected);
@@ -116,7 +114,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
                 }
             })?;
         // Authenticated!
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let (tx, rx) = new_protocol_chan(100);
         let new_conn = client
             .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
             .await;
@@ -181,15 +179,14 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
         .map_err(|_| AttestProtocolError::SocketClosed)?;
     Ok(socket)
 }
-pub(crate) type InternalRequest = Receiver<(AttestRequest, oneshot::Sender<AttestResponse>)>;
 
 pub async fn handshake_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     socket: W,
     gss: &mut GlobalSocketState,
     role: Role,
-    new_request: Option<InternalRequest>,
-) -> Result<(W, InternalRequest), AttestProtocolError> {
+    new_request: Option<ProtocolReceiver>,
+) -> Result<(W, ProtocolReceiver), AttestProtocolError> {
     trace!(protocol = "handshake", ?role, "Starting Handshake");
     let res = match (role, new_request) {
         (Role::Server, None) => handshake_protocol_server(g, socket, gss).await,
