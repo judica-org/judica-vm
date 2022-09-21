@@ -21,7 +21,6 @@
     flex-direction: row;
 }
 
-
 .MoveForm {
     min-height: 20vh;
 }
@@ -29,3 +28,4 @@
 .MoveForm>form {
     min-height: 20vh;
 }
+

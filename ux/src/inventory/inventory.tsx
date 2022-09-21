@@ -20,6 +20,8 @@ const user_inventory_stub = {
   user_token_balances: [['Bitcoin', 400], ['Steel', 398], ['Silicon', 201], ['Concrete', 267]]
 }
 
+const prices = ["N/A", 5, 66, 24];
+
 export const Inventory = () => {
   const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
 
@@ -71,6 +73,9 @@ export const Inventory = () => {
       <Table size="small" sx={{ borderTop: 1, borderBottom: 1 }}>
         <TableHead>
           <TableRow key="titles">
+            <TableCell variant="head">
+              Inventory
+            </TableCell>
             {/* make row headers */}
             {userInventory?.user_token_balances && userInventory?.user_token_balances.map((token, index) => (
               <TableCell variant="head">
@@ -81,12 +86,27 @@ export const Inventory = () => {
         </TableHead>
         <TableBody>
           <TableRow key="values">
+            <TableCell>
+              Qty Owned
+            </TableCell>
             {/* make cells */}
             {userInventory?.user_token_balances && userInventory?.user_token_balances.map((token, index) => (
               <TableCell component="td" scope="row">
                 {token[1]}
               </TableCell>
             ))}
+          </TableRow>
+          <TableRow key="prices">
+            <TableCell>
+              Price in BTC
+            </TableCell>
+            {
+              prices && prices.map((val, index) => (
+                <TableCell component="td" scope="row">
+                  {val}
+                </TableCell>
+              ))
+            }
           </TableRow>
         </TableBody>
       </Table>

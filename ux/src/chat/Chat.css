@@ -1,10 +1,12 @@
 .Chat {
     display: grid;
     grid-template-rows: 1fr 5em;
+    border: 1px;
+    padding: 1em;
 }
 
 .ChatLogScrollBox {
-    height: 100px;
+    height: 200px;
     overflow-y: scroll;
     word-wrap: break-word;
 }
