@@ -69,7 +69,7 @@ pub async fn run(g: Arc<Globals>, db: MsgDB) -> tokio::task::JoinHandle<Abstract
         let s = axum::Server::bind(&addr)
             .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await;
-        tracing::warn!("The HTTP Server Quit") ;
+        tracing::warn!("The HTTP Server Quit");
         s.unwrap();
         INFER_UNIT
     })

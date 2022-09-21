@@ -1,3 +1,5 @@
+use self::authentication_handshake::MessageExt;
+
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
 use crate::control::query::Outcome;
@@ -290,48 +292,39 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
     _role: Role,
     msg: Message,
 ) -> Result<(), AttestProtocolError> {
-    match msg {
-        Message::Ping(_p) | Message::Pong(_p) => Ok(()),
-        Message::Close(_) => Ok(()),
-        Message::Binary(_) => Err(AttestProtocolError::IncorrectMessage(
-            "Expected Non Binary Message",
-        )),
-        Message::Text(b) => {
-            let a: AttestSocketProtocol = serde_json::from_str(&b)?;
-            match a {
-                AttestSocketProtocol::Request(seq, m) => {
-                    trace!(request=?m, seq, "Processing Request...");
-                    match m {
-                        AttestRequest::LatestTips => fetch_latest_tips(db, socket, seq).await,
-                        AttestRequest::SpecificTips(tips) => {
-                            fetch_specific_tips(tips, db, socket, seq).await
-                        }
-                        AttestRequest::Post(envelopes) => {
-                            post_envelope(envelopes, db, socket, seq).await
-                        }
+    let a: AttestSocketProtocol = msg
+        .only_text("as a json encoded messages")
+        .and_then(|s| Ok(serde_json::from_str(&s)?))?;
+    match a {
+        AttestSocketProtocol::Request(seq, m) => {
+            trace!(request=?m, seq, "Processing Request...");
+            match m {
+                AttestRequest::LatestTips => fetch_latest_tips(db, socket, seq).await,
+                AttestRequest::SpecificTips(tips) => {
+                    fetch_specific_tips(tips, db, socket, seq).await
+                }
+                AttestRequest::Post(envelopes) => post_envelope(envelopes, db, socket, seq).await,
+            }
+        }
+        AttestSocketProtocol::Response(seq, r) => {
+            *defecit -= 1;
+            trace!(response=?r, seq, "Routing Response...");
+            if let Some(k) = inflight_requests.remove(&seq) {
+                if r.response_code_of() != k.code {
+                    return Err(AttestProtocolError::ResponseTypeIncorrect);
+                }
+                // we don't care if the sender dropped
+                match k.sender.send(r) {
+                    Ok(_) => {
+                        trace!("Successfully sent response to oneshot::reciever")
+                    }
+                    Err(_) => {
+                        trace!("Did not send response to oneshot::reciever, closed")
                     }
                 }
-                AttestSocketProtocol::Response(seq, r) => {
-                    *defecit -= 1;
-                    trace!(response=?r, seq, "Routing Response...");
-                    if let Some(k) = inflight_requests.remove(&seq) {
-                        if r.response_code_of() != k.code {
-                            return Err(AttestProtocolError::ResponseTypeIncorrect);
-                        }
-                        // we don't care if the sender dropped
-                        match k.sender.send(r) {
-                            Ok(_) => {
-                                trace!("Successfully sent response to oneshot::reciever")
-                            }
-                            Err(_) => {
-                                trace!("Did not send response to oneshot::reciever, closed")
-                            }
-                        }
-                        Ok(())
-                    } else {
-                        Err(AttestProtocolError::UnrequestedResponse)
-                    }
-                }
+                Ok(())
+            } else {
+                Err(AttestProtocolError::UnrequestedResponse)
             }
         }
     }

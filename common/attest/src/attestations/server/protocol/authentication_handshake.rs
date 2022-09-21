@@ -30,7 +30,7 @@ fn new_cookie() -> [u8; 32] {
     drop(rng);
     challenge_secret
 }
-trait MessageExt {
+pub trait MessageExt {
     fn only_text(self, s: &str) -> Result<String, AttestProtocolError>;
 }
 impl MessageExt for Message {
