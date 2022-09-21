@@ -16,7 +16,7 @@ path = "../mine-with-friends-board"
 
 [dependencies.sapio-bitcoin]
 version = "0.28.1"
-features=['use-serde', 'rand']
+features=['use-serde', 'rand', 'base64']
 
 [dependencies.attest-messages]
 path = "../attest-messages"
