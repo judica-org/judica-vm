@@ -209,7 +209,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     mut db: MsgDB,
     role: Role,
     new_request: Option<Receiver<(AttestRequest, oneshot::Sender<AttestResponse>)>>,
-) -> Result<(), AttestProtocolError> {
+) -> Result<&'static str, AttestProtocolError> {
     let (mut socket, mut new_request) =
         authentication_handshake::handshake_protocol(g, socket, &mut gss, role, new_request)
             .await?;
@@ -234,7 +234,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     .await?;
                 } else {
                     trace!(seq, ?role, "socket quit: TCP Socket is Disconnected");
-                    break 'runner;
+                    return Ok("Peer Disconnected from us");
                 }
             }
             m = new_request.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
@@ -250,13 +250,12 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     .await?;
                 } else {
                     trace!(seq, ?role, "socket quit: Internal Connection Dropped");
-                    break 'runner;
+                    return Ok("Server Internally Dropped Request Connection");
                 }
             }
         }
     }
     socket.t_close().await;
-    Ok(())
 }
 async fn handle_internal_request<W: WebSocketFunctionality>(
     defecit: &mut i64,

@@ -147,13 +147,8 @@ impl AttestationClient {
     pub async fn get_latest_tips(&self, url: &String, port: u16) -> Option<Vec<Envelope>> {
         let conn = self.get_conn(ServiceUrl(url.clone(), port)).await;
         let (tx, rx) = oneshot::channel();
-        if conn
-            .send((AttestRequest::LatestTips, tx))
-            .await
-            .ok()
-            .is_none()
-        {
-            warn!("Receiver Dropped, Sending Request Failed");
+        if conn.send((AttestRequest::LatestTips, tx)).await.is_err() {
+            warn!("The channel to enqueue new requests is closed.");
             return None;
         }
         let resp = rx.await.ok();
@@ -170,7 +165,9 @@ impl AttestationClient {
                 None
             }
             None => {
-                warn!("Responder Dropped, Sending Request Failed");
+                warn!(
+                    "The oneshot::channel to get the reuslt closed without returning a response."
+                );
                 None
             }
         }
@@ -246,13 +243,15 @@ impl AttestationClient {
             .await
             .is_err()
         {
-            warn!("Receiver Dropped, Sending Request Failed");
+            warn!("The channel to enqueue new requests is closed.");
             return None;
         }
         let resp = rx.await.ok();
         match resp {
             None => {
-                warn!("Responder Dropped, Sending Request Failed");
+                warn!(
+                    "The oneshot::channel to get the reuslt closed without returning a response."
+                );
                 None
             }
             Some(
