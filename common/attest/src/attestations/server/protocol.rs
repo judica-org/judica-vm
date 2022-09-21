@@ -17,6 +17,7 @@ use std::fmt::Display;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -65,7 +66,7 @@ impl AttestRequest {
     }
     pub(crate) fn into_protocol_and_log(self, seq: u64) -> Result<Message, serde_json::Error> {
         let msg = &AttestSocketProtocol::Request(seq, self);
-        trace!(?msg, seq, "Sending Response");
+        trace!(?msg, seq, "Sending Request");
         Ok(Message::Text(serde_json::to_string(msg)?))
     }
 }
@@ -94,7 +95,6 @@ pub enum AttestProtocolError {
     IncorrectMessage,
     CookieMissMatch,
     TimedOut,
-    AlreadyRunning,
     SocketClosed,
     FailedToAuthenticate,
     AlreadyConnected,
@@ -199,19 +199,23 @@ struct ResponseRouter {
     code: ResponseCode,
     sender: oneshot::Sender<AttestResponse>,
 }
+// Only allow 10 outstanding messages
+pub const MAX_MESSAGE_DEFECIT: i64 = 10;
+
 pub async fn run_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
     mut socket: W,
     mut gss: GlobalSocketState,
     mut db: MsgDB,
     role: Role,
-    new_request: Option<UnboundedReceiver<(AttestRequest, oneshot::Sender<AttestResponse>)>>,
+    new_request: Option<Receiver<(AttestRequest, oneshot::Sender<AttestResponse>)>>,
 ) -> Result<(), AttestProtocolError> {
     let (mut socket, mut new_request) =
         authentication_handshake::handshake_protocol(g, socket, &mut gss, role, new_request)
             .await?;
     let mut inflight_requests: BTreeMap<u64, ResponseRouter> = Default::default();
     let mut seq = 0;
+    let mut defecit = 0;
     'runner: loop {
         seq += 1;
         trace!(seq, "waiting for request from peer or internal");
@@ -219,6 +223,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
             msg = socket.t_recv() => {
                 if let Some(Ok(msg)) = msg {
                     handle_message_from_peer(
+                        &mut defecit,
                         &mut socket,
                         &mut gss,
                         &mut db,
@@ -232,15 +237,13 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     break 'runner;
                 }
             }
-            m = new_request.recv() => {
+            m = new_request.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
                 if let Some((request, response_chan)) = m {
                     handle_internal_request(
+                        &mut defecit,
                         &mut socket,
-                        &mut gss,
-                        &mut db,
                         &mut inflight_requests,
                         seq,
-                        role,
                         request,
                         response_chan,
                     )
@@ -252,17 +255,14 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
             }
         }
     }
-
     socket.t_close().await;
     Ok(())
 }
 async fn handle_internal_request<W: WebSocketFunctionality>(
+    defecit: &mut i64,
     socket: &mut W,
-    gss: &mut GlobalSocketState,
-    db: &mut MsgDB,
     inflight_requests: &mut BTreeMap<u64, ResponseRouter>,
     seq: u64,
-    role: Role,
     msg: AttestRequest,
     response_chan: oneshot::Sender<AttestResponse>,
 ) -> Result<(), AttestProtocolError> {
@@ -274,12 +274,14 @@ async fn handle_internal_request<W: WebSocketFunctionality>(
             sender: response_chan,
         },
     );
+    *defecit += 1;
     socket.t_send(msg.into_protocol_and_log(seq)?).await?;
 
     Ok(())
 }
 
 async fn handle_message_from_peer<W: WebSocketFunctionality>(
+    defecit: &mut i64,
     socket: &mut W,
     gss: &mut GlobalSocketState,
     db: &mut MsgDB,
@@ -289,110 +291,26 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
 ) -> Result<(), AttestProtocolError> {
     match msg {
         Message::Ping(_p) | Message::Pong(_p) => Ok(()),
-        Message::Close(_) | Message::Binary(_) => Err(AttestProtocolError::IncorrectMessage),
+        Message::Close(_) => Ok(()),
+        Message::Binary(_) => Err(AttestProtocolError::IncorrectMessage),
         Message::Text(b) => {
             let a: AttestSocketProtocol = serde_json::from_str(&b)?;
             match a {
-                AttestSocketProtocol::Request(seq, m) => match m {
-                    AttestRequest::LatestTips => {
-                        let r = {
-                            let handle = db.get_handle().await;
-                            info!(method = "WS Latest Tips");
-                            handle.get_tips_for_all_users()
-                        };
-                        if let Ok(v) = r {
-                            if socket
-                                .t_send(AttestResponse::LatestTips(v).into_protocol_and_log(seq)?)
-                                .await
-                                .is_err()
-                            {
-                                return Err(AttestProtocolError::SocketClosed);
-                            } else {
-                                Ok(())
-                            }
-                        } else {
-                            warn!("Database Error, Disconnecting");
-                            return Err(AttestProtocolError::DatabaseError);
+                AttestSocketProtocol::Request(seq, m) => {
+                    trace!(request=?m, seq, "Processing Request...");
+                    match m {
+                        AttestRequest::LatestTips => fetch_latest_tips(db, socket, seq).await,
+                        AttestRequest::SpecificTips(tips) => {
+                            fetch_specific_tips(tips, db, socket, seq).await
+                        }
+                        AttestRequest::Post(envelopes) => {
+                            post_envelope(envelopes, db, socket, seq).await
                         }
                     }
-                    AttestRequest::SpecificTips(mut tips) => {
-                        // runs in O(N) usually since the slice should already be sorted
-                        tips.tips.sort_unstable();
-                        tips.tips.dedup();
-                        trace!(method = "GET /tips", ?tips);
-                        let all_tips = {
-                            let handle = db.get_handle().await;
-                            if let Ok(r) = handle.messages_by_hash(tips.tips.iter()) {
-                                r
-                            } else {
-                                return Err(AttestProtocolError::DatabaseError);
-                            }
-                        };
-
-                        if socket
-                            .t_send(
-                                AttestResponse::SpecificTips(all_tips)
-                                    .into_protocol_and_log(seq)?,
-                            )
-                            .await
-                            .is_err()
-                        {
-                            return Err(AttestProtocolError::SocketClosed);
-                        }
-                        Ok(())
-                    }
-                    AttestRequest::Post(envelopes) => {
-                        let mut authed = Vec::with_capacity(envelopes.len());
-                        for envelope in envelopes {
-                            tracing::info!(method="POST /msg",  envelope=?envelope.canonicalized_hash_ref(), "Envelope Received" );
-                            tracing::trace!(method="POST /msg",  envelope=?envelope, "Envelope Received" );
-                            if let Ok(valid_envelope) =
-                                envelope.self_authenticate(&Secp256k1::new())
-                            {
-                                authed.push(valid_envelope);
-                            } else {
-                                tracing::debug!("Invalid Message From Peer");
-                                break;
-                            }
-                        }
-                        let mut outcomes = Vec::with_capacity(authed.len());
-                        {
-                            let mut locked = db.get_handle().await;
-                            for envelope in authed {
-                                tracing::trace!("Inserting Into Database");
-                                match locked.try_insert_authenticated_envelope(envelope) {
-                                    Ok(i) => match i {
-                                        Ok(()) => {
-                                            outcomes.push(Outcome { success: true });
-                                        }
-                                        Err(fail) => {
-                                            outcomes.push(Outcome { success: false });
-                                            tracing::debug!(
-                                                ?fail,
-                                                "Inserting Into Database Failed"
-                                            );
-                                        }
-                                    },
-                                    Err(err) => {
-                                        outcomes.push(Outcome { success: false });
-                                        tracing::debug!(?err, "Inserting Into Database Failed");
-                                    }
-                                }
-                            }
-                        }
-                        if socket
-                            .t_send(
-                                AttestResponse::PostResult(outcomes).into_protocol_and_log(seq)?,
-                            )
-                            .await
-                            .is_err()
-                        {
-                            return Err(AttestProtocolError::SocketClosed);
-                        }
-                        Ok(())
-                    }
-                },
+                }
                 AttestSocketProtocol::Response(seq, r) => {
+                    *defecit -= 1;
+                    trace!(response=?r, seq, "Routing Response...");
                     if let Some(k) = inflight_requests.remove(&seq) {
                         if r.response_code_of() != k.code {
                             return Err(AttestProtocolError::ResponseTypeIncorrect);
@@ -406,5 +324,122 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
                 }
             }
         }
+    }
+}
+
+async fn post_envelope<W>(
+    envelopes: Vec<Envelope>,
+    db: &mut MsgDB,
+    socket: &mut W,
+    seq: u64,
+) -> Result<(), AttestProtocolError>
+where
+    W: WebSocketFunctionality,
+{
+    info!(method = "POST", item = "/envelope/new");
+    let mut authed = Vec::with_capacity(envelopes.len());
+    for envelope in envelopes {
+        info!(method="POST /msg",  envelope=?envelope.canonicalized_hash_ref(), "Envelope Received" );
+        trace!(method="POST /msg",  envelope=?envelope, "Envelope Received" );
+        if let Ok(valid_envelope) = envelope.self_authenticate(&Secp256k1::new()) {
+            authed.push(valid_envelope);
+        } else {
+            tracing::debug!("Invalid Message From Peer");
+            break;
+        }
+    }
+    let mut outcomes = Vec::with_capacity(authed.len());
+    {
+        let mut locked = db.get_handle().await;
+        for envelope in authed {
+            trace!("Inserting Into Database");
+            match locked.try_insert_authenticated_envelope(envelope) {
+                Ok(i) => match i {
+                    Ok(()) => {
+                        outcomes.push(Outcome { success: true });
+                    }
+                    Err(fail) => {
+                        outcomes.push(Outcome { success: false });
+                        tracing::debug!(?fail, "Inserting Into Database Failed");
+                    }
+                },
+                Err(err) => {
+                    outcomes.push(Outcome { success: false });
+                    tracing::debug!(?err, "Inserting Into Database Failed");
+                }
+            }
+        }
+    }
+    if socket
+        .t_send(AttestResponse::PostResult(outcomes).into_protocol_and_log(seq)?)
+        .await
+        .is_err()
+    {
+        return Err(AttestProtocolError::SocketClosed);
+    }
+    Ok(())
+}
+
+async fn fetch_specific_tips<W>(
+    mut tips: Tips,
+    db: &mut MsgDB,
+    socket: &mut W,
+    seq: u64,
+) -> Result<(), AttestProtocolError>
+where
+    W: WebSocketFunctionality,
+{
+    info!(method = "GET", item = "/specific_tips");
+    // runs in O(N) usually since the slice should already be sorted
+    tips.tips.sort_unstable();
+    tips.tips.dedup();
+    trace!(method = "GET /tips", ?tips);
+    let all_tips = {
+        let handle = db.get_handle().await;
+        if let Ok(r) = handle.messages_by_hash(tips.tips.iter()) {
+            r
+        } else {
+            return Err(AttestProtocolError::DatabaseError);
+        }
+    };
+    if socket
+        .t_send(AttestResponse::SpecificTips(all_tips).into_protocol_and_log(seq)?)
+        .await
+        .is_err()
+    {
+        return Err(AttestProtocolError::SocketClosed);
+    }
+    Ok(())
+}
+
+async fn fetch_latest_tips<W>(
+    db: &mut MsgDB,
+    socket: &mut W,
+    seq: u64,
+) -> Result<(), AttestProtocolError>
+where
+    W: WebSocketFunctionality,
+{
+    info!(method = "GET", item = "/latest_tips");
+    let r = {
+        let handle = db.get_handle().await;
+        handle.get_tips_for_all_users()
+    };
+    if let Ok(v) = r {
+        let msg = AttestResponse::LatestTips(v).into_protocol_and_log(seq)?;
+        if socket.t_send(msg).await.is_err() {
+            trace!(seq, "peer rejected message");
+            Err(AttestProtocolError::SocketClosed)
+        } else {
+            info!(
+                method = "GET",
+                item = "/latest_tips",
+                "fetched and sent successfully"
+            );
+            Ok(())
+        }
+    } else {
+        warn!("Database Error, Disconnecting");
+        Err(AttestProtocolError::DatabaseError)
     }
 }

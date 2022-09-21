@@ -25,6 +25,7 @@ pub type TaskID = (String, u16, TaskType, bool);
 
 pub enum PeerQuery {
     RunningTasks(Sender<Vec<TaskID>>),
+    RefreshTasks,
 }
 pub fn startup(
     g: Arc<Globals>,
@@ -32,6 +33,7 @@ pub fn startup(
     mut status: Receiver<PeerQuery>,
 ) -> JoinHandle<Result<(), Box<dyn Error + Sync + Send + 'static>>> {
     tokio::spawn(async move {
+        info!("Starting Task for Peer Services");
         let client = g.get_client().await?;
         let mut interval = g.config.peer_service.timer_override.reconnect_interval();
         let mut task_set: HashMap<TaskID, JoinHandle<Result<(), _>>> = HashMap::new();
@@ -61,6 +63,9 @@ pub fn startup(
                                 PeerQuery::RunningTasks(r) => {
                                     r.send(task_set.keys().cloned().collect()).ok();
                                 },
+                                PeerQuery::RefreshTasks => {
+                                    info!("Refresh Tasks");
+                                }
                             }
                         }
                         None => continue 'outer,
@@ -72,6 +77,7 @@ pub fn startup(
                     }
                 }
             };
+            info!("Scanning for service reboot");
             let mut create_services: HashSet<_> = db
                 .get_handle()
                 .await

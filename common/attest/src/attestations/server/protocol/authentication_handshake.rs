@@ -18,6 +18,7 @@ use sapio_bitcoin::secp256k1::rand::Rng;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::protocol::Role;
@@ -74,8 +75,8 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
             if let Message::Text(challenge_response) = msg {
                 if challenge_response == challenge_secret.to_hex() {
                     // Authenticated!
-                    let (tx, rx) = unbounded_channel();
-                    if let OpenState::NewlyOpened = client
+                    let (tx, rx) = tokio::sync::mpsc::channel(100);
+                    if let (OpenState::NewlyOpened, _) = client
                         .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
                         .await
                     {
@@ -160,8 +161,7 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     }
 }
 
-pub(crate) type InternalRequest =
-    UnboundedReceiver<(AttestRequest, oneshot::Sender<AttestResponse>)>;
+pub(crate) type InternalRequest = Receiver<(AttestRequest, oneshot::Sender<AttestResponse>)>;
 
 pub async fn handshake_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,

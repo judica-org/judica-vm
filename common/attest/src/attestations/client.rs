@@ -17,13 +17,13 @@ use std::{
 use tokio::{
     spawn,
     sync::{
-        mpsc::{unbounded_channel, UnboundedSender},
+        mpsc::{channel, unbounded_channel, Sender, UnboundedSender},
         oneshot, Mutex, Notify, RwLock,
     },
 };
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing::{debug, trace};
-type ProtocolChan = UnboundedSender<(
+type ProtocolChan = Sender<(
     protocol::AttestRequest,
     oneshot::Sender<protocol::AttestResponse>,
 )>;
@@ -71,41 +71,46 @@ impl Drop for NotifyOnDrop {
 pub enum OpenState {
     AlreadyOpened,
     NewlyOpened,
+    NotOpened,
 }
 impl AttestationClient {
+    pub async fn conn_already_exists(&self, svc: &ServiceUrl) -> Option<ProtocolChan> {
+        let f = self.connections.read().await;
+        if let Some(s) = f.get(svc) {
+            if !s.is_closed() {
+                trace!(?svc, "Client Connection Found to be Open");
+                return Some(s.clone());
+            } else {
+                trace!(?svc, "Client Connection Found to be Closed");
+            }
+        } else {
+            trace!(?svc, "Client Connection Doesn't Exist");
+        }
+        None
+    }
     pub async fn conn_already_exists_or_create(
         &self,
         svc: &ServiceUrl,
         tx: ProtocolChan,
-    ) -> OpenState {
-        {
-            let f = self.connections.read().await;
-            if let Some(s) = f.get(svc) {
-                if !s.is_closed() {
-                    trace!(?svc, "Client Connection Found to be Open");
-                    return OpenState::AlreadyOpened;
-                } else {
-                    trace!(?svc, "Client Connection Found to be Closed");
-                }
-            } else {
-                trace!(?svc, "Client Connection Doesn't Exist");
-            }
+    ) -> (OpenState, ProtocolChan) {
+        if let Some(ch) = self.conn_already_exists(svc).await {
+            return (OpenState::AlreadyOpened, ch);
         }
 
         {
             let mut f = self.connections.write().await;
             let e = f.entry(svc.clone());
-            let mut ret = OpenState::NewlyOpened;
-            e.and_modify(|tx| {
+            let mut ret = (OpenState::NewlyOpened, tx.clone());
+            e.and_modify(|prior_tx| {
                 if tx.is_closed() {
                     trace!(?svc, "Removing Closed Connection");
-                    *tx = tx.clone();
+                    *prior_tx = tx.clone();
                 } else {
                     trace!(
                         ?svc,
                         "Client Connection Found to be Opened by some other Thread"
                     );
-                    ret = OpenState::AlreadyOpened;
+                    ret = (OpenState::AlreadyOpened, prior_tx.clone());
                 }
             })
             .or_insert_with(|| tx.clone());
@@ -113,41 +118,10 @@ impl AttestationClient {
         }
     }
     pub async fn get_conn(&self, svc: ServiceUrl) -> ProtocolChan {
-        {
-            let f = self.connections.read().await;
-            if let Some(s) = f.get(&svc) {
-                if !s.is_closed() {
-                    trace!(?svc, "Client Connection Found to be Open");
-                    return s.clone();
-                } else {
-                    trace!(?svc, "Client Connection Found to be Closed");
-                }
-            } else {
-                trace!(?svc, "Client Connection Doesn't Exist");
-            }
-        }
-        let mut f = self.connections.write().await;
-        let e = f.entry(svc.clone());
-        match e {
-            std::collections::hash_map::Entry::Occupied(s) if !s.get().is_closed() => {
-                trace!(
-                    ?svc,
-                    "Client Connection Found to be Opened by some other Thread"
-                );
-                return s.get().clone();
-            }
-            std::collections::hash_map::Entry::Occupied(s) => {
-                trace!(?svc, "Removing Closed Connection");
-                s.remove();
-            }
-            _ => {}
-        }
-
-        let (tx, rx) = unbounded_channel();
+        let (tx, rx) = channel(100);
+        let (s, tx) = self.conn_already_exists_or_create(&svc, tx).await;
         let svc_url = svc.to_string();
-        f.entry(svc).or_insert(tx.clone());
-        drop(f);
-        {
+        if let OpenState::NewlyOpened = s {
             let g = self.g.clone();
             let gss = self.gss.clone();
             let db = self.db.clone();
@@ -173,15 +147,30 @@ impl AttestationClient {
     pub async fn get_latest_tips(&self, url: &String, port: u16) -> Option<Vec<Envelope>> {
         let conn = self.get_conn(ServiceUrl(url.clone(), port)).await;
         let (tx, rx) = oneshot::channel();
-        conn.send((AttestRequest::LatestTips, tx)).ok()?;
-        let resp = rx.await.ok()?;
+        if conn
+            .send((AttestRequest::LatestTips, tx))
+            .await
+            .ok()
+            .is_none()
+        {
+            warn!("Receiver Dropped, Sending Request Failed");
+            return None;
+        }
+        let resp = rx.await.ok();
+
         match resp {
-            protocol::AttestResponse::LatestTips(tips) => {
-                debug!(v=?tips.iter().map(|v|(v.header().height(), v.get_genesis_hash(), v.canonicalized_hash_ref())).collect::<Vec<_>>());
+            Some(protocol::AttestResponse::LatestTips(tips)) => {
+                debug!(v=?tips.iter().map(|v|(v.header().height(), v.get_genesis_hash(), v.canonicalized_hash_ref())).collect::<Vec<_>>(), "got tips");
                 Some(tips)
             }
-            protocol::AttestResponse::PostResult(_) | protocol::AttestResponse::SpecificTips(_) => {
+            Some(
+                protocol::AttestResponse::PostResult(_) | protocol::AttestResponse::SpecificTips(_),
+            ) => {
                 warn!(?resp, "Invalid Response Type");
+                None
+            }
+            None => {
+                warn!("Responder Dropped, Sending Request Failed");
                 None
             }
         }
@@ -211,6 +200,7 @@ impl AttestationClient {
         let (tx, rx) = oneshot::channel();
         let send_ok = conn
             .send((AttestRequest::SpecificTips(tips.clone()), tx))
+            .await
             .ok();
         let resp_ok = rx.await.ok();
 
@@ -251,15 +241,30 @@ impl AttestationClient {
     ) -> Option<Vec<Outcome>> {
         let conn = self.get_conn(ServiceUrl(url.clone(), port)).await;
         let (tx, rx) = oneshot::channel();
-        conn.send((AttestRequest::Post(envelopes.clone()), tx))
-            .ok()?;
-        let resp = rx.await.ok()?;
+        if conn
+            .send((AttestRequest::Post(envelopes.clone()), tx))
+            .await
+            .is_err()
+        {
+            warn!("Receiver Dropped, Sending Request Failed");
+            return None;
+        }
+        let resp = rx.await.ok();
         match resp {
-            protocol::AttestResponse::LatestTips(_) | protocol::AttestResponse::SpecificTips(_) => {
+            None => {
+                warn!("Responder Dropped, Sending Request Failed");
+                None
+            }
+            Some(
+                protocol::AttestResponse::LatestTips(_) | protocol::AttestResponse::SpecificTips(_),
+            ) => {
                 warn!(?resp, "Invalid Response Type");
                 None
             }
-            protocol::AttestResponse::PostResult(o) => Some(o),
+            Some(protocol::AttestResponse::PostResult(o)) => {
+                debug!("successfully posted messages");
+                Some(o)
+            }
         }
     }
 

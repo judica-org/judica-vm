@@ -97,7 +97,7 @@ async fn create_test_config(quits: &mut Vec<AppShutdown>, test_id: u8) -> (AppSh
     dir.push(format!("test-rust-{}", bytes.to_hex()));
     tracing::debug!("Using tmpdir: {}", dir.display());
     let dir = attest_util::ensure_dir(dir, None).await.unwrap();
-    let timer_override = PeerServicesTimers::scaled_default(0.001);
+    let timer_override = PeerServicesTimers::scaled_default(0.01);
     let config = Config {
         bitcoin: btc_config.clone(),
         subname: format!("subname-{}", test_id),
@@ -139,6 +139,9 @@ async fn connect_and_test_nodes() {
             assert_eq!(resp.into_iter().collect::<Vec<_>>(), empty);
             break;
         }
+
+        info!(checkpoint = "Initial fetch showed no tips posessed");
+
         // Create a genesis envelope for each node
         let genesis_envelopes = {
             let it = ports.iter().map(|(_port, ctrl)| {
@@ -163,6 +166,8 @@ async fn connect_and_test_nodes() {
                 .collect::<Result<Vec<Envelope>, _>>()
                 .unwrap()
         };
+
+        info!(checkpoint = "Created Genesis for each Node");
         // Check that each node knows about it's own genesis envelope
         {
             let it = ports.iter().map(|(port, _ctrl)| {
@@ -178,6 +183,7 @@ async fn connect_and_test_nodes() {
                 genesis_envelopes
             );
         }
+        info!(checkpoint = "Each Node Has Own Genesis");
 
         // Add a message to each client like test-1-for-12345
 
@@ -196,6 +202,9 @@ async fn connect_and_test_nodes() {
         )
         .await;
         check_synched(1, false).await;
+
+        info!(checkpoint = "New Tips Appear Locally");
+
         // Connect each peer to every other peer
         {
             let futs = move |to, cli: ControlClient, ctrl: u16| async move {
@@ -212,6 +221,7 @@ async fn connect_and_test_nodes() {
                 )
                 .await
             };
+
             let it = ports.iter().map(|(port, ctrl)| {
                 let control_client = control_client.clone();
                 let ports = ports.clone();
@@ -231,14 +241,17 @@ async fn connect_and_test_nodes() {
                 }
             });
             let resp = join_all(it).await;
+
             // No Failures
             assert!(resp.iter().flatten().all(|o| o.success));
             // handshaking lemma n*n-1 would be "cleaner", but this checks
             // more strictly each one had the right number of responses
             assert!(resp.iter().all(|v| v.len() == ports.len() - 1));
             debug!("All Connected");
+            info!(checkpoint = "Peered each node to each other, unsynchronized");
             check_synched(1, true).await;
-            info!("All Synchronized")
+            info!("All Synchronized");
+            info!(checkpoint = "Peered each node to each other and synchronized");
         }
 
         // TODO: signal that notifies after re-peering successful?
@@ -259,6 +272,7 @@ async fn connect_and_test_nodes() {
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
+        info!(checkpoint = "New Tips Synchronize after peering");
 
         for x in 3..=10 {
             make_nth(
@@ -416,6 +430,7 @@ async fn check_synched(
                     .collect::<Vec<_>>();
                 msgs.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
                 if expected != msgs {
+                    info!(?expected, got=?msgs);
                     tokio::time::sleep(Duration::from_millis(50)).await;
                     continue 'resync;
                 }

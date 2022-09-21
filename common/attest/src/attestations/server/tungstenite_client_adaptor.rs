@@ -58,15 +58,23 @@ impl ClientWebSocket {
     ///
     /// Returns `None` if the stream has closed.
     pub async fn recv(&mut self) -> Option<Result<Message, Error>> {
-        self.next().await
+        let res = self.next().await;
+        if res.is_none() {
+            tracing::trace!("Attempted to read for Closed Client Socket")
+        }
+        if res.as_ref().and_then(|v| v.as_ref().ok()).is_none() {
+            tracing::trace!("Err reading from Client Socket")
+        }
+        res
     }
 
     /// Send a message.
     pub async fn send(&mut self, msg: Message) -> Result<(), Error> {
-        self.inner
-            .send(into_tungstenite(msg))
-            .await
-            .map_err(Error::new)
+        let res = SinkExt::send(self, msg).await;
+        if res.is_err() {
+            tracing::trace!("Attempted to send to a Closed Client Socket")
+        }
+        res
     }
 
     /// Gracefully close this WebSocket.
