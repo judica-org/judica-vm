@@ -13,8 +13,17 @@ serde = "1.0.136"
 futures = "0.3.21"
 bitcoincore-rpc-async = "4.0.1-alpha.1"
 ruma-serde = "0.6.0"
-tokio-tungstenite = "0.17.2"
 futures-util = "0.3.24"
+
+
+[dependencies.tokio-tungstenite]
+version = "0.17.2"
+features = ["native-tls"]
+[dependencies.tokio-socks]
+version = "0.5.1"
+features = ["tor"]
+default-features = false
+
 
 
 [dependencies.axum]

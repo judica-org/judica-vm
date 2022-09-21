@@ -72,7 +72,7 @@ impl AttestationClient {
                 let db = self.db.clone();
                 spawn(async move {
                     let socket =
-                        tungstenite_client_adaptor::ClientWebSocket::connect(svc_url).await;
+                        tungstenite_client_adaptor::ClientWebSocket::connect(&g, svc_url).await;
                     let res =
                         protocol::run_protocol(g, socket, gss, db, Role::Client, Some(rx)).await;
                     trace!(?res, role=?Role::Server,"socket quit");

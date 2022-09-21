@@ -30,27 +30,190 @@ use axum::{extract::ws::Message, http::HeaderValue, Error};
 use futures::SinkExt;
 use futures_util::StreamExt;
 use futures_util::{Sink, Stream};
+use std::fmt::Debug;
+use std::sync::Arc;
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
 use tokio::net::TcpStream;
+use tokio_socks::tcp::Socks5Stream;
 use tokio_tungstenite::tungstenite as ts;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::error::Error as TungstenError;
+use tokio_tungstenite::tungstenite::error::UrlError;
+use tokio_tungstenite::tungstenite::handshake::client::Response as ClientResponse;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+
+use crate::globals::Globals;
+
+use self::maybe_tor::MaybeTor;
+mod maybe_tor {
+
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
+
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+    use tokio_socks::tcp::Socks5Stream;
+    use tokio_tungstenite::MaybeTlsStream;
+
+    /// A stream that might be protected with TLS, or over tor
+    #[non_exhaustive]
+    #[derive(Debug)]
+    pub enum MaybeTor<S> {
+        MaybeTls(S),
+        TorHidden(Socks5Stream<S>),
+    }
+
+    impl<S> From<S> for MaybeTor<S> {
+        fn from(v: S) -> Self {
+            Self::MaybeTls(v)
+        }
+    }
+
+    impl<S> From<Socks5Stream<S>> for MaybeTor<S> {
+        fn from(v: Socks5Stream<S>) -> Self {
+            Self::TorHidden(v)
+        }
+    }
+
+    impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTor<S> {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            match self.get_mut() {
+                MaybeTor::MaybeTls(ref mut s) => Pin::new(s).poll_read(cx, buf),
+                MaybeTor::TorHidden(ref mut s) => Pin::new(s).poll_read(cx, buf),
+            }
+        }
+    }
+
+    impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTor<S> {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<Result<usize, std::io::Error>> {
+            match self.get_mut() {
+                MaybeTor::MaybeTls(ref mut s) => Pin::new(s).poll_write(cx, buf),
+                MaybeTor::TorHidden(ref mut s) => Pin::new(s).poll_write(cx, buf),
+            }
+        }
+
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Result<(), std::io::Error>> {
+            match self.get_mut() {
+                MaybeTor::MaybeTls(ref mut s) => Pin::new(s).poll_flush(cx),
+                MaybeTor::TorHidden(ref mut s) => Pin::new(s).poll_flush(cx),
+            }
+        }
+
+        fn poll_shutdown(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Result<(), std::io::Error>> {
+            match self.get_mut() {
+                MaybeTor::MaybeTls(ref mut s) => Pin::new(s).poll_shutdown(cx),
+                MaybeTor::TorHidden(ref mut s) => Pin::new(s).poll_shutdown(cx),
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct ClientWebSocket {
-    inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
+    inner: WebSocketStream<MaybeTlsStream<MaybeTor<TcpStream>>>,
     protocol: Option<HeaderValue>,
+}
+
+#[derive(Debug)]
+pub enum TorWSError {
+    TungstenError(TungstenError),
+    SocksError(tokio_socks::Error),
+}
+impl std::fmt::Display for TorWSError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+impl std::error::Error for TorWSError {}
+
+impl From<TungstenError> for TorWSError {
+    fn from(v: TungstenError) -> Self {
+        Self::TungstenError(v)
+    }
+}
+
+impl From<tokio_socks::Error> for TorWSError {
+    fn from(v: tokio_socks::Error) -> Self {
+        Self::SocksError(v)
+    }
 }
 // TODO: Tor Support
 impl ClientWebSocket {
-    pub async fn connect(url: String) -> ClientWebSocket {
-        let (ws_stream, _) = connect_async(url).await.expect("Failed to connect");
+    pub async fn connect(globals: &Arc<Globals>, url: String) -> ClientWebSocket {
+        let (ws_stream, _) = Self::connect_async_with_config_tor(globals, url, None)
+            .await
+            .expect("Failed to connect");
         ClientWebSocket {
             inner: ws_stream,
             protocol: None,
         }
+    }
+
+    pub async fn connect_async_with_config_tor<R>(
+        globals: &Arc<Globals>,
+        request: R,
+        config: Option<WebSocketConfig>,
+    ) -> Result<
+        (
+            WebSocketStream<MaybeTlsStream<MaybeTor<TcpStream>>>,
+            ClientResponse,
+        ),
+        TorWSError,
+    >
+    where
+        R: IntoClientRequest + Unpin,
+    {
+        let request = request.into_client_request()?;
+
+        let domain = request
+            .uri()
+            .host()
+            .ok_or(TungstenError::Url(UrlError::NoHostName))?;
+        let port = request
+            .uri()
+            .port_u16()
+            .or_else(|| match request.uri().scheme_str() {
+                Some("wss") => Some(443),
+                Some("ws") => Some(80),
+                _ => None,
+            })
+            .ok_or(TungstenError::Url(UrlError::UnsupportedUrlScheme))?;
+
+        // TODO : resolve via tor
+        let socket = if let Some(tor_port) = globals.config.tor.as_ref().map(|m| m.socks_port) {
+            let proxy = format!("127.0.0.1:{}", tor_port);
+            let addr = format!("{}:{}", domain, port);
+            let socket = Socks5Stream::connect(proxy.as_str(), addr.as_str()).await?;
+            socket.into()
+        } else {
+            let addr = format!("{}:{}", domain, port);
+            let try_socket = TcpStream::connect(addr).await;
+            let socket = try_socket.map_err(TungstenError::Io)?;
+            // TODO: honor encryption?
+            socket.into()
+        };
+        return Ok(
+            tokio_tungstenite::client_async_tls_with_config(request, socket, config, None).await?,
+        );
     }
 }
 impl ClientWebSocket {
