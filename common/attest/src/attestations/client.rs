@@ -4,7 +4,6 @@ use attest_database::connection::MsgDB;
 use attest_messages::CanonicalEnvelopeHash;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::Display,
@@ -14,6 +13,7 @@ use tokio::sync::{
     mpsc::{channel, error::SendError, Receiver, Sender},
     oneshot, Mutex, Notify, RwLock,
 };
+use tracing::warn;
 type LatestTipsT = (
     protocol::LatestTips,
     oneshot::Sender<protocol::LatestTipsResponse>,
@@ -162,6 +162,7 @@ impl Drop for NotifyOnDrop {
     }
 }
 pub enum OpenState {
-    Already,
-    Newly,
+    Unknown,
+    Already(ProtocolChan),
+    Newly(ProtocolChan, ProtocolReceiver),
 }

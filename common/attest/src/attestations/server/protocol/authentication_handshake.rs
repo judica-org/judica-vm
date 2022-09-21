@@ -1,11 +1,7 @@
 use super::super::generic_websocket::WebSocketFunctionality;
 use super::AttestProtocolError;
-use super::AttestRequest;
-use super::AttestResponse;
 use super::GlobalSocketState;
-
 use super::ServiceIDBuilder;
-use crate::attestations::client::new_protocol_chan;
 use crate::attestations::client::OpenState;
 use crate::attestations::client::ProtocolReceiver;
 use crate::attestations::client::ServiceUrl;
@@ -19,9 +15,7 @@ use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use std::sync::Arc;
 use std::time::Duration;
-
 use tokio::sync::mpsc::Receiver;
-
 use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing::{trace, warn};
@@ -114,11 +108,10 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
                 }
             })?;
         // Authenticated!
-        let (tx, rx) = new_protocol_chan(100);
         let new_conn = client
-            .conn_already_exists_or_create(&ServiceUrl(s.0, s.1), tx)
+            .conn_already_exists_or_create(&ServiceUrl(s.0, s.1))
             .await;
-        if let (OpenState::Newly, _) = new_conn {
+        if let OpenState::Newly(tx, rx) = new_conn {
             Ok((socket, rx))
         } else {
             Err(AttestProtocolError::AlreadyConnected)

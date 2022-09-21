@@ -118,7 +118,7 @@ async fn create_test_config(quits: &mut Vec<AppShutdown>, test_id: u8) -> (AppSh
 
 #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
 async fn connect_and_test_nodes() {
-    const NODES: u8 = 3;
+    const NODES: u8 = 5;
     let secp = Arc::new(Secp256k1::new());
     test_context(NODES, secp.clone(), |ports, test_node| async move {
         tokio::time::sleep(Duration::from_millis(10)).await;

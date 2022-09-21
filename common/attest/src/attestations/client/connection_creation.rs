@@ -1,10 +1,10 @@
 use super::super::server::protocol;
 use super::super::server::tungstenite_client_adaptor;
+use super::new_protocol_chan;
 use super::AttestationClient;
 use super::OpenState;
 use super::ProtocolChan;
 use super::ServiceUrl;
-use super::new_protocol_chan;
 use crate::globals::Globals;
 use reqwest::Client;
 use std::sync::Arc;
@@ -28,51 +28,60 @@ impl AttestationClient {
         }
         None
     }
-    pub async fn conn_already_exists_or_create(
-        &self,
-        svc: &ServiceUrl,
-        tx: ProtocolChan,
-    ) -> (OpenState, ProtocolChan) {
+    pub async fn conn_already_exists_or_create(&self, svc: &ServiceUrl) -> OpenState {
         if let Some(ch) = self.conn_already_exists(svc).await {
-            return (OpenState::Already, ch);
+            return OpenState::Already(ch);
         }
 
         {
             let mut f = self.connections.write().await;
             let e = f.entry(svc.clone());
-            let mut ret = (OpenState::Newly, tx.clone());
+            let mut open_state = OpenState::Unknown;
             e.and_modify(|prior_tx| {
-                if tx.is_closed() {
+                if prior_tx.is_closed() {
                     trace!(?svc, "Removing Closed Connection");
-                    *prior_tx = tx.clone();
+                    let (a, b) = new_protocol_chan(100);
+                    *prior_tx = a.clone();
+                    open_state = OpenState::Newly(a, b);
                 } else {
                     trace!(
                         ?svc,
                         "Client Connection Found to be Opened by some other Thread"
                     );
-                    ret = (OpenState::Already, prior_tx.clone());
+                    open_state = OpenState::Already(prior_tx.clone());
                 }
             })
-            .or_insert_with(|| tx.clone());
-            ret
+            .or_insert_with(|| {
+                let (a, b) = new_protocol_chan(100);
+                open_state = OpenState::Newly(a.clone(), b);
+                a
+            });
+            if let OpenState::Unknown = open_state {
+                unreachable!("Must have Been Set");
+            }
+            open_state
         }
     }
     pub async fn get_conn(&self, svc: &ServiceUrl) -> ProtocolChan {
-        let (tx, rx) = new_protocol_chan(100);
-        let (s, tx) = self.conn_already_exists_or_create(&svc, tx).await;
+        let s = self.conn_already_exists_or_create(&svc).await;
         let svc_url = svc.to_string();
-        if let OpenState::Newly = s {
-            let g = self.g.clone();
-            let gss = self.gss.clone();
-            let db = self.db.clone();
-            spawn(async move {
-                let socket = tungstenite_client_adaptor::ClientWebSocket::connect(svc_url).await;
-                let res = protocol::run_protocol(g, socket, gss, db, Role::Client, Some(rx)).await;
-                trace!(?res, role=?Role::Server,"socket quit");
-            });
+        match s {
+            OpenState::Newly(tx, rx) => {
+                let g = self.g.clone();
+                let gss = self.gss.clone();
+                let db = self.db.clone();
+                spawn(async move {
+                    let socket =
+                        tungstenite_client_adaptor::ClientWebSocket::connect(svc_url).await;
+                    let res =
+                        protocol::run_protocol(g, socket, gss, db, Role::Client, Some(rx)).await;
+                    trace!(?res, role=?Role::Server,"socket quit");
+                });
+                tx
+            }
+            OpenState::Already(tx) => tx,
+            OpenState::Unknown => unreachable!("Must have been set"),
         }
-
-        tx
     }
     pub fn new(client: Client, g: Arc<Globals>) -> Self {
         AttestationClient {
