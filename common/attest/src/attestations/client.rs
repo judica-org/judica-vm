@@ -4,6 +4,7 @@ use attest_database::connection::MsgDB;
 use attest_messages::CanonicalEnvelopeHash;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::Display,
@@ -71,6 +72,16 @@ impl ProtocolChan {
     }
 }
 
+pub struct ProtocolReceiverMut<'a> {
+    pub latest_tips: &'a mut Receiver<LatestTipsT>,
+    pub specific_tips: &'a mut Receiver<SpecificTipsT>,
+    pub post: &'a mut Receiver<PostT>,
+}
+impl Drop for ProtocolReceiver {
+    fn drop(&mut self) {
+        warn!("Dropping Protocol Receiver");
+    }
+}
 pub struct ProtocolReceiver {
     pub latest_tips: Receiver<LatestTipsT>,
     pub specific_tips: Receiver<SpecificTipsT>,
@@ -78,14 +89,12 @@ pub struct ProtocolReceiver {
 }
 
 impl ProtocolReceiver {
-    pub async fn recv_post(&mut self) -> Option<PostT> {
-        self.post.recv().await
-    }
-    pub async fn recv_specific_tips(&mut self) -> Option<SpecificTipsT> {
-        self.specific_tips.recv().await
-    }
-    pub async fn recv_latest_tips(&mut self) -> Option<LatestTipsT> {
-        self.latest_tips.recv().await
+    pub fn get_mut(&mut self) -> ProtocolReceiverMut {
+        ProtocolReceiverMut {
+            latest_tips: &mut self.latest_tips,
+            specific_tips: &mut self.specific_tips,
+            post: &mut self.post,
+        }
     }
 }
 

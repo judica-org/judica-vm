@@ -4,6 +4,7 @@ use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
 use crate::attestations::client::AnySender;
 use crate::attestations::client::ProtocolReceiver;
+use crate::attestations::client::ProtocolReceiverMut;
 use crate::control::query::Outcome;
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
@@ -232,15 +233,14 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
     role: Role,
     new_request: Option<ProtocolReceiver>,
 ) -> Result<&'static str, AttestProtocolError> {
-    let (
-        mut socket,
-        ProtocolReceiver {
-            mut latest_tips,
-            mut specific_tips,
-            mut post,
-        },
-    ) = authentication_handshake::handshake_protocol(g, socket, &mut gss, role, new_request)
-        .await?;
+    let (mut socket, mut receiver) =
+        authentication_handshake::handshake_protocol(g, socket, &mut gss, role, new_request)
+            .await?;
+    let ProtocolReceiverMut {
+        latest_tips,
+        specific_tips,
+        post,
+    } = receiver.get_mut();
     let mut inflight_requests: BTreeMap<u64, ResponseRouter> = Default::default();
     let mut seq = 0;
     let mut defecit = 0;
