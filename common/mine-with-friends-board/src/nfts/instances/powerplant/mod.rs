@@ -3,7 +3,10 @@ use std::collections::HashMap;
 pub mod events;
 use super::lockup::CoinLockup;
 use crate::entity::EntityID;
+use crate::game::CallContext;
 use crate::game::GameBoard;
+use crate::tokens::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::token_swap::TradingPairID;
 use crate::util::Currency;
 use crate::util::Price;
 use crate::{nfts::BaseNFT, nfts::NftPtr, tokens::TokenPointer};
@@ -159,5 +162,64 @@ impl PowerPlantProducer {
             let _ = token.transfer(&owner, &plant_ptr.0, price);
             token.end_transaction();
         }
+    }
+
+    pub(crate) fn super_mint(
+        game: &mut GameBoard,
+        // size of the plant
+        scale: u64,
+        location: (u64, u64),
+        plant_type: PlantType,
+        owner: EntityID,
+    ) -> Result<(), ()> {
+        // get bill for plant
+        let resources = plant_type.raw_materials_bill(game, scale);
+        // get btc token ptr
+        let btc_token_ptr = game.bitcoin_token_id;
+        // need CallContext
+        let ctx = CallContext { sender: owner };
+        // for each resource/qty
+        for (material, qty) in resources {
+            // create a trading pair
+            let id = TradingPairID {
+                asset_a: material,      // purchasing
+                asset_b: btc_token_ptr, // paying
+            };
+            // purchse material from mkt
+            ConstantFunctionMarketMaker::do_trade(game, id, 0, qty, false, &ctx);
+        }
+        // mint the power plant
+        PowerPlantProducer::mint_power_plant(game, scale, location, plant_type, owner);
+
+        Ok(())
+    }
+
+    pub fn estimate_materials_cost(
+        game: &mut GameBoard,
+        scale: u64,
+        location: (u64, u64),
+        plant_type: PlantType,
+        owner: EntityID,
+    ) -> Result<u128, ()> {
+        let ctx = CallContext { sender: owner };
+        // get bill for plant
+        let resources = plant_type.raw_materials_bill(game, scale);
+        let btc_token_ptr = game.bitcoin_token_id;
+        // for each resource/qty
+        let prices_in_btc: Vec<u128> = resources
+            .iter()
+            .map(|(material, qty)| {
+                // create a trading pair
+                let id = TradingPairID {
+                    asset_a: *material,     // purchasing
+                    asset_b: btc_token_ptr, // paying in
+                };
+                // simulate trade
+                ConstantFunctionMarketMaker::do_trade(game, id, 0, *qty, true, &ctx)
+                    .unwrap()
+                    .amount_player_sold
+            })
+            .collect();
+        Ok(prices_in_btc.iter().sum())
     }
 }

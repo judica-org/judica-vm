@@ -32,6 +32,8 @@ use crate::tokens::instances::steel::Steel;
 use crate::tokens::instances::steel::SteelSmelter;
 use crate::tokens::token_swap;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::token_swap::TradeError;
+use crate::tokens::token_swap::TradeOutcome;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::token_swap::UXMaterialsPriceData;
 use crate::MoveEnvelope;
@@ -347,7 +349,9 @@ impl GameBoard {
                 amount_a,
                 amount_b,
             }) => {
-                ConstantFunctionMarketMaker::do_trade(self, pair, amount_a, amount_b, &context);
+                ConstantFunctionMarketMaker::do_trade(
+                    self, pair, amount_a, amount_b, false, &context,
+                );
             }
             GameMove::MintPowerPlant(MintPowerPlant {
                 scale,
@@ -361,6 +365,13 @@ impl GameBoard {
                     plant_type,
                     context.sender,
                 );
+            }
+            GameMove::SuperMintPowerPlant(MintPowerPlant {
+                scale,
+                location,
+                plant_type,
+            }) => {
+                PowerPlantProducer::super_mint(self, scale, location, plant_type, context.sender);
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,
@@ -602,6 +613,39 @@ impl GameBoard {
         // normalization step
         res.iter_mut().for_each(|(_, v)| v.0 /= total);
         res
+    }
+
+    pub fn simulate_trade(
+        game: &mut GameBoard,
+        pair: TradingPairID,
+        amount_a: u128,
+        amount_b: u128,
+        sender: EntityID,
+    ) -> Result<TradeOutcome, TradeError> {
+        match ConstantFunctionMarketMaker::do_trade(
+            game,
+            pair,
+            amount_a,
+            amount_b,
+            true,
+            &CallContext { sender },
+        ) {
+            Ok(outcome) => Ok(outcome),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn get_power_plant_cost(
+        game: &mut GameBoard,
+        scale: u64,
+        location: (u64, u64),
+        plant_type: PlantType,
+        owner: EntityID,
+    ) -> Result<u128, ()> {
+        Ok(
+            PowerPlantProducer::estimate_materials_cost(game, scale, location, plant_type, owner)
+                .unwrap(),
+        )
     }
 }
 
