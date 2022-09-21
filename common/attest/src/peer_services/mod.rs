@@ -141,15 +141,10 @@ pub fn startup(
                             task_id.clone(),
                             tokio::spawn({
                                 let g = g.clone();
-                                let db = 
-                                        db.clone();
+                                let db = db.clone();
                                 async move {
                                     fetch_peer::fetch_from_peer(
-                                        g,
-                                        client,
-                                        &task_id.0,
-                                        db,
-                                        task_id.2,
+                                        g, client, &task_id.0, db, task_id.2,
                                     )
                                     .await
                                 }

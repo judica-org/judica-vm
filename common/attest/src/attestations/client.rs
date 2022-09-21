@@ -1,4 +1,4 @@
-use super::server::protocol::{self, GlobalSocketState, LatestTips, PostResponse};
+use super::server::protocol::{self, GlobalSocketState};
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
 use attest_messages::CanonicalEnvelopeHash;

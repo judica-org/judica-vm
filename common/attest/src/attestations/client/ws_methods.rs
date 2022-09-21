@@ -1,6 +1,5 @@
 use super::super::query::Tips;
-use super::super::server::protocol;
-use super::super::server::protocol::AttestRequest;
+
 use super::AttestationClient;
 use super::NotifyOnDrop;
 use super::ServiceUrl;

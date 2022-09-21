@@ -15,8 +15,7 @@ use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc::Receiver;
-use tokio::sync::oneshot;
+
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing::{trace, warn};
 
@@ -111,7 +110,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
         let new_conn = client
             .conn_already_exists_or_create(&ServiceUrl(s.0, s.1))
             .await;
-        if let OpenState::Newly(tx, rx) = new_conn {
+        if let OpenState::Newly(_tx, rx) = new_conn {
             Ok((socket, rx))
         } else {
             Err(AttestProtocolError::AlreadyConnected)

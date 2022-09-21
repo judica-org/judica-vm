@@ -9,7 +9,7 @@ use crate::globals::Globals;
 use reqwest::Client;
 use std::sync::Arc;
 use tokio::spawn;
-use tokio::sync::mpsc::channel;
+
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing::trace;
 
@@ -63,7 +63,7 @@ impl AttestationClient {
         }
     }
     pub async fn get_conn(&self, svc: &ServiceUrl) -> ProtocolChan {
-        let s = self.conn_already_exists_or_create(&svc).await;
+        let s = self.conn_already_exists_or_create(svc).await;
         let svc_url = svc.to_string();
         match s {
             OpenState::Newly(tx, rx) => {
