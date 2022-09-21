@@ -315,7 +315,14 @@ async fn handle_message_from_peer<W: WebSocketFunctionality>(
                             return Err(AttestProtocolError::ResponseTypeIncorrect);
                         }
                         // we don't care if the sender dropped
-                        k.sender.send(r).ok();
+                        match k.sender.send(r) {
+                            Ok(_) => {
+                                trace!("Successfully sent response to oneshot::reciever")
+                            }
+                            Err(_) => {
+                                trace!("Did not send response to oneshot::reciever, closed")
+                            }
+                        }
                         Ok(())
                     } else {
                         Err(AttestProtocolError::UnrequestedResponse)

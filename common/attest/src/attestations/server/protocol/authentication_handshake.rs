@@ -40,8 +40,16 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
         let s: ServiceID = serde_json::from_str(&t)?;
         let challenge_secret = new_cookie();
         let client = g.get_client().await?;
+        if client
+            .conn_already_exists(&ServiceUrl(s.0.clone(), s.1))
+            .await
+            .is_some()
+        {
+            trace!(protocol, role=?Role::Server, svc=?s, "Already connected to service");
+            socket.t_close();
+            return Err(AttestProtocolError::AlreadyConnected);
+        }
         let challenge_hash = sha256::Hash::hash(&challenge_secret[..]);
-
         socket
             .t_send(Message::Text(challenge_hash.to_hex()))
             .await
