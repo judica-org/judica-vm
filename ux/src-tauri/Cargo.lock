@@ -976,6 +976,7 @@ dependencies = [
  "game-host-messages",
  "game-player-messages",
  "mine-with-friends-board",
+ "ruma-serde",
  "sapio-bitcoin",
  "schemars",
  "serde",
