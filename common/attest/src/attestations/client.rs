@@ -1,18 +1,150 @@
-use super::query::Tips;
-use crate::control::query::Outcome;
-use attest_messages::{CanonicalEnvelopeHash, Envelope};
+use super::server::protocol::{self, GlobalSocketState};
+use crate::globals::Globals;
+use attest_database::connection::MsgDB;
+use attest_messages::CanonicalEnvelopeHash;
 use reqwest::Client;
-use std::{collections::BTreeSet, sync::Arc};
-use tokio::{
-    spawn,
-    sync::{Mutex, Notify},
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Display,
+    sync::Arc,
 };
-use tracing::{debug, trace};
+use tokio::sync::{
+    mpsc::{channel, error::SendError, Receiver, Sender},
+    oneshot, Mutex, Notify, RwLock,
+};
+use tracing::warn;
+type LatestTipsT = (
+    protocol::LatestTips,
+    oneshot::Sender<protocol::LatestTipsResponse>,
+);
+type SpecificTipsT = (
+    protocol::SpecificTips,
+    oneshot::Sender<protocol::SpecificTipsResponse>,
+);
+
+pub enum AnySender {
+    LatestTips(oneshot::Sender<protocol::LatestTipsResponse>),
+    Post(oneshot::Sender<protocol::PostResponse>),
+    SpecificTips(oneshot::Sender<protocol::SpecificTipsResponse>),
+}
+impl From<oneshot::Sender<protocol::SpecificTipsResponse>> for AnySender {
+    fn from(c: oneshot::Sender<protocol::SpecificTipsResponse>) -> Self {
+        AnySender::SpecificTips(c)
+    }
+}
+impl From<oneshot::Sender<protocol::PostResponse>> for AnySender {
+    fn from(c: oneshot::Sender<protocol::PostResponse>) -> Self {
+        AnySender::Post(c)
+    }
+}
+impl From<oneshot::Sender<protocol::LatestTipsResponse>> for AnySender {
+    fn from(c: oneshot::Sender<protocol::LatestTipsResponse>) -> Self {
+        AnySender::LatestTips(c)
+    }
+}
+
+type PostT = (protocol::Post, oneshot::Sender<protocol::PostResponse>);
+
+#[derive(Clone)]
+pub struct ProtocolChan {
+    latest_tips: Sender<LatestTipsT>,
+    specific_tips: Sender<SpecificTipsT>,
+    post: Sender<PostT>,
+}
+
+impl ProtocolChan {
+    // if any is closed, they should all be dropped
+    pub fn is_closed(&self) -> bool {
+        self.post.is_closed() || self.specific_tips.is_closed() || self.latest_tips.is_closed()
+    }
+    pub async fn send_latest_tips(&self, value: LatestTipsT) -> Result<(), SendError<LatestTipsT>> {
+        self.latest_tips.send(value).await
+    }
+    pub async fn send_specific_tips(
+        &self,
+        value: SpecificTipsT,
+    ) -> Result<(), SendError<SpecificTipsT>> {
+        self.specific_tips.send(value).await
+    }
+    pub async fn send_post(&self, value: PostT) -> Result<(), SendError<PostT>> {
+        self.post.send(value).await
+    }
+}
+
+pub struct ProtocolReceiverMut<'a> {
+    pub latest_tips: &'a mut Receiver<LatestTipsT>,
+    pub specific_tips: &'a mut Receiver<SpecificTipsT>,
+    pub post: &'a mut Receiver<PostT>,
+}
+impl Drop for ProtocolReceiver {
+    fn drop(&mut self) {
+        warn!("Dropping Protocol Receiver");
+    }
+}
+pub struct ProtocolReceiver {
+    pub latest_tips: Receiver<LatestTipsT>,
+    pub specific_tips: Receiver<SpecificTipsT>,
+    pub post: Receiver<PostT>,
+}
+
+impl ProtocolReceiver {
+    pub fn get_mut(&mut self) -> ProtocolReceiverMut {
+        ProtocolReceiverMut {
+            latest_tips: &mut self.latest_tips,
+            specific_tips: &mut self.specific_tips,
+            post: &mut self.post,
+        }
+    }
+}
+
+pub fn new_protocol_chan(p: usize) -> (ProtocolChan, ProtocolReceiver) {
+    let (latest_tips_tx, latest_tips_rx) = channel(p);
+    let (specific_tips_tx, specific_tips_rx) = channel(p);
+    let (post_tx, post_rx) = channel(p);
+    (
+        ProtocolChan {
+            latest_tips: latest_tips_tx,
+            specific_tips: specific_tips_tx,
+            post: post_tx,
+        },
+        ProtocolReceiver {
+            latest_tips: latest_tips_rx,
+            specific_tips: specific_tips_rx,
+            post: post_rx,
+        },
+    )
+}
+
+mod connection_creation;
+// Methods
+mod http_methods;
+mod ws_methods;
 
 #[derive(Clone)]
 pub struct AttestationClient {
     client: Client,
     inflight: Arc<Mutex<BTreeSet<CanonicalEnvelopeHash>>>,
+    connections: Arc<RwLock<HashMap<ServiceUrl, ProtocolChan>>>,
+    g: Arc<Globals>,
+    db: MsgDB,
+    gss: GlobalSocketState,
+}
+
+#[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize)]
+pub struct ServiceUrl(pub Arc<String>, pub u16);
+
+impl Display for ServiceUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ws://{}:{}/socket", self.0, self.1)
+    }
+}
+impl std::fmt::Debug for ServiceUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ServiceUrl")
+            .field(&self.to_string())
+            .finish()
+    }
 }
 
 #[derive(Debug)]
@@ -29,95 +161,8 @@ impl Drop for NotifyOnDrop {
         }
     }
 }
-impl AttestationClient {
-    pub fn new(client: Client) -> Self {
-        AttestationClient {
-            client,
-            inflight: Default::default(),
-        }
-    }
-    pub async fn get_latest_tips(
-        &self,
-        url: &String,
-        port: u16,
-    ) -> Result<Vec<Envelope>, reqwest::Error> {
-        let resp: Vec<Envelope> = self
-            .client
-            .get(format!("http://{}:{}/newest_tips", url, port))
-            .send()
-            .await?
-            .json()
-            .await?;
-        debug!(v=?resp.iter().map(|v|(v.header().height(), v.get_genesis_hash(), v.canonicalized_hash_ref())).collect::<Vec<_>>());
-        Ok(resp)
-    }
-    pub async fn get_tips(
-        &self,
-        mut tips: Tips,
-        url: &String,
-        port: u16,
-        use_cache: bool,
-    ) -> Result<(Vec<Envelope>, NotifyOnDrop), reqwest::Error> {
-        trace!("IN get_tips");
-        if use_cache {
-            let mut inflight = self.inflight.lock().await;
-            for tip_idx in (0..tips.tips.len()).rev() {
-                let h = tips.tips[tip_idx];
-                // if we already had this one remove it from the query
-                if !inflight.insert(h) {
-                    trace!(hash=?h, "skipping entry already in flight");
-                    tips.tips.swap_remove(tip_idx);
-                } else {
-                    trace!(hash=?h, "scheduling fetch of");
-                }
-            }
-        }
-        let req = self
-            .client
-            .get(format!("http://{}:{}/tips", url, port))
-            .json(&tips);
-        let notify = Arc::new(Notify::new());
-        let notified = notify.notified();
-        if use_cache {
-            spawn({
-                let notify = notify.clone();
-                let inflight = self.inflight.clone();
-                async move {
-                    let waiter = notify.notified();
-                    notify.notify_one();
-                    waiter.await;
-                    let mut inflight = inflight.lock().await;
-                    for tip in tips.tips {
-                        inflight.remove(&tip);
-                    }
-                }
-            });
-        }
-        notified.await;
-        let notify_on = NotifyOnDrop(Some(notify));
-        match req.send().await {
-            Ok(s) => match s.json().await {
-                Ok(j) => Ok((j, notify_on)),
-                Err(e) => Err(e),
-            },
-            Err(e) => Err(e),
-        }
-    }
-
-    pub async fn post_messages(
-        &self,
-        envelopes: &Vec<Envelope>,
-        url: &String,
-        port: u16,
-    ) -> Result<Vec<Outcome>, reqwest::Error> {
-        let resp = self
-            .client
-            .post(format!("http://{}:{}/msg", url, port))
-            .json(envelopes)
-            .send()
-            .await?
-            .json()
-            .await?;
-        Ok(resp)
-    }
+pub enum OpenState {
+    Unknown,
+    Already(ProtocolChan),
+    Newly(ProtocolChan, ProtocolReceiver),
 }

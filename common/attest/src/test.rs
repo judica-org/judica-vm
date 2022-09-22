@@ -1,5 +1,8 @@
 use crate::{
-    attestations::client::AttestationClient,
+    attestations::{
+        client::{AttestationClient, ServiceUrl},
+        server::protocol::GlobalSocketState,
+    },
     configuration::{Config, PeerServicesTimers},
     configuration::{ControlConfig, PeerServiceConfig},
     control::{
@@ -15,10 +18,12 @@ use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
 use ruma_serde::CanonicalJsonValue;
-use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
+use sapio_bitcoin::{
+    secp256k1::{All, Secp256k1},
+    XOnlyPublicKey,
+};
 use std::{collections::BTreeSet, env::temp_dir, sync::Arc, time::Duration};
 use test_log::test;
-use tokio::spawn;
 use tracing::{debug, info};
 const HOME: &str = "127.0.0.1";
 
@@ -33,58 +38,38 @@ fn get_btc_config() -> BitcoinConfig {
         },
     }
 }
-async fn test_context<T, F>(nodes: u8, code: F)
+async fn test_context<T, F>(nodes: u8, secp: Arc<Secp256k1<All>>, code: F)
 where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
-    F: Fn(Vec<(u16, u16)>) -> T,
+    F: Fn(Vec<(u16, u16)>, Arc<Globals>) -> T,
 {
     let mut unord = FuturesUnordered::new();
     let mut quits = vec![];
     let mut ports = vec![];
-    let secp = Arc::new(Secp256k1::new());
-    for test_id in 0..nodes {
-        let btc_config = get_btc_config();
-        let shutdown = AppShutdown::new();
-        quits.push(shutdown.clone());
-        let mut dir = temp_dir();
-        let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
-        use sapio_bitcoin::secp256k1::rand::Rng;
-        let bytes: [u8; 16] = rng.gen();
-        use sapio_bitcoin::hashes::hex::ToHex;
-        dir.push(format!("test-rust-{}", bytes.to_hex()));
-        tracing::debug!("Using tmpdir: {}", dir.display());
-        let dir = attest_util::ensure_dir(dir, None).await.unwrap();
-        let timer_override = PeerServicesTimers::scaled_default(0.001);
-        let config = Config {
-            bitcoin: btc_config.clone(),
-            subname: format!("subname-{}", test_id),
-            attestation_port: 12556 + test_id as u16,
-            tor: None,
-            control: ControlConfig {
-                port: 14556 + test_id as u16,
-            },
-            prefix: Some(dir),
-            peer_service: PeerServiceConfig { timer_override },
-            test_db: true,
-        };
+    let mut client_globals = None;
+    for test_id in 0..nodes + 1 {
+        let (shutdown, config) = create_test_config(&mut quits, test_id).await;
         ports.push((config.attestation_port, config.control.port));
-        let task_one = spawn({
-            let secp = secp.clone();
-            async move {
-                init_main(Arc::new(Globals {
-                    config: Arc::new(config),
-                    shutdown,
-                    secp,
-                }))
-                .await
-            }
+        let secp = secp.clone();
+        let msg_db = config.setup_db().await.unwrap();
+        let globals = Arc::new(Globals {
+            config: Arc::new(config),
+            shutdown,
+            secp,
+            client: Default::default(),
+            msg_db,
+            socket_state: GlobalSocketState::default(),
         });
-        unord.push(task_one);
+        if test_id == nodes {
+            client_globals = Some(globals.clone());
+            ports.pop();
+        }
+        unord.push(init_main(globals));
     }
 
     let fail = tokio::select! {
-        _ = code(ports) => {
+        _ = code(ports, client_globals.unwrap()) => {
             tracing::debug!("Main Task Completed");
             None
         }
@@ -99,34 +84,71 @@ where
     // Wait for tasks to finish
     while (unord.next().await).is_some() {}
     if fail.is_some() {
-        fail.unwrap().unwrap().unwrap()
+        fail.unwrap().unwrap()
     }
+}
+
+async fn create_test_config(quits: &mut Vec<AppShutdown>, test_id: u8) -> (AppShutdown, Config) {
+    let btc_config = get_btc_config();
+    let shutdown = AppShutdown::new();
+    quits.push(shutdown.clone());
+    let mut dir = temp_dir();
+    let mut rng = sapio_bitcoin::secp256k1::rand::thread_rng();
+    use sapio_bitcoin::secp256k1::rand::Rng;
+    let bytes: [u8; 16] = rng.gen();
+    use sapio_bitcoin::hashes::hex::ToHex;
+    dir.push(format!("test-rust-{}", bytes.to_hex()));
+    tracing::debug!("Using tmpdir: {}", dir.display());
+    let dir = attest_util::ensure_dir(dir, None).await.unwrap();
+    let timer_override = PeerServicesTimers::scaled_default(0.001);
+    let config = Config {
+        bitcoin: btc_config.clone(),
+        subname: format!("subname-{}", test_id),
+        attestation_port: 12556 + test_id as u16,
+        tor: None,
+        control: ControlConfig {
+            port: 14556 + test_id as u16,
+        },
+        prefix: Some(dir),
+        peer_service: PeerServiceConfig { timer_override },
+        test_db: true,
+    };
+    (shutdown, config)
 }
 
 #[test(tokio::test(flavor = "multi_thread", worker_threads = 5))]
 async fn connect_and_test_nodes() {
     const NODES: u8 = 5;
-    test_context(NODES, |ports| async move {
+    let secp = Arc::new(Secp256k1::new());
+    test_context(NODES, secp.clone(), |ports, test_node| async move {
         tokio::time::sleep(Duration::from_millis(10)).await;
+
         // TODO: Guarantee all clients are started?
         let base = Client::new();
-        let client = AttestationClient::new(base.clone());
+        let client = AttestationClient::new(base.clone(), test_node);
         let control_client = ControlClient(base.clone());
         // Initial fetch should show no tips posessed
         loop {
             let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
-                async move { client.get_latest_tips(&HOME.into(), *port).await }
+                async move {
+                    client
+                        .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                        .await
+                }
             });
             let resp = join_all(it).await;
             let empty = (0..NODES).map(|_| Some(vec![])).collect::<Vec<_>>();
-            if resp.iter().any(Result::is_err) {
+            if resp.iter().any(Option::is_none) {
                 // Wait until all services are online
                 continue;
             }
-            assert_eq!(resp.into_iter().map(|r| r.ok()).collect::<Vec<_>>(), empty);
+            assert_eq!(resp.into_iter().collect::<Vec<_>>(), empty);
             break;
         }
+
+        info!(checkpoint = "Initial fetch showed no tips posessed");
+
         // Create a genesis envelope for each node
         let genesis_envelopes = {
             let it = ports.iter().map(|(_port, ctrl)| {
@@ -151,21 +173,28 @@ async fn connect_and_test_nodes() {
                 .collect::<Result<Vec<Envelope>, _>>()
                 .unwrap()
         };
+
+        info!(checkpoint = "Created Genesis for each Node");
         // Check that each node knows about it's own genesis envelope
         {
             let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
-                async move { client.get_latest_tips(&HOME.into(), *port).await }
+                async move {
+                    client
+                        .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                        .await
+                }
             });
             let resp = join_all(it).await;
             debug!("Got {:?}", resp);
             assert_eq!(
                 resp.into_iter()
-                    .flat_map(|r| r.ok().unwrap())
+                    .flat_map(|r| r.unwrap())
                     .collect::<Vec<_>>(),
                 genesis_envelopes
             );
         }
+        info!(checkpoint = "Each Node Has Own Genesis");
 
         // Add a message to each client like test-1-for-12345
 
@@ -184,6 +213,9 @@ async fn connect_and_test_nodes() {
         )
         .await;
         check_synched(1, false).await;
+
+        info!(checkpoint = "New Tips Appear Locally");
+
         // Connect each peer to every other peer
         {
             let futs = move |to, cli: ControlClient, ctrl: u16| async move {
@@ -200,6 +232,7 @@ async fn connect_and_test_nodes() {
                 )
                 .await
             };
+
             let it = ports.iter().map(|(port, ctrl)| {
                 let control_client = control_client.clone();
                 let ports = ports.clone();
@@ -219,14 +252,17 @@ async fn connect_and_test_nodes() {
                 }
             });
             let resp = join_all(it).await;
+
             // No Failures
             assert!(resp.iter().flatten().all(|o| o.success));
             // handshaking lemma n*n-1 would be "cleaner", but this checks
             // more strictly each one had the right number of responses
             assert!(resp.iter().all(|v| v.len() == ports.len() - 1));
             debug!("All Connected");
+            info!(checkpoint = "Peered each node to each other, unsynchronized");
             check_synched(1, true).await;
-            info!("All Synchronized")
+            info!("All Synchronized");
+            info!(checkpoint = "Peered each node to each other and synchronized");
         }
 
         // TODO: signal that notifies after re-peering successful?
@@ -247,6 +283,7 @@ async fn connect_and_test_nodes() {
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         test_envelope_inner_tips(ports.clone(), client.clone(), old_tips).await;
+        info!(checkpoint = "New Tips Synchronize after peering");
 
         for x in 3..=10 {
             make_nth(
@@ -280,7 +317,11 @@ async fn get_all_tips(
 ) -> BTreeSet<CanonicalEnvelopeHash> {
     let it = ports.iter().map(|(port, _ctrl)| {
         let client = client.clone();
-        async move { client.get_latest_tips(&HOME.into(), *port).await }
+        async move {
+            client
+                .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                .await
+        }
     });
     let resp = join_all(it).await;
     resp.iter()
@@ -302,7 +343,11 @@ async fn test_envelope_inner_tips(
     // Attempt to check that the latest tips of all clients Envelopes are in sync
     let it = ports.iter().map(|(port, _ctrl)| {
         let client = client.clone();
-        async move { client.get_latest_tips(&HOME.into(), *port).await }
+        async move {
+            client
+                .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                .await
+        }
     });
     let resp = join_all(it).await;
 
@@ -381,12 +426,16 @@ async fn check_synched(
         );
         let it = ports.iter().map(|(port, _ctrl)| {
             let client = client.clone();
-            async move { client.get_latest_tips(&HOME.into(), *port).await }
+            async move {
+                client
+                    .get_latest_tips(&ServiceUrl(HOME.to_owned().into(), *port))
+                    .await
+            }
         });
         let resp = join_all(it).await;
         info!("Initial Check that all nodes know their own message");
         for (r, (port, _)) in resp.iter().zip(ports.iter()) {
-            let tips = r.as_ref().ok().unwrap();
+            let tips = r.as_ref().unwrap();
             let needle = nth_msg_per_port(*port, n);
             info!(?port, response = ?tips.iter().map(|t| t.msg()).collect::<Vec<_>>(), seeking = ?needle, "Node Got Response");
 
@@ -397,13 +446,14 @@ async fn check_synched(
         }
         if require_full {
             for r in resp {
-                let tips = r.ok().unwrap();
+                let tips = r.unwrap();
                 let mut msgs = tips
                     .into_iter()
                     .map(|m| m.msg().clone())
                     .collect::<Vec<_>>();
                 msgs.sort_by(|k1, k2| k1.as_str().cmp(&k2.as_str()));
                 if expected != msgs {
+                    info!(?expected, got=?msgs);
                     tokio::time::sleep(Duration::from_millis(50)).await;
                     continue 'resync;
                 }
