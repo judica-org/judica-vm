@@ -31,7 +31,7 @@ impl SIMP for AutoBroadcast {
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct EventSource(pub String);
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct EventKey(pub String);
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
@@ -40,7 +40,7 @@ pub struct EventRecompiler {
     pub filter: EventKey,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Event {
     pub key: EventKey,
     pub slot: String,
@@ -80,4 +80,20 @@ impl Into<XOnlyPublicKey> for XOnlyPublicKeyString {
 pub struct AttestContinuationPointSubscription {
     #[schemars(with = "XOnlyPublicKeyString")]
     pub oracle_key: XOnlyPublicKey,
+}
+impl AttestContinuationPointSubscription {
+    pub fn get_protocol_number() -> i64 {
+        0x1
+    }
+}
+impl SIMP for AttestContinuationPointSubscription {
+    fn get_protocol_number(&self) -> i64 {
+        Self::get_protocol_number()
+    }
+    fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
+        serde_json::to_value(self)
+    }
+    fn from_json(value: serde_json::Value) -> Result<Self, serde_json::Error> {
+        serde_json::from_value(value)
+    }
 }
