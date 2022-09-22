@@ -7,6 +7,7 @@ use crate::game::CallContext;
 use crate::game::GameBoard;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
 use crate::tokens::token_swap::TradingPairID;
+use crate::tokens::TokenRegistry;
 use crate::util::Currency;
 use crate::util::Price;
 use crate::{nfts::BaseNFT, nfts::NftPtr, tokens::TokenPointer};
@@ -194,32 +195,38 @@ impl PowerPlantProducer {
         Ok(())
     }
 
+    /// returns the quantity and cost in BTC for each material needed to build a plant
     pub fn estimate_materials_cost(
         game: &mut GameBoard,
         scale: u64,
         location: (u64, u64),
         plant_type: PlantType,
         owner: EntityID,
-    ) -> Result<u128, ()> {
+    ) -> Result<Vec<(String, u128, u128)>, ()> {
         let ctx = CallContext { sender: owner };
         // get bill for plant
         let resources = plant_type.raw_materials_bill(game, scale);
         let btc_token_ptr = game.bitcoin_token_id;
         // for each resource/qty
-        let prices_in_btc: Vec<u128> = resources
+        let prices_in_btc: Vec<(String, u128, u128)> = resources
             .iter()
             .map(|(material, qty)| {
+                let human_name: String = game.tokens[*material]
+                    .nickname()
+                    .unwrap_or_else(|| "Material Not Found".into());
                 // create a trading pair
                 let id = TradingPairID {
                     asset_a: *material,     // purchasing
                     asset_b: btc_token_ptr, // paying in
                 };
                 // simulate trade
-                ConstantFunctionMarketMaker::do_trade(game, id, 0, *qty, true, &ctx)
-                    .unwrap()
-                    .amount_player_sold
+                let cost_in_btc =
+                    ConstantFunctionMarketMaker::do_trade(game, id, 0, *qty, true, &ctx)
+                        .unwrap()
+                        .amount_player_sold;
+                (human_name, *qty, cost_in_btc)
             })
             .collect();
-        Ok(prices_in_btc.iter().sum())
+        Ok(prices_in_btc)
     }
 }
