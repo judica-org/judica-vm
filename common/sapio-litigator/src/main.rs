@@ -33,7 +33,7 @@ use tokio::spawn;
 use tokio::sync::Notify;
 mod universe;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Event {
     Initialization((Vec<u8>, CreateArgs<Value>)),
     ExternalEvent(simps::Event),
@@ -208,15 +208,29 @@ async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Err
     // allocate a CTV Emulator
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
 
-    // summon a wasm plugin handle
-    let locator: ModuleLocator = ModuleLocator::FileName(format!(
-        "{}",
-        config
-            .contract_location
-            .into_os_string()
-            .into_string()
-            .expect("Couldn't convert OSStr to String")
-    ));
+    // create wasm plugin handle from contract initialization data at beginning of the event log
+    let ogid = evlog
+        .get_accessor()
+        .await
+        .get_occurrence_group_by_key(&config.event_log.group)?;
+    let occurrence_list = evlog.get_accessor().await.get_occurrences_for_group(ogid)?;
+    let (contract_bytes, contract_args) = match occurrence_list.get(0) {
+        None => {
+            println!("Contract has not been initialized for this event log group!");
+            // TODO: figure out how to actually construct a dyn Error
+            return Ok(());
+        }
+        Some((_, occ)) => {
+            let ev = Event::from_occurrence(occ.clone())?;
+            match ev {
+                Event::Initialization(init) => init,
+                other => {
+                    panic!("Invalid first event for event log: {:?}", other)
+                }
+            }
+        }
+    };
+    let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
     let module = WasmPluginHandle::<Compiled>::new_async(
         &data_dir,
         &emulator,
@@ -225,10 +239,13 @@ async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Err
         Default::default(),
     )
     .await?;
+
+    // check which continuation points need attest message routing
     let obj = module.call(
         &PathFragment::Root.into(),
         &serde_json::from_value(config.contract_args)?,
     )?;
+    for cont_point in obj.continuation_points() {}
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let accessor = evlog.get_accessor().await;
