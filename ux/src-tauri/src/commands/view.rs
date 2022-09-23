@@ -21,16 +21,43 @@ pub(crate) async fn game_synchronizer_inner(
     info!("Registering Window for State Updates");
     let _p = PrintOnDrop("Registration Canceled".into());
     loop {
-        game_synchronizer_inner_loop(signing_key.inner(), s.inner(), d.inner(), &window).await?;
+        match game_synchronizer_inner_loop(signing_key.inner(), s.inner(), d.inner(), &window).await
+        {
+            Ok(()) => {}
+            Err(e) => {
+                tracing::debug!(?e, "SyncError");
+                match &e {
+                    SyncError::NoSigningKey | SyncError::NoGame => {
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    }
+                    SyncError::KeyUnknownByGame | SyncError::DatabaseError => return Err(e),
+                }
+            }
+        }
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub enum SyncError {
     NoSigningKey,
     NoGame,
     KeyUnknownByGame,
     DatabaseError,
+}
+trait ResultFlipExt {
+    type Output;
+    fn flip(self) -> Self::Output;
+}
+impl<T, E1, E2> ResultFlipExt for Result<Result<T, E1>, E2> {
+    type Output = Result<Result<T, E2>, E1>;
+
+    fn flip(self) -> Self::Output {
+        match self {
+            Ok(Ok(v)) => Ok(Ok(v)),
+            Err(e) => Ok(Err(e)),
+            Ok(Err(v)) => Err(v),
+        }
+    }
 }
 
 async fn game_synchronizer_inner_loop(
@@ -39,27 +66,6 @@ async fn game_synchronizer_inner_loop(
     d: &Database,
     window: &Window,
 ) -> Result<(), SyncError> {
-    // No Idea why the borrow checker likes this, but it seems to be the case
-    // that because the notified needs to live inside the async state machine
-    // hapily, giving a stable reference to it tricks the compiler into thinking
-    // that the lifetime is 'static and we can successfully wait on it outside
-    // the lock.
-    let mut arc_cheat = None;
-    let signing_key = *signing_key.lock().await;
-    let signing_key = signing_key.ok_or(SyncError::NoSigningKey)?;
-    let (gamestring, wait_on, key, chat_log, user_inventory) = {
-        let game = s.lock().await;
-        let game = game.as_ref().ok_or(SyncError::NoGame)?;
-        let s = serde_json::to_string(&game.board).unwrap_or_else(|_| "null".into());
-        arc_cheat = Some(game.should_notify.clone());
-        let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
-        let chat_log = game.board.get_ux_chat_log();
-        let user_inventory = game
-            .board
-            .get_ux_user_inventory(signing_key.to_string())
-            .map_err(|()| SyncError::KeyUnknownByGame)?;
-        (s, w, game.host_key, chat_log, user_inventory)
-    };
     let (appName, prefix, list_of_chains, user_keys) = {
         let l = d.state.lock().await;
         if let Some(g) = l.as_ref() {
@@ -77,6 +83,39 @@ async fn game_synchronizer_inner_loop(
             ("".into(), None, vec![], vec![])
         }
     };
+
+    Ok(())
+        .and_then(|()| window.emit("db-connection", (appName, prefix)))
+        .and_then(|()| window.emit("available-sequencers", list_of_chains))
+        .and_then(|()| window.emit("user-keys", user_keys))
+        .expect("All window emits should succeed");
+
+    // No Idea why the borrow checker likes this, but it seems to be the case
+    // that because the notified needs to live inside the async state machine
+    // hapily, giving a stable reference to it tricks the compiler into thinking
+    // that the lifetime is 'static and we can successfully wait on it outside
+    // the lock.
+    let mut arc_cheat = None;
+    let signing_key = *signing_key.lock().await;
+    let signing_key = signing_key.ok_or(SyncError::NoSigningKey);
+    let (gamestring, wait_on, key, chat_log, user_inventory) = {
+        let game = s.lock().await;
+        let game = game.as_ref().ok_or(SyncError::NoGame)?;
+        let s = serde_json::to_string(&game.board).unwrap_or_else(|_| "null".into());
+        arc_cheat = Some(game.should_notify.clone());
+        let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
+        let chat_log = game.board.get_ux_chat_log();
+        let user_inventory = signing_key
+            .as_ref()
+            .map(|key| {
+                game.board
+                    .get_ux_user_inventory(key.to_string())
+                    .map_err(|()| SyncError::KeyUnknownByGame)
+            })
+            .flip()?
+            .map_err(|e| e.clone());
+        (s, w, game.host_key, chat_log, user_inventory)
+    };
     // TODO: move these under a single held game lock
     // Attempt to get data to show prices
     let (raw_price_data, power_plants, listings) = {
@@ -92,17 +131,24 @@ async fn game_synchronizer_inner_loop(
     };
     info!("Emitting State Updates");
     Ok(())
-        .and_then(|()| window.emit("available-sequencers", list_of_chains))
         .and_then(|()| window.emit("chat-log", chat_log))
-        .and_then(|()| window.emit("signing-key", signing_key))
+        .and_then(|()| {
+            signing_key
+                .map(|key| window.emit("signing-key", key))
+                .flip()?;
+            Ok(())
+        })
         .and_then(|()| window.emit("host-key", key))
-        .and_then(|()| window.emit("user-keys", user_keys))
-        .and_then(|()| window.emit("db-connection", (appName, prefix)))
         .and_then(|()| window.emit("game-board", gamestring))
         .and_then(|()| window.emit("materials-price-data", raw_price_data))
         .and_then(|()| window.emit("power-plants", power_plants))
         .and_then(|()| window.emit("energy-exchange", listings.listings))
-        .and_then(|()| window.emit("user-inventory", user_inventory))
+        .and_then(|()| {
+            user_inventory
+                .map(|inventory| window.emit("user-inventory", inventory))
+                .flip()?;
+            Ok(())
+        })
         .expect("All window emits should succeed");
     if let Some(w) = wait_on {
         w.await;
