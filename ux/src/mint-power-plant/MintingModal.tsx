@@ -3,14 +3,14 @@ import { Modal, Paper, IconButton, Divider, Button } from '@mui/material';
 import { useEffect, useState } from 'react';
 import MintingForm from './MintingForm';
 
-function MintingModal() {
+function MintingModal({ location }: { location: [number, number] }) {
   const [open, setOpen] = useState(false);
 
   const handleClose = () => setOpen(false);
   const handleOpen = () => setOpen(true);
 
   return (
-    <div>
+    <div className="MintingModal">
       <Button onClick={handleOpen}>Mint Power Plant</Button>
       <Modal
         aria-labelledby='minting-modal'
@@ -31,7 +31,7 @@ function MintingModal() {
             <Close />
           </IconButton>
           <Divider />
-          <MintingForm />
+          <MintingForm location={location} />
         </Paper>
       </Modal>
     </div>

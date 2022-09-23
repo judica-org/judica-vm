@@ -1,24 +1,29 @@
 import React, { useState, useEffect } from "react";
 import { listen } from '@tauri-apps/api/event';
-import { Button, FormControl, FormControlLabel, FormLabel, Grid, Radio, RadioGroup, Switch, TextField } from "@mui/material";
+import { Button, Divider, FormControl, FormControlLabel, FormLabel, Grid, Radio, RadioGroup, Switch, TextField, Typography } from "@mui/material";
+import { invoke } from "@tauri-apps/api";
+import { MintingEstimate } from "./MintingEstimate";
+import { tauri_host } from "../tauri_host";
+import { PlantType } from "../App";
 
-const MintingForm = () => {
-  const [location, setLocation] = useState([]);
+const standardizeCoordinates = ({ lat, lng }: { lat: number, lng: number }): [number, number] => {
+  // fix to 6 decimal places to conform with hex data then remove decimals
+  const newLat = parseFloat(lat.toFixed(6)) * 1000000;
+  const newLng = parseFloat(lng.toFixed(6)) * 1000000;
+
+  return [newLat, newLng]
+}
+
+const MintingForm = ({ location }: { location: [number, number] }) => {
+  // const [location, setLocation] = useState([]);
   const [superMint, setSuperMint] = useState(false);
+  const [estimate, setEstimate] = useState<any[] | null>(null);
 
   const defaultValues = {
     plant_type: 'Select',
     scale: 1,
     location,
   }
-
-  useEffect(() => {
-    listen("globe-click", (ev: { payload: any }) => {
-      console.log(["globe-click"], ev);
-      setLocation(ev.payload);
-    });
-  });
-
 
   /* Will need two submit buttons:
     1. simulate - will submit formData with simulate = true. 
@@ -41,72 +46,92 @@ const MintingForm = () => {
     setSuperMint(event.target.checked);
   };
 
-  const handleSubmit = (event: React.SyntheticEvent) => {
+  const handleSubmit = async (event: any) => {
     event.preventDefault();
-    console.log({...formValues, superMint});
+    const submitter_id = event.nativeEvent.submitter.id;
+    const { scale, plant_type } = formValues;
+    console.log(["submit-clicked"], { ...formValues, superMint }, { submitter_id });
+    console.log(["number-log"], standardizeCoordinates({ lat: location[0], lng: location[1] }));
+    if (submitter_id === "estimate") {
+      let costs = await tauri_host.mint_power_plant_cost(scale, standardizeCoordinates({ lat: location[0], lng: location[1] }), plant_type as PlantType);
+      console.log(["mint-plant-estimate"], costs)
+      setEstimate(costs as unknown as any);
+    }
+    if (submitter_id === "mint") {
+      // this expects entityID that isn't used. Remove later.
+      await tauri_host.make_move_inner({ scale, location, plant_type }, 12345);
+      await invoke("game-move", { payload: { scale, location, plant_type } });
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <Grid container style={{ alignItems: "center" }}>
-        <Grid item>
-          <TextField
-            id="scale-input"
-            name="scale"
-            label="Scale"
-            type="number"
-            value={formValues.scale}
-            onChange={handleInputChange}
-          />
-        </Grid>
-        <Grid item>
-          <FormControl>
-            <FormLabel>Plant Type</FormLabel>
-            <RadioGroup
-              name="plant-type"
-              value={formValues.plant_type}
-              onChange={handleInputChange}
-              row
-            >
-              <FormControlLabel
-                key="solar"
-                value="Solar"
-                control={<Radio size="small" />}
-                label="Solar"
+    <div className="MintingForm">
+      {estimate && <MintingEstimate costs={estimate}></MintingEstimate>}
+      <Divider />
+      <div>
+        <Typography variant="h6"> Estimate Plant Cost and Build </Typography>
+        <form onSubmit={handleSubmit}>
+          <Grid container style={{ alignItems: "center" }}>
+            <Grid item>
+              <TextField
+                id="scale-input"
+                name="scale"
+                label="Scale"
+                type="number"
+                value={formValues.scale}
+                onChange={handleInputChange}
               />
-              <FormControlLabel
-                key="hydro"
-                value="Hydro"
-                control={<Radio size="small" />}
-                label="Hydro"
-              />
-              <FormControlLabel
-                key="flare"
-                value="Flare"
-                control={<Radio size="small" />}
-                label="Flare"
-              />
-            </RadioGroup>
-          </FormControl>
-        </Grid>
-        <Grid item>
-          <div style={{ width: "400px" }}>
-            Super Mint?
-            <Switch
-              checked={superMint}
-              onChange={handleSelectChange}
-              inputProps={{ 'aria-label': 'controlled' }}
-            />
-          </div>
-        </Grid>
-        <Button variant="contained" color="primary" type="submit">
-          Estimate
-        </Button>
-        <Button variant="contained" color="primary" type="submit">
-          Mint
-        </Button>
-      </Grid>
-    </form>
+            </Grid>
+            <Grid item>
+              <FormControl>
+                <FormLabel>Plant Type</FormLabel>
+                <RadioGroup
+                  name="plant_type"
+                  value={formValues.plant_type}
+                  onChange={handleInputChange}
+                  row
+                >
+                  <FormControlLabel
+                    key="solar"
+                    value="Solar"
+                    control={<Radio size="small" />}
+                    label="Solar"
+                  />
+                  <FormControlLabel
+                    key="hydro"
+                    value="Hydro"
+                    control={<Radio size="small" />}
+                    label="Hydro"
+                  />
+                  <FormControlLabel
+                    key="flare"
+                    value="Flare"
+                    control={<Radio size="small" />}
+                    label="Flare"
+                  />
+                </RadioGroup>
+              </FormControl>
+            </Grid>
+            <Grid item>
+              <div style={{ width: "400px" }}>
+                Super Mint?
+                <Switch
+                  checked={superMint}
+                  onChange={handleSelectChange}
+                  inputProps={{ 'aria-label': 'controlled' }}
+                />
+              </div>
+            </Grid>
+            <Button variant="contained" color="primary" type="submit" id="estimate">
+              Estimate
+            </Button>
+            <Button variant="contained" color="primary" type="submit" id="mint">
+              Mint
+            </Button>
+          </Grid>
+        </form>
+      </div>
+    </div >
   );
 };
 export default MintingForm;

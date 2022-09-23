@@ -10,6 +10,7 @@ import { Chat } from './chat/Chat';
 import { AppHeader } from './header/AppHeader';
 import { Inventory } from './inventory/inventory';
 import MintingModal from './mint-power-plant/MintingModal';
+import { listen } from '@tauri-apps/api/event';
 
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
@@ -122,6 +123,7 @@ function GameBoard(props: { g: game_board }) {
 
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
+  const [location, setLocation] = useState<[number, number] | null>(null);
 
   useEffect(() => {
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
@@ -136,12 +138,19 @@ function App() {
     }
   }, [game_board]);
 
+  useEffect(() => {
+    listen("globe-location", (ev: { payload: any }) => {
+      console.log(["globe-location"], JSON.parse(ev.payload));
+      setLocation(JSON.parse(ev.payload));
+    });
+  });
+
   return (
     <div>
       <AppHeader></AppHeader>
       <div className="App">
         <WorkingGlobe></WorkingGlobe>
-      <MintingModal />
+        {location && <MintingModal location={location} />}
         {<EnergyExchange></EnergyExchange>}
         <RawMaterialsMarket></RawMaterialsMarket>
         <Inventory></Inventory>
