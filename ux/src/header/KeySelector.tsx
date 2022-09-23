@@ -10,7 +10,7 @@ export const KeySelector = () => {
 
   useEffect(() => {
     const unlisten = appWindow.listen("user-keys", (ev) => {
-      console.log(ev.payload);
+      console.log(["available keys"], ev.payload);
       const new_keys = ev.payload as typeof available_keys;
       // reset selected key
       if (selected_key && new_keys.indexOf(selected_key) == -1) {
@@ -24,11 +24,11 @@ export const KeySelector = () => {
         (await unlisten)()
       })();
     }
-  });
+  }, []);
 
   useEffect(() => {
     const unlisten = appWindow.listen("signing-key", (ev) => {
-      console.log(["signing_key"], ev);
+      console.log(["signing-key"], ev.payload);
       set_signing_key(ev.payload as string)
     })
     return () => {
@@ -36,11 +36,11 @@ export const KeySelector = () => {
         (await unlisten)()
       })();
     }
-  });
+  }, []);
 
   const handle_submit = (ev: FormEvent<HTMLButtonElement>): void => {
     ev.preventDefault();
-    console.log(["selected_key"], selected_key);
+    console.log(["selected-key"], selected_key);
     // redundant but more clear to check both
     if (selected_key || selected_key !== "") tauri_host.set_signing_key(selected_key);
     else tauri_host.set_signing_key(null);
@@ -51,7 +51,7 @@ export const KeySelector = () => {
   })
 
   return <div>
-    <h4>Signing With: {signing_key}</h4>
+    <h6>Signing With: {signing_key}</h6>
     <FormControl >
       <Select label="Public Key" onChange={(ev) => set_selected_key(ev.target.value as string)}>
         <MenuItem value={""} selected={selected_key == null}>No Key</MenuItem>
