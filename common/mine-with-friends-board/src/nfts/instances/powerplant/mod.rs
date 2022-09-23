@@ -39,7 +39,7 @@ pub(crate) struct PowerPlant {
     pub id: NftPtr,
     pub plant_type: PlantType,
     pub watts: u128,
-    pub coordinates: (u64, u64),
+    pub coordinates: (i64, i64),
 }
 
 impl PowerPlant {
@@ -48,7 +48,7 @@ impl PowerPlant {
         game: &GameBoard,
         id: NftPtr,
         plant_type: PlantType,
-        coordinates: (u64, u64),
+        coordinates: (i64, i64),
         scale: u64,
     ) -> Self {
         let watts = {
@@ -124,7 +124,7 @@ impl PowerPlantProducer {
         game: &mut GameBoard,
         // size of the plant
         scale: u64,
-        location: (u64, u64),
+        location: (i64, i64),
         plant_type: PlantType,
         owner: EntityID,
     ) {
@@ -169,7 +169,7 @@ impl PowerPlantProducer {
         game: &mut GameBoard,
         // size of the plant
         scale: u64,
-        location: (u64, u64),
+        location: (i64, i64),
         plant_type: PlantType,
         owner: EntityID,
     ) -> Result<(), ()> {
@@ -199,7 +199,7 @@ impl PowerPlantProducer {
     pub fn estimate_materials_cost(
         game: &mut GameBoard,
         scale: u64,
-        location: (u64, u64),
+        location: (i64, i64),
         plant_type: PlantType,
         owner: EntityID,
     ) -> Result<Vec<(String, u128, u128)>, ()> {

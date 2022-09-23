@@ -65,7 +65,7 @@ export default () => {
                 <Globe
                     onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
                         console.log(['globe-click'], { lat, lng });
-                        emit('globe-click', { lat, lng });
+                        emit('globe-click', [lat,lng]);
                     }}
                     globeImageUrl={earth}
                     width={500}

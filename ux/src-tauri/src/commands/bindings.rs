@@ -1,4 +1,5 @@
 use mine_with_friends_board::game::game_move::GameMove;
+use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use tauri::{generate_handler, Invoke};
 
@@ -14,7 +15,8 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     set_signing_key,
     send_chat,
     make_new_chain,
-    list_my_users
+    list_my_users,
+    mint_power_plant_cost
 ];
 #[tauri::command]
 pub async fn game_synchronizer(
@@ -24,6 +26,17 @@ pub async fn game_synchronizer(
     signing_key: State<'_, SigningKeyInner>,
 ) -> Result<(), SyncError> {
     view::game_synchronizer_inner(window, s, d, signing_key).await
+}
+
+#[tauri::command]
+pub(crate) async fn mint_power_plant_cost(
+    scale: u64,
+    location: (i64, i64),
+    plant_type: PlantType,
+    s: GameState<'_>,
+    signing_key: State<'_, SigningKeyInner>,
+) -> Result<Vec<(String, u128, u128)>, ()> {
+    view::mint_power_plant_cost(scale, location, plant_type, s, signing_key).await
 }
 
 #[tauri::command]

@@ -6,6 +6,6 @@ pub(crate) type Price = u128;
 pub type Currency = TokenPointer;
 
 pub type Watts = u128;
-pub type Location = (u64, u64);
+pub type Location = (i64, i64);
 pub type ForSale = bool;
 pub type HasMiners = bool;

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api';
+import { PlantType } from './App';
 
 let game_synchronizer_invoked = false;
 export const tauri_host = {
@@ -31,5 +32,8 @@ export const tauri_host = {
   },
   make_new_chain: async (nickname: string) => {
     return invoke("make_new_chain", { nickname });
+  },
+  mint_power_plant_cost: async(scale: number, location: [number, number], plantType: PlantType) => {
+    return invoke("mint_power_plant_cost", {scale, location, plantType});
   }
 };

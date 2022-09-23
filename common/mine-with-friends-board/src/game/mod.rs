@@ -638,7 +638,7 @@ impl GameBoard {
     pub fn get_power_plant_cost(
         &mut self,
         scale: u64,
-        location: (u64, u64),
+        location: (i64, i64),
         plant_type: PlantType,
         signing_key: String,
     ) -> Result<Vec<(String, u128, u128)>, ()> {
