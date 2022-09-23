@@ -616,14 +616,14 @@ impl GameBoard {
     }
 
     pub fn simulate_trade(
-        game: &mut GameBoard,
+        &mut self,
         pair: TradingPairID,
         amount_a: u128,
         amount_b: u128,
         sender: EntityID,
     ) -> Result<TradeOutcome, TradeError> {
         match ConstantFunctionMarketMaker::do_trade(
-            game,
+            self,
             pair,
             amount_a,
             amount_b,
@@ -636,15 +636,16 @@ impl GameBoard {
     }
 
     pub fn get_power_plant_cost(
-        game: &mut GameBoard,
+        &mut self,
         scale: u64,
         location: (u64, u64),
         plant_type: PlantType,
-        owner: EntityID,
-    ) -> Result<u128, ()> {
+        signing_key: String,
+    ) -> Result<Vec<(String, u128, u128)>, ()> {
+        let owner = self.users_by_key.get(&signing_key).unwrap().to_owned();
         Ok(
-            PowerPlantProducer::estimate_materials_cost(game, scale, location, plant_type, owner)
-                .unwrap(),
+            PowerPlantProducer::estimate_materials_cost(self, scale, location, plant_type, owner)
+                .unwrap_or(Vec::new()),
         )
     }
 }

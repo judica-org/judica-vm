@@ -9,6 +9,7 @@ import { tauri_host } from './tauri_host';
 import { Chat } from './chat/Chat';
 import { AppHeader } from './header/AppHeader';
 import { Inventory } from './inventory/inventory';
+import MintingModal from './mint-power-plant/MintingModal';
 
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
@@ -140,6 +141,7 @@ function App() {
       <AppHeader></AppHeader>
       <div className="App">
         <WorkingGlobe></WorkingGlobe>
+      <MintingModal />
         {<EnergyExchange></EnergyExchange>}
         <RawMaterialsMarket></RawMaterialsMarket>
         <Inventory></Inventory>

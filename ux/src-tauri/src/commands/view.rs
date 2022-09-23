@@ -1,6 +1,8 @@
 use crate::{Database, Game, GameState, PrintOnDrop, SigningKeyInner};
 
-use mine_with_friends_board::nfts::{sale::UXForSaleList, NftPtr, UXPlantData};
+use mine_with_friends_board::nfts::{
+    instances::powerplant::PlantType, sale::UXForSaleList, NftPtr, UXPlantData,
+};
 use sapio_bitcoin::XOnlyPublicKey;
 
 use tauri::{State, Window};
@@ -134,4 +136,47 @@ pub(crate) async fn list_my_users_inner(
         .map(|((_a, b), k)| (*k, b.clone()))
         .collect();
     Ok(ret)
+}
+
+/// returns qty BTC to purchase materials and mint plant of given type and size
+pub(crate) async fn super_mint_power_plant_cost(
+    scale: u64,
+    location: (u64, u64),
+    plant_type: PlantType,
+    s: GameState<'_>,
+    signing_key: State<'_, SigningKeyInner>,
+) -> Result<u128, ()> {
+    let cost = {
+        let cost_detail = mint_power_plant_cost(scale, location, plant_type, s, signing_key).await.unwrap();
+        let btc_costs: Vec<u128> = cost_detail.iter().map(|(_, _, btc)| *btc).collect();
+        btc_costs.iter().sum()
+    };
+
+    Ok(cost)
+}
+
+// returns qty of each material necessary to mint plant of given type and size
+pub(crate) async fn mint_power_plant_cost(
+    scale: u64,
+    location: (u64, u64),
+    plant_type: PlantType,
+    s: GameState<'_>,
+    signing_key: State<'_, SigningKeyInner>,
+) -> Result<Vec<(String, u128, u128)>, ()> {
+    let signing_key: Option<_> = *signing_key.inner().lock().await;
+    let mut game = s.inner().lock().await;
+    let current_prices = game
+        .as_mut()
+        .map(|g| {
+            g.board.get_power_plant_cost(
+                scale,
+                location,
+                plant_type,
+                signing_key.unwrap().to_string(),
+            )
+        })
+        .unwrap_or(Ok(Vec::new()))
+        .unwrap();
+
+    Ok(current_prices)
 }
