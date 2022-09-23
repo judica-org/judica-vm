@@ -2,7 +2,7 @@ use mine_with_friends_board::game::game_move::GameMove;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use tauri::{generate_handler, Invoke};
 
-use super::*;
+use super::{*, view::SyncError};
 pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     game_synchronizer,
     get_move_schema,
@@ -22,7 +22,7 @@ pub async fn game_synchronizer(
     s: GameState<'_>,
     d: State<'_, Database>,
     signing_key: State<'_, SigningKeyInner>,
-) -> Result<(), ()> {
+) -> Result<(), SyncError> {
     view::game_synchronizer_inner(window, s, d, signing_key).await
 }
 

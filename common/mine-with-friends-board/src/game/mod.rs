@@ -507,7 +507,7 @@ impl GameBoard {
     }
 
     // where does miner status come from
-    pub fn get_ux_power_plant_data(&mut self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
+    pub fn get_ux_power_plant_data(&self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
         let mut power_plant_data = Vec::new();
         let plants = &self.nfts.power_plants.clone();
         plants.iter().for_each(|(pointer, power_plant)| {
@@ -545,7 +545,7 @@ impl GameBoard {
         Ok(UXNFTRegistry { power_plant_data })
     }
 
-    pub fn get_user_power_plants(&mut self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
+    pub fn get_user_power_plants(&self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
         let mut power_plant_data = BTreeMap::new();
         let mut power_plant_vec = self.get_ux_power_plant_data();
         // should use something other than drain_filter?
@@ -557,7 +557,7 @@ impl GameBoard {
         Ok(UXNFTRegistry { power_plant_data })
     }
 
-    pub fn get_ux_user_inventory(&mut self, user_key: String) -> Result<UXUserInventory, ()> {
+    pub fn get_ux_user_inventory(&self, user_key: String) -> Result<UXUserInventory, ()> {
         let user_id = self.users_by_key.get(&user_key).unwrap().to_owned();
         let user_power_plants = self
             .get_user_power_plants(user_id)
@@ -565,7 +565,7 @@ impl GameBoard {
             .power_plant_data;
         let user_token_balances = {
             let mut balances = Vec::new();
-            for token in self.tokens.tokens.values_mut() {
+            for token in self.tokens.tokens.values() {
                 let balance = token.balance_check(&user_id);
                 let nickname = token.nickname().unwrap();
                 balances.push((nickname, balance))
