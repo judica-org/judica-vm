@@ -177,6 +177,7 @@ pub(crate) async fn set_signing_key_inner(
     selected: Option<XOnlyPublicKey>,
     sk: State<'_, SigningKeyInner>,
 ) -> Result<(), ()> {
+    tracing::info!(?selected, "Selecting Key");
     {
         let mut l = sk.inner().lock().await;
         *l = selected;

@@ -44,7 +44,7 @@ export default () => {
         setCountries(countries_data);
         const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
             console.log(['game-board-event'], ev);
-            set_power_plants(JSON.parse(ev.payload))
+            set_power_plants(ev.payload)
         });
 
         return () => {

@@ -11,7 +11,7 @@ export type UserPowerPlant = PowerPlant & {
 }
 
 export type UserInventory = {
-  user_power_plants: UserPowerPlant[]
+  user_power_plants: Record<string, UserPowerPlant>,
   user_token_balances: [string, number][]
 }
 
@@ -54,8 +54,8 @@ export const Inventory = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {userInventory?.user_power_plants && userInventory?.user_power_plants.map((plant, index) => (
-                  <TableRow key={index}>
+                {Object.entries(userInventory?.user_power_plants??{}).map(([ptr, plant]) => (
+                  <TableRow key={`plant-${ptr}`}>
                     <TableCell>
                       <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[plant.plant_type] }} /><p>{plant.plant_type}</p>
                     </TableCell>

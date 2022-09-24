@@ -280,7 +280,7 @@ impl ConstantFunctionMarketMaker {
 }
 
 /// A struct for passing token qty information to the UX for price calculation
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct UXMaterialsPriceData {
     pub trading_pair: TradingPairID,
     pub asset_a: String,
@@ -289,7 +289,7 @@ pub struct UXMaterialsPriceData {
     pub mkt_qty_b: u128,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct TradeOutcome {
     pub trading_pair: TradingPairID,
     pub asset_player_purchased: String,

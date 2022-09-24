@@ -50,7 +50,7 @@ use tokens::TokenPointer;
 use tokens::TokenRegistry;
 use tracing::info;
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct UXUserInventory {
     user_power_plants: BTreeMap<NftPtr, UXPlantData>,
     user_token_balances: Vec<(String, u128)>,

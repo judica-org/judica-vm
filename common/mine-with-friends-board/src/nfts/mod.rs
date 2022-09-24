@@ -108,7 +108,7 @@ impl NFT for BaseNFT {
     }
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct UXPlantData {
     pub coordinates: Location,
     pub for_sale: ForSale,

@@ -83,9 +83,20 @@ async fn game_synchronizer_inner_loop(
             ("".into(), None, vec![], vec![])
         }
     };
+    let signing_key = *signing_key.lock().await;
+    let signing_key = signing_key.as_ref().ok_or(SyncError::NoSigningKey);
 
     Ok(())
         .and_then(|()| window.emit("db-connection", (appName, prefix)))
+        .and_then({
+            let signing_key = signing_key.clone();
+            |()| {
+                signing_key
+                    .map(|key| emit(window, "signing-key", key))
+                    .flip()?;
+                Ok(())
+            }
+        })
         .and_then(|()| window.emit("available-sequencers", list_of_chains))
         .and_then(|()| window.emit("user-keys", user_keys))
         .expect("All window emits should succeed");
@@ -96,11 +107,18 @@ async fn game_synchronizer_inner_loop(
     // that the lifetime is 'static and we can successfully wait on it outside
     // the lock.
     let mut arc_cheat = None;
-    let signing_key = *signing_key.lock().await;
-    let signing_key = signing_key.ok_or(SyncError::NoSigningKey);
-    let (gamestring, wait_on, key, chat_log, user_inventory) = {
-        let game = s.lock().await;
-        let game = game.as_ref().ok_or(SyncError::NoGame)?;
+    let (
+        gamestring,
+        wait_on,
+        key,
+        chat_log,
+        user_inventory,
+        raw_price_data,
+        power_plants,
+        listings,
+    ) = {
+        let mut game = s.lock().await;
+        let game = game.as_mut().ok_or(SyncError::NoGame)?;
         let s = serde_json::to_string(&game.board).unwrap_or_else(|_| "null".into());
         arc_cheat = Some(game.should_notify.clone());
         let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
@@ -114,38 +132,36 @@ async fn game_synchronizer_inner_loop(
             })
             .flip()?
             .map_err(|e| e.clone());
-        (s, w, game.host_key, chat_log, user_inventory)
-    };
-    // TODO: move these under a single held game lock
-    // Attempt to get data to show prices
-    let (raw_price_data, power_plants, listings) = {
-        let mut game = s.lock().await;
-        let game = game.as_mut().ok_or(SyncError::NoGame)?;
+        // Attempt to get data to show prices
         let raw_price_data = game.board.get_ux_materials_prices().unwrap_or_default();
         let plants: Vec<(NftPtr, UXPlantData)> = game.board.get_ux_power_plant_data();
 
         let listings = game.board.get_ux_energy_market().unwrap_or(UXForSaleList {
             listings: Vec::new(),
         });
-        (raw_price_data, plants, listings)
+
+        (
+            s,
+            w,
+            game.host_key,
+            chat_log,
+            user_inventory,
+            raw_price_data,
+            plants,
+            listings,
+        )
     };
     info!("Emitting State Updates");
     Ok(())
-        .and_then(|()| window.emit("chat-log", chat_log))
-        .and_then(|()| {
-            signing_key
-                .map(|key| window.emit("signing-key", key))
-                .flip()?;
-            Ok(())
-        })
-        .and_then(|()| window.emit("host-key", key))
-        .and_then(|()| window.emit("game-board", gamestring))
-        .and_then(|()| window.emit("materials-price-data", raw_price_data))
-        .and_then(|()| window.emit("power-plants", power_plants))
-        .and_then(|()| window.emit("energy-exchange", listings.listings))
+        .and_then(|()| emit(window, "chat-log", chat_log))
+        .and_then(|()| emit(window, "host-key", key))
+        .and_then(|()| emit(window, "game-board", gamestring))
+        .and_then(|()| emit(window, "materials-price-data", raw_price_data))
+        .and_then(|()| emit(window, "power-plants", power_plants))
+        .and_then(|()| emit(window, "energy-exchange", listings.listings))
         .and_then(|()| {
             user_inventory
-                .map(|inventory| window.emit("user-inventory", inventory))
+                .map(|inventory| emit(window, "user-inventory", inventory))
                 .flip()?;
             Ok(())
         })
@@ -156,6 +172,14 @@ async fn game_synchronizer_inner_loop(
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
     Ok(())
+}
+
+fn emit<S>(window: &Window, event: &str, payload: S) -> Result<(), tauri::Error>
+where
+    S: Serialize + Clone + std::fmt::Debug,
+{
+    tracing::trace!(?payload, ?event, "Emitting: ");
+    window.emit(event, payload)
 }
 
 pub(crate) async fn list_my_users_inner(

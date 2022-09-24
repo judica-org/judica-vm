@@ -1,7 +1,7 @@
 import React from 'react';
 import logo from './logo.svg';
 import './App.css';
-import { GridColDef, GridColumns } from '@mui/x-data-grid';
+import { GridColDef, GridColumns, GridToolbarContainer } from '@mui/x-data-grid';
 import { Menu, Newspaper } from '@mui/icons-material';
 import { AppBar, Box, Container, IconButton, Toolbar, Typography } from '@mui/material';
 import { AddPeer } from './AddPeer';
@@ -19,6 +19,9 @@ function App() {
   const init = start.searchParams.get("service_url");
   const [url, set_url] = React.useState<null | string>(init);
   const [status, set_status] = React.useState<null | any>(null);
+  const peer = React.useMemo(() =>
+    <AddPeer root={url}></AddPeer>
+    , [url]);
   React.useEffect(
     () => {
       let cancel = false;
@@ -45,6 +48,7 @@ function App() {
     , [url])
   return (
     <Box className="App">
+      {peer}
       <AppBar position="static" color="secondary">
         <Toolbar variant="dense">
           <IconButton edge="start" color="inherit" aria-label="menu" sx={{ mr: 2 }}>
@@ -64,7 +68,7 @@ function App() {
         <div className="TableGrid">
 
           <div style={{ gridArea: "peers" }}>
-            {status && url && <Peers peers={status.peers} root={url}></Peers>}
+            <Peers peers={status?.peers ?? []} root={url} toolbar_component={peer}></Peers>
           </div>
           <div style={{ gridArea: "tasks" }}>
             {status && <TaskSet tasks={status.peer_connections}></TaskSet>}
