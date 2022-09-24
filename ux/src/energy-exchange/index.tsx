@@ -37,7 +37,7 @@ export const EnergyExchange = () => {
   useEffect(() => {
     const unlisten_energy_exchange = appWindow.listen("energy-exchange", (ev) => {
       console.log(['energy-exchange'], ev);
-      setListings(JSON.parse(ev.payload as string) as NFTSale[]);
+      setListings(ev.payload as NFTSale[]);
     });
 
     return () => {
