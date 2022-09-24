@@ -170,7 +170,7 @@ where
             let id = row.get::<_, i64>(1)?;
             *newer = (*newer).max(Some(id));
             // skip invalid...
-            match row.get::<_, E>(1) {
+            match row.get::<_, E>(0) {
                 Ok(v) => {
                     map.insert(v.as_ref().canonicalized_hash_ref(), v);
                 }
