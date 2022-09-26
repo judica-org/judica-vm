@@ -408,10 +408,13 @@ impl GameBoard {
                 currency,
             }) => {
                 let shipping_time = 1000;
-                let plant = &self.nfts.power_plants[&nft_id];
-                plant
-                    .to_owned()
-                    .ship_hashrate(currency, amount, shipping_time, self);
+                let owner = &self.nfts.nfts[&nft_id].owner();
+                if owner.eq(&from) {
+                    let plant = &self.nfts.power_plants[&nft_id];
+                    plant
+                        .to_owned()
+                        .ship_hashrate(currency, amount, shipping_time, self);
+                }
             }
             GameMove::Chat(Chat(s)) => {
                 self.chat_counter += 1;
