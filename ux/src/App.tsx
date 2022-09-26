@@ -131,7 +131,7 @@ function Panel(props: React.PropsWithChildren & { index: number, current_index: 
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
 
-  const [current_tab, set_current_tab] = useState(0);
+  const [current_tab, set_current_tab] = useState(1);
   useEffect(() => {
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
@@ -151,8 +151,8 @@ function App() {
       <div className="App">
         <WorkingGlobe></WorkingGlobe>
         <Box>
-          <Box sx={{size: "sm"}}>
-            <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable">
+          <Box sx={{ size: "sm" }}>
+            <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
               <Tab value={1} label="Minting"></Tab>
               <Tab value={2} label="Energy Exchange"></Tab>
               <Tab value={3} label="Materials Market"></Tab>
