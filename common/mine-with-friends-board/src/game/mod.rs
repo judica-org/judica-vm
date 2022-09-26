@@ -641,12 +641,9 @@ impl GameBoard {
         location: (i64, i64),
         plant_type: PlantType,
         signing_key: String,
-    ) -> Result<Vec<(String, u128, u128)>, ()> {
+    ) -> Result<Vec<(String, u128, u128)>, TradeError> {
         let owner = self.users_by_key.get(&signing_key).unwrap().to_owned();
-        Ok(
             PowerPlantProducer::estimate_materials_cost(self, scale, location, plant_type, owner)
-                .unwrap_or_default(),
-        )
     }
 }
 
