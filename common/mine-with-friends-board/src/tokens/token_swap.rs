@@ -8,6 +8,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::fmt::Display;
 use tracing::Instrument;
 
@@ -73,9 +74,50 @@ impl ConstantFunctionMarketMakerPair {
 #[derive(
     Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema, Debug,
 )]
+#[serde(into = "String", try_from = "String")]
 pub struct TradingPairID {
     pub asset_a: TokenPointer,
     pub asset_b: TokenPointer,
+}
+
+#[derive(Debug)]
+pub enum TradingPairIDParseError {
+    WrongNumberOfTerms,
+    EntityIDParseError(<EntityID as TryFrom<String>>::Error),
+}
+
+impl Display for TradingPairIDParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+impl std::error::Error for TradingPairIDParseError {}
+
+impl TryFrom<String> for TradingPairID {
+    type Error = TradingPairIDParseError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let a: Vec<&str> = value.split(':').collect();
+        if a.len() != 2 {
+            return Err(TradingPairIDParseError::WrongNumberOfTerms);
+        }
+        let asset_a = TokenPointer(
+            EntityID::try_from(a[0]).map_err(TradingPairIDParseError::EntityIDParseError)?,
+        );
+        let asset_b = TokenPointer(
+            EntityID::try_from(a[1]).map_err(TradingPairIDParseError::EntityIDParseError)?,
+        );
+        Ok(TradingPairID { asset_a, asset_b })
+    }
+}
+impl From<TradingPairID> for String {
+    fn from(s: TradingPairID) -> Self {
+        format!(
+            "{}:{}",
+            String::from(s.asset_a.0),
+            String::from(s.asset_b.0)
+        )
+    }
 }
 
 impl TradingPairID {

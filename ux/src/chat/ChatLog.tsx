@@ -1,21 +1,8 @@
 import { appWindow } from "@tauri-apps/api/window";
 import React from "react";
 
-export function ChatLog() {
+export function ChatLog({chat_log}:{chat_log:[number, number, string][]}) {
 
-    const [chat_log, set_chat_log] = React.useState<[number, number, string][]>([]);
-    React.useEffect(() => {
-        const unlisten = appWindow.listen("chat-log", (ev) => {
-            console.log("Chat:", ev.payload);
-            const new_msgs = ev.payload as typeof chat_log;
-            set_chat_log(new_msgs)
-        })
-        return () => {
-            (async () => {
-                (await unlisten)()
-            })();
-        }
-    });
 
     const msgs = chat_log.map(([a, b, c]) => {
         return <div key={a}>

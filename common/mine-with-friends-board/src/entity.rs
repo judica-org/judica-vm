@@ -12,7 +12,8 @@ use std::num::ParseIntError;
 #[derive(
     Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Serialize, Deserialize, JsonSchema, Debug,
 )]
-#[serde(transparent)]
+#[serde(into = "String")]
+#[serde(try_from = "String")]
 pub struct EntityID(pub u64);
 
 impl EntityID {
@@ -21,6 +22,12 @@ impl EntityID {
     }
 }
 
+impl TryFrom<&str> for EntityID {
+    type Error = ParseIntError;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        u64::from_str_radix(value, 16).map(EntityID)
+    }
+}
 impl TryFrom<String> for EntityID {
     type Error = ParseIntError;
     fn try_from(value: String) -> Result<Self, Self::Error> {

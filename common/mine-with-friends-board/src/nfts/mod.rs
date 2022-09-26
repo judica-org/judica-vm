@@ -47,6 +47,7 @@ impl Serialize for NFTRegistry {
 #[derive(
     Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy, JsonSchema, Debug,
 )]
+#[serde(transparent)]
 pub struct NftPtr(EntityID);
 
 impl NFTRegistry {

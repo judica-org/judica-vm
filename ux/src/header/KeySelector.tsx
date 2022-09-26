@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { tauri_host } from '../tauri_host';
 
 export const KeySelector = () => {
-  const [selected_key, set_selected_key] = useState<string | null>(null);
+  const [selected_key, set_selected_key] = useState<string>("");
   const [signing_key, set_signing_key] = useState<string | null>(null);
   const [available_keys, set_available_keys] = useState<string[]>([]);
 
@@ -15,7 +15,7 @@ export const KeySelector = () => {
       // reset selected key
       if (selected_key && new_keys.indexOf(selected_key) == -1) {
         tauri_host.set_signing_key(null);
-        set_selected_key(null);
+        set_selected_key("");
       }
       set_available_keys(new_keys);
     })
@@ -47,14 +47,14 @@ export const KeySelector = () => {
   };
 
   let key_options = available_keys.map((key) => {
-    return <MenuItem value={key} selected={key === selected_key}>{key}</MenuItem>;
+    return <MenuItem value={key} selected={key === selected_key} key={key}>{key}</MenuItem>;
   })
 
   return <div>
     <h6>Signing With: {signing_key}</h6>
     <FormControl >
-      <Select label="Public Key" onChange={(ev) => set_selected_key(ev.target.value as string)}>
-        <MenuItem value={""} selected={selected_key == null}>No Key</MenuItem>
+      <Select label="Public Key" onChange={(ev) => set_selected_key(ev.target.value as string)} value={selected_key}>
+        <MenuItem value={""} selected={selected_key === ""}>No Key</MenuItem>
         {key_options}
       </Select>
       <Button type="submit" onClick={handle_submit}>Select This Key</Button>

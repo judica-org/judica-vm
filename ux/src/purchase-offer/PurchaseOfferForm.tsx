@@ -4,26 +4,30 @@ import { invoke } from "@tauri-apps/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { tauri_host } from "../tauri_host";
 
-const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
+const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: number }) => {
   const [schema, setSchema] = useState<null | any>(null);
 
   useEffect(() => {
     (async () => {
-      setSchema(await invoke("get_listing_schema"));
+      setSchema(await invoke("get_purchase_schema"));
     })()
-  });
-  console.log("listing schema:", schema);
+  }, []);
+  console.log("purchase schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
     if (uid.current?.valueAsNumber)
       tauri_host.make_move_inner(data.formData, uid.current?.valueAsNumber)
   };
 
-  // form creater should be extracted out into a form util
+  const formData = {
+    nft_id: nft_id ?? null
+  }
+
+  // for creater should be extracted out into a form util
   const schema_form = useMemo<JSX.Element>(() => {
     const customFormats = { "uint128": (s: string) => { return true; } };
     if (schema)
-      return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
+      return <Form formData={formData} schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
         <button type="submit">Submit</button>
       </Form>;
 
@@ -35,7 +39,7 @@ const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
   const uid = useRef<null | HTMLInputElement>(null);
   return schema && <Card>
     <CardHeader
-      title={'Sell?'}
+      title={'Purchase?'}
       subheader={subtitle}
     >
     </CardHeader>
@@ -51,4 +55,4 @@ const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
   </Card>;
 };
 
-export default SaleListingForm;
+export default PurchaseOfferForm;
