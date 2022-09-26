@@ -10,6 +10,9 @@ import { Chat } from './chat/Chat';
 import { AppHeader } from './header/AppHeader';
 import { Inventory } from './inventory/inventory';
 import MintingModal from './mint-power-plant/MintingModal';
+import { Box, Tab, Tabs } from '@mui/material';
+import { TabPanelUnstyled, TabsUnstyled } from '@mui/base';
+
 
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
@@ -120,9 +123,15 @@ function GameBoard(props: { g: game_board }) {
   </ul>;
 }
 
+function Panel(props: React.PropsWithChildren & { index: number, current_index: number }) {
+  return <div hidden={props.index !== props.current_index}>
+    {props.index === props.current_index && props.children}
+  </div>
+}
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
 
+  const [current_tab, set_current_tab] = useState(0);
   useEffect(() => {
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
@@ -141,15 +150,42 @@ function App() {
       <AppHeader></AppHeader>
       <div className="App">
         <WorkingGlobe></WorkingGlobe>
-      <MintingModal />
-        {<EnergyExchange></EnergyExchange>}
-        <RawMaterialsMarket></RawMaterialsMarket>
-        <Inventory></Inventory>
-        <MoveForm></MoveForm>
-        <Chat></Chat>
-        {game_board && <GameBoard g={game_board}></GameBoard>}
-      </div>
-    </div>
+        <Box>
+          <Box sx={{size: "sm"}}>
+            <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable">
+              <Tab value={1} label="Minting"></Tab>
+              <Tab value={2} label="Energy Exchange"></Tab>
+              <Tab value={3} label="Materials Market"></Tab>
+              <Tab value={4} label="Inventory"></Tab>
+              <Tab value={5} label="Raw Move"></Tab>
+              <Tab value={6} label="Chat"></Tab>
+              <Tab value={7} label="Board JSON"></Tab>
+            </Tabs>
+          </Box>
+          <Panel index={1} current_index={current_tab}>
+            <MintingModal />
+          </Panel>
+          <Panel index={2} current_index={current_tab}>
+            {<EnergyExchange></EnergyExchange>}
+          </Panel>
+          <Panel index={3} current_index={current_tab}>
+            <RawMaterialsMarket></RawMaterialsMarket>
+          </Panel>
+          <Panel index={4} current_index={current_tab}>
+            <Inventory></Inventory>
+          </Panel>
+          <Panel index={5} current_index={current_tab}>
+            <MoveForm></MoveForm>
+          </Panel>
+          <Panel index={6} current_index={current_tab}>
+            <Chat></Chat>
+          </Panel>
+          <Panel index={7} current_index={current_tab}>
+            {game_board && <GameBoard g={game_board}></GameBoard>}
+          </Panel>
+        </Box>
+      </div >
+    </div >
   );
 }
 
