@@ -12,7 +12,7 @@ const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action:
     (async () => {
       setSchema(await tauri_host.get_material_schema());
     })()
-  });
+  }, []);
   console.log("materials schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {

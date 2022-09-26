@@ -11,7 +11,7 @@ const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
     (async () => {
       setSchema(await invoke("get_listing_schema"));
     })()
-  });
+  }, []);
   console.log("listing schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {

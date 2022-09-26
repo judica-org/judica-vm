@@ -11,7 +11,7 @@ const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: nu
     (async () => {
       setSchema(await invoke("get_purchase_schema"));
     })()
-  });
+  }, []);
   console.log("purchase schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
