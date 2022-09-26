@@ -14,7 +14,7 @@ const standardizeCoordinates = ({ lat, lng }: { lat: number, lng: number }): [nu
   return [newLat, newLng]
 }
 
-const MintingForm = ({ location }: { location: [number, number] }) => {
+const MintingForm = ({ location }: { location: [number, number]}) => {
   // const [location, setLocation] = useState([]);
   const [superMint, setSuperMint] = useState(false);
   const [estimate, setEstimate] = useState<any[] | null>(null);

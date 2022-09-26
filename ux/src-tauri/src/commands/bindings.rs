@@ -35,7 +35,7 @@ pub(crate) async fn mint_power_plant_cost(
     plant_type: PlantType,
     s: GameState<'_>,
     signing_key: State<'_, SigningKeyInner>,
-) -> Result<Vec<(String, u128, u128)>, ()> {
+) -> Result<Vec<(String, u128, u128)>, SyncError> {
     view::mint_power_plant_cost(scale, location, plant_type, s, signing_key).await
 }
 
