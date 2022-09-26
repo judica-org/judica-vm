@@ -135,7 +135,7 @@ function App() {
   useEffect(() => {
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
-      set_game_board(JSON.parse(ev.payload as string) as game_board)
+      set_game_board(ev.payload as game_board)
     });
     tauri_host.game_synchronizer()
     return () => {

@@ -119,9 +119,9 @@ async fn game_synchronizer_inner_loop(
     ) = {
         let mut game = s.lock().await;
         let game = game.as_mut().ok_or(SyncError::NoGame)?;
-        let s = serde_json::to_string(&game.board).unwrap_or_else(|e| {
+        let s = serde_json::to_value(&game.board).unwrap_or_else(|e| {
             tracing::warn!(error=?e, "Failed to Serialized Game Board");
-            "null".into()
+            serde_json::Value::Null
         });
         arc_cheat = Some(game.should_notify.clone());
         let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
