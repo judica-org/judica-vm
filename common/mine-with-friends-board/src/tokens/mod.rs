@@ -46,6 +46,8 @@ pub(crate) trait Token: Send + Sync {
     fn to_json(&self) -> serde_json::Value;
     /// the id of the token contract itself
     fn id(&self) -> EntityID;
+    /// the ptr of the token contract itself
+    fn ptr(&self) -> TokenPointer;
     /// a nickname, not guaranteed to be unique
     fn nickname(&self) -> Option<String>;
 }
@@ -154,6 +156,9 @@ impl Token for TokenBase {
         true
     }
 
+    fn ptr(&self) -> TokenPointer {
+        TokenPointer(self.this)
+    }
     fn id(&self) -> EntityID {
         self.this
     }

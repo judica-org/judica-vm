@@ -27,6 +27,10 @@ pub(crate) struct ConstantFunctionMarketMakerPair {
 }
 
 impl ConstantFunctionMarketMakerPair {
+    pub fn has_market(game: &GameBoard, mut pair: TradingPairID) -> bool {
+        pair.normalize();
+        game.swap.markets.contains_key(&pair)
+    }
     /// ensure makes sure that a given trading pair exists in the GameBoard
     fn ensure(game: &mut GameBoard, mut pair: TradingPairID) -> TradingPairID {
         pair.normalize();
@@ -124,7 +128,7 @@ impl TradingPairID {
     /// Sort the key for use in e.g. Maps
     /// N.B. don't normalize without sorting the amounts in the same order.
     /// TODO: Make a type-safer way of represnting this
-    fn normalize(&mut self) {
+    pub fn normalize(&mut self) {
         if self.asset_a <= self.asset_b {
         } else {
             *self = Self {
@@ -419,10 +423,7 @@ impl ConstantFunctionMarketMaker {
         })
     }
 
-    pub(crate) fn get_pair_price_data(
-        game: &mut GameBoard,
-        id: TradingPairID,
-    ) -> Result<(u128, u128), ()> {
+    pub(crate) fn get_pair_price_data(game: &mut GameBoard, id: TradingPairID) -> (u128, u128) {
         // check that a these two tokens are a valid pairing (do we need to?)
         let id = ConstantFunctionMarketMakerPair::ensure(game, id);
         let tokens: &mut TokenRegistry = &mut game.tokens;
@@ -431,7 +432,7 @@ impl ConstantFunctionMarketMaker {
         let mkt_qty_a = mkt.amt_a(tokens);
         let mkt_qty_b = mkt.amt_b(tokens);
 
-        Ok((mkt_qty_a, mkt_qty_b))
+        (mkt_qty_a, mkt_qty_b)
     }
 }
 
@@ -443,6 +444,7 @@ pub struct UXMaterialsPriceData {
     pub mkt_qty_a: u128,
     pub asset_b: String,
     pub mkt_qty_b: u128,
+    pub display_asset: String,
 }
 
 #[derive(Serialize, Clone, Debug)]

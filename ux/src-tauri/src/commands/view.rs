@@ -145,7 +145,7 @@ async fn game_synchronizer_inner_loop(
             .flip()?
             .map_err(|e| e.clone());
         // Attempt to get data to show prices
-        let raw_price_data = game.board.get_ux_materials_prices().unwrap_or_default();
+        let raw_price_data = game.board.get_ux_materials_prices();
         let plants: Vec<(NftPtr, UXPlantData)> = game.board.get_ux_power_plant_data();
 
         let listings = game.board.get_ux_energy_market().unwrap_or(UXForSaleList {

@@ -33,6 +33,7 @@ use crate::tokens::instances::steel::Steel;
 use crate::tokens::instances::steel::SteelSmelter;
 use crate::tokens::token_swap;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::token_swap::ConstantFunctionMarketMakerPair;
 use crate::tokens::token_swap::TradeError;
 use crate::tokens::token_swap::TradeOutcome;
 use crate::tokens::token_swap::TradingPairID;
@@ -129,7 +130,10 @@ impl GameBoard {
         let mut alloc = EntityIDAllocator::new();
 
         let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Virtual Sats".into()));
-        let real_sats = Box::new(TokenBase::new_from_alloc(&mut alloc, "Real World Sats".into()));
+        let real_sats = Box::new(TokenBase::new_from_alloc(
+            &mut alloc,
+            "Real World Sats".into(),
+        ));
         let concrete = Box::new(TokenBase::new_from_alloc(&mut alloc, "Concrete".into()));
         let asic = Box::new(TokenBase::new_from_alloc(&mut alloc, "ASIC Gen 1".into()));
         let steel = Box::new(TokenBase::new_from_alloc(&mut alloc, "Steel".into()));
@@ -433,92 +437,37 @@ impl GameBoard {
         self.chat.clone()
     }
 
-    pub fn get_ux_materials_prices(&mut self) -> Result<Vec<UXMaterialsPriceData>, ()> {
-        let mut price_data = Vec::new();
-        // get pointer and human name for materials and
-        let bitcoin_token_id = self.bitcoin_token_id;
-        let steel_token_id = self.steel_token_id;
-        let silicon_token_id = self.silicon_token_id;
-        let concrete_token_id = self.concrete_token_id;
-        // get ux names
-        let registry = &self.tokens;
-        let human_name_bitcoin = registry
-            .index(bitcoin_token_id)
-            .nickname()
-            .unwrap_or_else(|| "Bitcoin".into());
-        let human_name_steel = registry
-            .index(steel_token_id)
-            .nickname()
-            .unwrap_or_else(|| "Steel".into());
-        let human_name_silicon = registry
-            .index(silicon_token_id)
-            .nickname()
-            .unwrap_or_else(|| "Silicon".into());
-        let human_name_concrete = registry
-            .index(concrete_token_id)
-            .nickname()
-            .unwrap_or_else(|| "Concrete".into());
-        // get steel/btc
-        let (steel_qty_btc, btc_qty_steel) = ConstantFunctionMarketMaker::get_pair_price_data(
-            self,
-            TradingPairID {
-                asset_a: steel_token_id,
-                asset_b: bitcoin_token_id,
-            },
-        )
-        .unwrap();
-        // get silicon/btc
-        let (silicon_qty_btc, btc_qty_silicon) = ConstantFunctionMarketMaker::get_pair_price_data(
-            self,
-            TradingPairID {
-                asset_a: silicon_token_id,
-                asset_b: bitcoin_token_id,
-            },
-        )
-        .unwrap();
-        // get concrete/btc
-        let (concrete_qty_btc, btc_qty_concrete) =
-            ConstantFunctionMarketMaker::get_pair_price_data(
-                self,
-                TradingPairID {
-                    asset_a: concrete_token_id,
-                    asset_b: bitcoin_token_id,
-                },
-            )
-            .unwrap();
+    pub fn get_ux_materials_prices(&mut self) -> Vec<UXMaterialsPriceData> {
+        let mut res = vec![];
+        for (id) in  self.tokens.tokens.keys().cloned().collect::<Vec<_>>() {
+            let ptr = self.tokens.tokens[&id].ptr();
+            let nick = self.tokens.tokens[&id].nickname().unwrap_or_else(|| "Unknown Token".into());
 
-        price_data.push(UXMaterialsPriceData {
-            trading_pair: TradingPairID {
-                asset_a: steel_token_id,
-                asset_b: bitcoin_token_id,
-            },
-            asset_a: human_name_steel,
-            mkt_qty_a: steel_qty_btc,
-            asset_b: human_name_bitcoin.clone(),
-            mkt_qty_b: btc_qty_steel,
-        });
-        price_data.push(UXMaterialsPriceData {
-            trading_pair: TradingPairID {
-                asset_a: silicon_token_id,
-                asset_b: bitcoin_token_id,
-            },
-            asset_a: human_name_silicon,
-            mkt_qty_a: silicon_qty_btc,
-            asset_b: human_name_bitcoin.clone(),
-            mkt_qty_b: btc_qty_silicon,
-        });
-        price_data.push(UXMaterialsPriceData {
-            trading_pair: TradingPairID {
-                asset_a: concrete_token_id,
-                asset_b: bitcoin_token_id,
-            },
-            asset_a: human_name_concrete,
-            mkt_qty_a: concrete_qty_btc,
-            asset_b: human_name_bitcoin,
-            mkt_qty_b: btc_qty_concrete,
-        });
-
-        Ok(price_data)
+            let mut trading_pair = TradingPairID {
+                asset_a: ptr,
+                asset_b: self.bitcoin_token_id,
+            };
+            trading_pair.normalize();
+            // N.B. Pairs may not show up on first pass if not formerly ensured
+            if !ConstantFunctionMarketMakerPair::has_market(self, trading_pair) {
+                continue;
+            }
+            let (mkt_qty_a, mkt_qty_b) =
+                ConstantFunctionMarketMaker::get_pair_price_data(self, trading_pair);
+            res.push(UXMaterialsPriceData {
+                asset_a: self.tokens[trading_pair.asset_a]
+                    .nickname()
+                    .unwrap_or_else(|| format!("Unknown Token: {:?}", trading_pair.asset_a)),
+                asset_b: self.tokens[trading_pair.asset_b]
+                    .nickname()
+                    .unwrap_or_else(|| format!("Unknown Token: {:?}", trading_pair.asset_b)),
+                mkt_qty_a,
+                mkt_qty_b,
+                trading_pair,
+                display_asset: nick,
+            })
+        }
+        res
     }
 
     // where does miner status come from
