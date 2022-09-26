@@ -35,7 +35,7 @@ mod universe;
 
 #[derive(Serialize, Deserialize)]
 pub enum Event {
-    Initialization(CreateArgs<Value>),
+    Initialization((Vec<u8>, CreateArgs<Value>)),
     ExternalEvent(simps::Event),
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
@@ -112,6 +112,8 @@ struct Config {
     logfile: PathBuf,
     event_log: EventLogConfig,
     oracle_key: XOnlyPublicKey,
+    contract_location: PathBuf,
+    contract_args: Value,
 }
 
 #[derive(Deserialize)]
@@ -141,48 +143,94 @@ impl Config {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-    do_main().await
-}
-
-async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Arc::new(Config::from_env()?);
-    let evlog = config.get_event_log().await?;
-    let msg_db = config.get_db().await?;
-    let _bitcoin = config.get_bitcoin_rpc().await?;
+fn data_dir_modules(app_instance: &str) -> PathBuf {
     let typ = "org";
     let org = "judica";
-    let proj = format!("sapio-litigator.{}", config.app_instance);
+    let proj = format!("sapio-litigator.{}", app_instance);
     let proj =
         directories::ProjectDirs::from(typ, org, &proj).expect("Failed to find config directory");
     let mut data_dir = proj.data_dir().to_owned();
     data_dir.push("modules");
+    data_dir
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
+    let mut args = std::env::args();
+    let config = Config::from_env()?;
+    match args.nth(1) {
+        None => todo!(),
+        Some(s) if &s == "init" => Ok(init_contract_event_log(config).await?),
+        Some(s) if &s == "run" => Ok(litigate_contract(config).await?),
+        Some(s) => {
+            println!("Invalid argument: {}", s);
+            return Ok(());
+        }
+    }
+}
+
+async fn init_contract_event_log(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+    let evlog = config.get_event_log().await?;
+    let accessor = evlog.get_accessor().await;
+    let group = config.event_log.group;
+    match accessor.get_occurrence_group_by_key(&group) {
+        Ok(a) => {
+            println!("Instance {} has already been initialized", group);
+            return Ok(());
+        }
+        Err(e) => {
+            let location = config.contract_location.to_str().unwrap();
+            println!("Initializing contract at {}", location);
+            println!("Using arguments {}", config.contract_args);
+            let gid = accessor.insert_new_occurrence_group(&group)?;
+            let ev = Event::Initialization((
+                tokio::fs::read(&location).await?,
+                serde_json::from_value(config.contract_args)?,
+            ));
+            let ev_occ: &dyn ToOccurrence = &ev;
+            accessor.insert_occurrence(gid, &ev_occ.into())?;
+            return Ok(());
+        }
+    }
+}
+
+// TODO: MAKE SURE WE ARE GRABBING CONTRACT PARAMETERS FROM BEGINNING OF EVENT LOG
+async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+    // initialize db connection to the event log
+    let evlog = config.get_event_log().await?;
+    let msg_db = config.get_db().await?;
+    let _bitcoin = config.get_bitcoin_rpc().await?;
+
+    // get location of project directory modules
+    let data_dir = data_dir_modules(&config.app_instance);
+
+    // allocate a CTV Emulator
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
-    let logfile = config.logfile.clone();
-    let mut opened = OpenOptions::default();
-    opened.append(true).create(true).open(&logfile).await?;
-    let fi = File::open(logfile).await?;
-    let read = BufReader::new(fi);
-    let mut lines = read.lines();
-    let m: ModuleLocator = serde_json::from_str(
-        &lines
-            .next_line()
-            .await?
-            .expect("EVLog Should start with locator"),
-    )?;
+
+    // summon a wasm plugin handle
+    let locator: ModuleLocator = ModuleLocator::FileName(format!(
+        "{}",
+        config
+            .contract_location
+            .into_os_string()
+            .into_string()
+            .expect("Couldn't convert OSStr to String")
+    ));
     let module = WasmPluginHandle::<Compiled>::new_async(
         &data_dir,
         &emulator,
-        m,
+        locator,
         bitcoin::Network::Bitcoin,
         Default::default(),
     )
     .await?;
+    let obj = module.call(
+        &PathFragment::Root.into(),
+        &serde_json::from_value(config.contract_args)?,
+    )?;
+
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    let tx = tx.clone();
-    let config = config.clone();
     let accessor = evlog.get_accessor().await;
     let key = &config.event_log.group;
     let evlog_group_id = accessor.get_occurrence_group_by_key(key);
@@ -190,46 +238,41 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     // This should be in notify_one mode, which means that only the db reader
     // should be calling notified and wakers should call notify_one.
     let new_synthetic_event = Arc::new(Notify::new());
-    {
-        let evlog = evlog.clone();
-        let new_synthetic_event = new_synthetic_event.clone();
-        tokio::spawn(async move {
-            universe::linearized::event_log_processor(
-                evlog,
-                evlog_group_id,
-                tx,
-                new_synthetic_event,
-            )
-            .await?;
-            OK_T
-        });
-    }
-    {
-        let evlog = evlog.clone();
-        let new_synthetic_event = new_synthetic_event.clone();
-        tokio::spawn(async move {
-            universe::extractors::time::time_event_extractor(
-                evlog,
-                evlog_group_id,
-                new_synthetic_event,
-            )
-            .await?;
-            OK_T
-        });
-    }
-
-    {
-        let config = config.clone();
-        let evlog = evlog.clone();
-        let new_synthetic_event = new_synthetic_event.clone();
-        spawn(universe::extractors::sequencer::sequencer_extractor(
+    let elp_evlog = evlog.clone();
+    let elp_new_synthetic_event = new_synthetic_event.clone();
+    tokio::spawn(async move {
+        universe::linearized::event_log_processor(
+            elp_evlog,
+            evlog_group_id.clone(),
+            tx,
+            elp_new_synthetic_event,
+        )
+        .await?;
+        OK_T
+    });
+    let tee_evlog = evlog.clone();
+    let tee_new_synthetic_event = new_synthetic_event.clone();
+    tokio::spawn(async move {
+        universe::extractors::time::time_event_extractor(
+            tee_evlog,
+            evlog_group_id.clone(),
+            tee_new_synthetic_event,
+        )
+        .await?;
+        OK_T
+    });
+    let se_evlog = evlog.clone();
+    let se_new_synthetic_event = new_synthetic_event.clone();
+    tokio::spawn(async move {
+        universe::extractors::sequencer::sequencer_extractor(
             config.oracle_key,
             msg_db,
-            evlog,
+            se_evlog,
             evlog_group_id,
-            new_synthetic_event,
-        ));
-    }
+            se_new_synthetic_event,
+        )
+    });
+
     let mut state = AppState::Uninitialized;
     loop {
         match rx.recv().await {
@@ -275,10 +318,10 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
             Some(Event::Initialization(x)) => {
                 if state.is_uninitialized() {
                     let init: Result<Compiled, CompilationError> =
-                        module.call(&PathFragment::Root.into(), &x);
+                        module.call(&PathFragment::Root.into(), &x.1);
                     if let Ok(c) = init {
                         state = AppState::Initialized {
-                            args: x,
+                            args: x.1,
                             contract: c,
                             bound_to: None,
                             psbt_db: Arc::new(PSBTDatabase::new()),
