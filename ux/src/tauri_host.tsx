@@ -35,5 +35,8 @@ export const tauri_host = {
   },
   mint_power_plant_cost: async(scale: number, location: [number, number], plantType: PlantType) => {
     return invoke("mint_power_plant_cost", {scale, location, plantType});
+  },
+  super_mint: async(scale: number, location: [number, number], plantType: PlantType) => {
+    return invoke("super_mint", {scale, location, plantType});
   }
 };
