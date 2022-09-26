@@ -7,5 +7,10 @@
     },
     "db_app_name": "testing-$PLAYER",
     "app_instance": "testing-$PLAYER",
-    "logfile": "$LITIGATOR_LOGFILE"
+    "logfile": "$LITIGATOR_LOGFILE",
+    "event_log": {
+        "app_name": "testing-$PLAYER",
+        "group": "$PLAYER-event-group"
+    },
+    "oracle_key": "$SEQUENCER_KEY"
 }
