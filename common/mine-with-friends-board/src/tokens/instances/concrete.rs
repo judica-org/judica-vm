@@ -53,7 +53,7 @@ impl Callback for ConcreteMiller {
             self.total_units -= start;
         }
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);
-        ConstantFunctionMarketMaker::do_trade(
+        ConstantFunctionMarketMaker::do_sell_trade(
             game,
             pair,
             min(balance / 100, balance),

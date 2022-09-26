@@ -76,7 +76,7 @@ impl Callback for ASICProducer {
         // the current price is above the current price, then sell enough to get
         // the price back to base_price.
         // Maybe worth implementing logic inside the swap contract directly for these.
-        ConstantFunctionMarketMaker::do_trade(
+        ConstantFunctionMarketMaker::do_sell_trade(
             game,
             pair,
             min(balance / 100, balance),

@@ -35,10 +35,10 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
   const [formValues, setFormValues] = useState(defaultValues);
   // fix this type
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
+    const { name, value, valueAsNumber } = e.target;
     setFormValues({
       ...formValues,
-      [name]: value,
+      [name]: name === 'scale' ? valueAsNumber : value,
     });
   };
 
@@ -53,9 +53,13 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
     console.log(["submit-clicked"], { ...formValues, superMint }, { submitter_id });
     console.log(["number-log"], standardizeCoordinates({ lat: location[0], lng: location[1] }));
     if (submitter_id === "estimate") {
-      let costs = await tauri_host.mint_power_plant_cost(scale, standardizeCoordinates({ lat: location[0], lng: location[1] }), plant_type as PlantType);
-      console.log(["mint-plant-estimate"], costs)
-      setEstimate(costs as unknown as any);
+      try {
+        let costs = await tauri_host.mint_power_plant_cost(scale, standardizeCoordinates({ lat: location[0], lng: location[1] }), plant_type as PlantType);
+        console.log(["mint-plant-estimate"], costs)
+        setEstimate(costs as unknown as any);
+      } catch (e) {
+        console.warn(e);
+      }
     }
     if (submitter_id === "mint") {
       // this expects entityID that isn't used. Remove later.

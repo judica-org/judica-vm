@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::{Database, Game, GameState, PrintOnDrop, SigningKeyInner};
 
-use mine_with_friends_board::nfts::{
-    instances::powerplant::PlantType, sale::UXForSaleList, NftPtr, UXPlantData,
+use mine_with_friends_board::{
+    nfts::{instances::powerplant::PlantType, sale::UXForSaleList, NftPtr, UXPlantData},
+    tokens::token_swap::TradeError,
 };
 use sapio_bitcoin::XOnlyPublicKey;
 
@@ -27,6 +28,7 @@ pub(crate) async fn game_synchronizer_inner(
             Err(e) => {
                 tracing::debug!(?e, "SyncError");
                 match &e {
+                    SyncError::TradeError(_) => {}
                     SyncError::NoSigningKey | SyncError::NoGame => {
                         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     }
@@ -43,6 +45,13 @@ pub enum SyncError {
     NoGame,
     KeyUnknownByGame,
     DatabaseError,
+    TradeError(TradeError),
+}
+
+impl From<TradeError> for SyncError {
+    fn from(v: TradeError) -> Self {
+        Self::TradeError(v)
+    }
 }
 trait ResultFlipExt {
     type Output;
@@ -207,7 +216,7 @@ pub(crate) async fn list_my_users_inner(
 /// returns qty BTC to purchase materials and mint plant of given type and size
 pub(crate) async fn super_mint_power_plant_cost(
     scale: u64,
-    location: (i64,i64),
+    location: (i64, i64),
     plant_type: PlantType,
     s: GameState<'_>,
     signing_key: State<'_, SigningKeyInner>,
@@ -225,7 +234,7 @@ pub(crate) async fn super_mint_power_plant_cost(
 /// returns qty of each material necessary to mint plant of given type and size
 pub(crate) async fn mint_power_plant_cost(
     scale: u64,
-    location: (i64,i64),
+    location: (i64, i64),
     plant_type: PlantType,
     s: GameState<'_>,
     signing_key: State<'_, SigningKeyInner>,
@@ -237,10 +246,9 @@ pub(crate) async fn mint_power_plant_cost(
         .ok_or(SyncError::NoSigningKey)?;
     let mut game = s.inner().lock().await;
     let game = game.as_mut().ok_or(SyncError::NoGame)?;
-    let current_prices = game
-        .board
-        .get_power_plant_cost(scale, location, plant_type, signing_key.to_string())
-        .unwrap_or_default();
+    let current_prices =
+        game.board
+            .get_power_plant_cost(scale, location, plant_type, signing_key.to_string())?;
 
     Ok(current_prices)
 }
