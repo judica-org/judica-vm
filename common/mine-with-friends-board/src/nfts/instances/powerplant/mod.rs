@@ -104,7 +104,7 @@ impl PowerPlant {
         game.tokens[miners].end_transaction();
     }
     /// Withdrawals are processed via a CoinLockup which emulates shipping
-    fn ship_hashrate(
+    pub(crate) fn ship_hashrate(
         &self,
         miners: TokenPointer,
         amount: Price,

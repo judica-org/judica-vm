@@ -23,6 +23,8 @@ pub enum GameMove {
     ListNFTForSale(ListNFTForSale),
     /// # Send Coins
     SendTokens(SendTokens),
+    /// # Remove Tokens
+    RemoveTokens(RemoveTokens),
     /// # Send a logged Chat Message to All Players
     Chat(Chat),
     /// # Mint Power Plant NFT
@@ -47,6 +49,7 @@ derive_from!(MintPowerPlant);
 derive_from!(PurchaseNFT);
 derive_from!(ListNFTForSale);
 derive_from!(SendTokens);
+derive_from!(RemoveTokens);
 derive_from!(Chat);
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
@@ -86,6 +89,14 @@ pub struct SendTokens {
     pub to: EntityID,
     pub amount: Price,
     pub currency: Currency,
+}
+
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
+pub struct RemoveTokens {
+    pub nft_id: NftPtr,
+    pub amount: Price,
+    pub currency: Currency,
+    // do we need time here?
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]

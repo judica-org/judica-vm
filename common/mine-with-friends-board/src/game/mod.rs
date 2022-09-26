@@ -4,6 +4,7 @@ use self::game_move::Heartbeat;
 use self::game_move::ListNFTForSale;
 use self::game_move::MintPowerPlant;
 use self::game_move::PurchaseNFT;
+use self::game_move::RemoveTokens;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
 use crate::callbacks::CallbackRegistry;
@@ -400,6 +401,17 @@ impl GameBoard {
                 self.tokens[currency].transaction();
                 let _ = self.tokens[currency].transfer(&from, &to, amount);
                 self.tokens[currency].end_transaction();
+            }
+            GameMove::RemoveTokens(RemoveTokens {
+                nft_id,
+                amount,
+                currency,
+            }) => {
+                let shipping_time = 1000;
+                let plant = &self.nfts.power_plants[&nft_id];
+                plant
+                    .to_owned()
+                    .ship_hashrate(currency, amount, shipping_time, self);
             }
             GameMove::Chat(Chat(s)) => {
                 self.chat_counter += 1;
