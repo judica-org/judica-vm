@@ -3,11 +3,11 @@ import { Typography, Card, CardHeader, CardContent, Table, TableHead, TableRow, 
 import { appWindow } from '@tauri-apps/api/window';
 import { useState, useEffect } from 'react';
 import { MaterialPriceDisplay } from '../App';
-import FormModal from '../form-modal';
+import FormModal from '../form-modal/FormModal';
 import { material_type_color_map } from '../util';
 
 
-export const RawMaterialsMarket = ({materials}: { materials: MaterialPriceDisplay[] }) => {
+export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisplay[] }) => {
   return (
     <div>
       <div className='materials-market-container'>

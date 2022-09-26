@@ -3,7 +3,7 @@ import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, T
 import { appWindow } from '@tauri-apps/api/window';
 import { useState, useEffect } from 'react';
 import { PlantType } from '../App';
-import FormModal from '../form-modal';
+import FormModal from '../form-modal/FormModal';
 import { NftPtr } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
 
