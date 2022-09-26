@@ -103,6 +103,15 @@ impl PowerPlant {
         let _ = game.tokens[miners].transfer(&owner, &self.id.0, amount);
         game.tokens[miners].end_transaction();
     }
+
+    /// Remove hash boxes from this power plant
+    fn remove_hashrate(&self, game: &mut GameBoard, miners: TokenPointer, amount: Price) {
+        let owner = game.nfts[self.id].owner();
+        game.tokens[miners].transaction();
+        let _ = game.tokens[miners].transfer(&self.id.0, &owner, amount);
+        game.tokens[miners].end_transaction();
+    }
+
     /// Withdrawals are processed via a CoinLockup which emulates shipping
     fn ship_hashrate(
         &self,
