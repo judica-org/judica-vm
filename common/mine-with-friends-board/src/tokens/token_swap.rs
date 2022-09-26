@@ -133,6 +133,9 @@ impl TradingPairID {
             }
         }
     }
+    fn is_normal(&self) -> bool {
+        self.asset_a <= self.asset_b
+    }
 }
 
 /// Registry of all Market Pairs
@@ -227,13 +230,13 @@ impl ConstantFunctionMarketMaker {
     /// Perform a trade op by using the X*Y = K formula for a CFMM
     ///
     /// Parameters: One of amount_a or amount_b should be 0, which implies the trade direction
-    pub(crate) fn do_trade(
+    pub(crate) fn do_sell_trade(
         game: &mut GameBoard,
         mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
         simulate: bool,
-        CallContext { ref sender }: &CallContext,
+        ctx: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
         let unnormalized_id = id;
         id.normalize();
@@ -245,6 +248,116 @@ impl ConstantFunctionMarketMaker {
             return Err(TradeError::InvalidTrade(
                 "Both token amounts cannot be zero".into(),
             ));
+        }
+        ConstantFunctionMarketMaker::internal_do_trade_sell_fixed_amount(
+            game, id, amount_a, amount_b, simulate, ctx,
+        )
+    }
+
+    pub(crate) fn do_buy_trade(
+        game: &mut GameBoard,
+        mut id: TradingPairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
+        simulate: bool,
+        ctx: &CallContext,
+    ) -> Result<TradeOutcome, TradeError> {
+        let unnormalized_id = id;
+        id.normalize();
+        if id != unnormalized_id {
+            std::mem::swap(&mut amount_a, &mut amount_b);
+        }
+        // the zero is the one to be computed
+        if !(amount_a == 0 || amount_b == 0) {
+            return Err(TradeError::InvalidTrade(
+                "Both token amounts cannot be zero".into(),
+            ));
+        }
+        ConstantFunctionMarketMaker::internal_do_trade_buy_fixed_amount(
+            game, id, amount_a, amount_b, simulate, ctx,
+        )
+    }
+
+    pub(crate) fn internal_do_trade_buy_fixed_amount(
+        game: &mut GameBoard,
+        mut id: TradingPairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
+        simulate: bool,
+        CallContext { ref sender }: &CallContext,
+    ) -> Result<TradeOutcome, TradeError> {
+        if !id.is_normal() {
+            panic!("Expects normalized IDs")
+        }
+        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
+        let mkt = &game.swap.markets[&id];
+        let tokens: &mut TokenRegistry = &mut game.tokens;
+        let (buying, selling, buy_amt) = match (amount_a, amount_b) {
+            (0, b) => (id.asset_b, id.asset_a, b),
+            (a, 0) => (id.asset_a, id.asset_b, a),
+            _ => panic!("Expected one to be 0"),
+        };
+        tokens[buying].transaction();
+        tokens[selling].transaction();
+
+        let (
+            asset_player_purchased,
+            amount_player_purchased,
+            asset_player_sold,
+            amount_player_sold,
+        ) = {
+            let selling_asset_name = tokens[selling].nickname().unwrap();
+            let buying_asset_name = tokens[buying].nickname().unwrap();
+            // if a is zero, a is token being "purchased"
+            // otherwise b is token being "purchased"
+            //
+            // mkt_qty_selling * y = k
+            // (mkt_qty_selling + sell_amt) * (mkt_qty_buying - buy_amt) = k
+            // (mkt_qty_selling + sell_amt) * (mkt_qty_buying - buy_amt) = (mkt_qty_selling * mkt_qty_buying)
+            // (mkt_qty_selling*mkt_qty_buying)/(mkt_qty_buying-buy_amt) - mkt_qty_selling = sell_amt
+            let mkt_qty_selling = tokens[selling].balance_check(&mkt.id);
+            let mkt_qty_buying = tokens[buying].balance_check(&mkt.id);
+            if buy_amt < mkt_qty_buying {
+                return Err(TradeError::InsufficientTokens(
+                    "Market has insufficient tokens".into(),
+                ));
+            }
+            let k = mkt_qty_selling * mkt_qty_buying;
+            let sell_amt = (k / (mkt_qty_buying - buy_amt)) - mkt_qty_selling;
+
+            if sell_amt > tokens[selling].balance_check(sender) {
+                return Err(TradeError::InsufficientTokens(
+                    "User has insufficient tokens".into(),
+                ));
+            }
+
+            if !simulate {
+                let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
+                let _ = tokens[buying].transfer(&mkt.id, sender, buy_amt);
+            }
+            (buying_asset_name, buy_amt, selling_asset_name, sell_amt)
+        };
+        tokens[buying].end_transaction();
+        tokens[selling].end_transaction();
+
+        Ok(TradeOutcome {
+            trading_pair: id,
+            asset_player_purchased,
+            amount_player_purchased,
+            asset_player_sold,
+            amount_player_sold,
+        })
+    }
+    pub(crate) fn internal_do_trade_sell_fixed_amount(
+        game: &mut GameBoard,
+        mut id: TradingPairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
+        simulate: bool,
+        CallContext { ref sender }: &CallContext,
+    ) -> Result<TradeOutcome, TradeError> {
+        if !id.is_normal() {
+            panic!("Expects normalized IDs")
         }
         let id = ConstantFunctionMarketMakerPair::ensure(game, id);
         let mkt = &game.swap.markets[&id];

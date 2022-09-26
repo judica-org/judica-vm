@@ -6,6 +6,7 @@ use crate::entity::EntityID;
 use crate::game::CallContext;
 use crate::game::GameBoard;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::token_swap::TradeError;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::TokenRegistry;
 use crate::util::Currency;
@@ -16,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 pub(crate) type PowerPlantPrices = HashMap<PlantType, Vec<(Currency, Price)>>;
 
-#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize, JsonSchema, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize, JsonSchema, Hash, Copy)]
 pub enum PlantType {
     Solar,
     Hydro,
@@ -127,21 +128,18 @@ impl PowerPlantProducer {
         location: (i64, i64),
         plant_type: PlantType,
         owner: EntityID,
-    ) {
+    ) -> Result<(), TradeError> {
         let resources = plant_type.raw_materials_bill(game, scale);
         // check whether owner has enough of each material
         // there's a better way to do this
-        let mut insufficient = false;
         for (currency, price) in &resources {
             let token = &mut game.tokens[*currency];
-            token.transaction();
             if token.balance_check(&owner) < *price {
-                insufficient = true;
+                return Err(TradeError::InsufficientTokens(format!(
+                    "Balance Check Failed: {:?}",
+                    currency
+                )));
             }
-            token.end_transaction();
-        }
-        if insufficient {
-            return;
         }
         // create base nft?
         let base_power_plant = BaseNFT {
@@ -163,6 +161,7 @@ impl PowerPlantProducer {
             let _ = token.transfer(&owner, &plant_ptr.0, price);
             token.end_transaction();
         }
+        Ok(())
     }
 
     pub(crate) fn super_mint(
@@ -172,11 +171,20 @@ impl PowerPlantProducer {
         location: (i64, i64),
         plant_type: PlantType,
         owner: EntityID,
-    ) -> Result<(), ()> {
-        // get bill for plant
-        let resources = plant_type.raw_materials_bill(game, scale);
+    ) -> Result<(), TradeError> {
+        let cost_estimates =
+            PowerPlantProducer::estimate_materials_cost(game, scale, location, plant_type, owner)?;
+        let total_cost = cost_estimates.iter().map(|i| i.2).sum::<u128>();
         // get btc token ptr
         let btc_token_ptr = game.bitcoin_token_id;
+        if game.tokens[btc_token_ptr].balance_check(&owner) < total_cost {
+            return Err(TradeError::InsufficientTokens(format!(
+                "Need at least {} of {:?} to mint",
+                total_cost, btc_token_ptr
+            )));
+        }
+        // get bill for plant
+        let resources = plant_type.raw_materials_bill(game, scale);
         // need CallContext
         let ctx = CallContext { sender: owner };
         // for each resource/qty
@@ -187,12 +195,11 @@ impl PowerPlantProducer {
                 asset_b: btc_token_ptr, // paying
             };
             // purchse material from mkt
-            ConstantFunctionMarketMaker::do_trade(game, id, 0, qty, false, &ctx);
+            ConstantFunctionMarketMaker::do_buy_trade(game, id, qty, 0, false, &ctx)
+                .expect("buy trade may not fail here given earlier estimate");
         }
         // mint the power plant
-        PowerPlantProducer::mint_power_plant(game, scale, location, plant_type, owner);
-
-        Ok(())
+        PowerPlantProducer::mint_power_plant(game, scale, location, plant_type, owner)
     }
 
     /// returns the quantity and cost in BTC for each material needed to build a plant
@@ -202,7 +209,7 @@ impl PowerPlantProducer {
         location: (i64, i64),
         plant_type: PlantType,
         owner: EntityID,
-    ) -> Result<Vec<(String, u128, u128)>, ()> {
+    ) -> Result<Vec<(String, u128, u128)>, TradeError> {
         let ctx = CallContext { sender: owner };
         // get bill for plant
         let resources = plant_type.raw_materials_bill(game, scale);
@@ -221,12 +228,11 @@ impl PowerPlantProducer {
                 };
                 // simulate trade
                 let cost_in_btc =
-                    ConstantFunctionMarketMaker::do_trade(game, id, 0, *qty, true, &ctx)
-                        .unwrap()
+                    ConstantFunctionMarketMaker::do_buy_trade(game, id, *qty, 0, true, &ctx)?
                         .amount_player_sold;
-                (human_name, *qty, cost_in_btc)
+                Ok((human_name, *qty, cost_in_btc))
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
         Ok(prices_in_btc)
     }
 }
