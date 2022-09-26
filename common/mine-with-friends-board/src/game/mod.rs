@@ -76,7 +76,7 @@ pub struct GameBoard {
     /// If init = true, must be Some
     pub(crate) bitcoin_token_id: TokenPointer,
     /// If init = true, must be Some
-    pub(crate) dollar_token_id: TokenPointer,
+    pub(crate) real_sats_token_id: TokenPointer,
     /// If init = true, must be Some
     pub(crate) steel_token_id: TokenPointer,
     /// If init = true, must be Some
@@ -118,7 +118,7 @@ impl GameSetup {
                 },
             );
             g.users_by_key.insert(player.clone(), id);
-            g.tokens[g.dollar_token_id].mint(&id, self.start_amount as u128);
+            g.tokens[g.real_sats_token_id].mint(&id, self.start_amount as u128);
         }
     }
 }
@@ -128,15 +128,15 @@ impl GameBoard {
     pub fn new(setup: &GameSetup) -> GameBoard {
         let mut alloc = EntityIDAllocator::new();
 
-        let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Bitcoin".into()));
-        let dollar = Box::new(TokenBase::new_from_alloc(&mut alloc, "US Dollar".into()));
+        let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Virtual Sats".into()));
+        let real_sats = Box::new(TokenBase::new_from_alloc(&mut alloc, "Real World Sats".into()));
         let concrete = Box::new(TokenBase::new_from_alloc(&mut alloc, "Concrete".into()));
         let asic = Box::new(TokenBase::new_from_alloc(&mut alloc, "ASIC Gen 1".into()));
         let steel = Box::new(TokenBase::new_from_alloc(&mut alloc, "Steel".into()));
         let silicon = Box::new(TokenBase::new_from_alloc(&mut alloc, "Silicon".into()));
         let mut tokens = TokenRegistry::default();
         let bitcoin_token_id = tokens.new_token(btc);
-        let dollar_token_id = tokens.new_token(dollar);
+        let real_sats_token_id = tokens.new_token(real_sats);
         let concrete_token_id = tokens.new_token(concrete);
         let steel_token_id = tokens.new_token(steel);
         let silicon_token_id = tokens.new_token(silicon);
@@ -191,7 +191,7 @@ impl GameBoard {
             swap: Default::default(),
             turn_count: 0,
             bitcoin_token_id,
-            dollar_token_id,
+            real_sats_token_id,
             steel_token_id,
             silicon_token_id,
             concrete_token_id,
@@ -219,7 +219,7 @@ impl GameBoard {
         // DEMO CODE:
         // REMOVE BEFORE FLIGHT
         self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10000000);
-        self.tokens[self.dollar_token_id].mint(&self.root_user, 30000);
+        self.tokens[self.real_sats_token_id].mint(&self.root_user, 30000);
         //
         let id = self.alloc();
         self.callbacks.schedule(Box::new(ASICProducer {
