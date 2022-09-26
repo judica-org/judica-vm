@@ -643,7 +643,7 @@ impl GameBoard {
         signing_key: String,
     ) -> Result<Vec<(String, u128, u128)>, TradeError> {
         let owner = self.users_by_key.get(&signing_key).unwrap().to_owned();
-            PowerPlantProducer::estimate_materials_cost(self, scale, location, plant_type, owner)
+        PowerPlantProducer::estimate_materials_cost(self, scale, location, plant_type, owner)
     }
 }
 

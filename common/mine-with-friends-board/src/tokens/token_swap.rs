@@ -297,8 +297,6 @@ impl ConstantFunctionMarketMaker {
             (a, 0) => (id.asset_a, id.asset_b, a),
             _ => panic!("Expected one to be 0"),
         };
-        tokens[buying].transaction();
-        tokens[selling].transaction();
 
         let (
             asset_player_purchased,
@@ -325,20 +323,23 @@ impl ConstantFunctionMarketMaker {
             let k = mkt_qty_selling * mkt_qty_buying;
             let sell_amt = (k / (mkt_qty_buying - buy_amt)) - mkt_qty_selling;
 
-            if sell_amt > tokens[selling].balance_check(sender) {
-                return Err(TradeError::InsufficientTokens(
-                    "User has insufficient tokens".into(),
-                ));
-            }
-
             if !simulate {
+                // Only check this condition when not similating... as we're
+                // looking to find out how much we would need!
+                if sell_amt > tokens[selling].balance_check(sender) {
+                    return Err(TradeError::InsufficientTokens(
+                        "User has insufficient tokens".into(),
+                    ));
+                }
+                tokens[buying].transaction();
+                tokens[selling].transaction();
                 let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
                 let _ = tokens[buying].transfer(&mkt.id, sender, buy_amt);
+                tokens[buying].end_transaction();
+                tokens[selling].end_transaction();
             }
             (buying_asset_name, buy_amt, selling_asset_name, sell_amt)
         };
-        tokens[buying].end_transaction();
-        tokens[selling].end_transaction();
 
         Ok(TradeOutcome {
             trading_pair: id,
