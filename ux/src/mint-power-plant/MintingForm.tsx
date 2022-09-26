@@ -35,10 +35,10 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
   const [formValues, setFormValues] = useState(defaultValues);
   // fix this type
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
+    const { name, value, valueAsNumber } = e.target;
     setFormValues({
       ...formValues,
-      [name]: value,
+      [name]: name === 'scale' ? valueAsNumber : value,
     });
   };
 
