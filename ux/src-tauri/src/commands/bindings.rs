@@ -3,7 +3,7 @@ use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use tauri::{generate_handler, Invoke};
 
-use super::{*, view::SyncError};
+use super::{view::SyncError, *};
 pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     game_synchronizer,
     get_move_schema,
@@ -35,7 +35,7 @@ pub(crate) async fn mint_power_plant_cost(
     plant_type: PlantType,
     s: GameState<'_>,
     signing_key: State<'_, SigningKeyInner>,
-) -> Result<Vec<(String, u128, u128)>, ()> {
+) -> Result<Vec<(String, u128, u128)>, SyncError> {
     view::mint_power_plant_cost(scale, location, plant_type, s, signing_key).await
 }
 

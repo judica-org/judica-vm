@@ -162,7 +162,7 @@ export type UserInventory = {
 }
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
-  const [location, setLocation] = useState<[number, number] | null>([0, 0]);
+  const [location, setLocation] = useState<[number, number]>([0, 0]);
 
   const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
