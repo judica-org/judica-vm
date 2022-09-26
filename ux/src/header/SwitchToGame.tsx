@@ -47,9 +47,9 @@ export function SwitchToGame() {
         <MenuItem value={""} selected={which_game == ""}>No Key</MenuItem>
         {options}
       </Select>
-      <Button type="submit"
+      <Button type="submit" variant="contained"
         onClick={handle_submit}
-      >Switch</Button>
+      >Switch Game</Button>
     </FormControl>
   </div>;
 }

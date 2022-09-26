@@ -11,7 +11,7 @@ export function MakeNewChain() {
     <h6> Create New Chain</h6>
     <FormControl >
       <TextField label='Nickname' onChange={(ev) => set_nick(ev.target.value)}></TextField>
-      <Button type="submit" onClick={(ev) => { ev.preventDefault(); nick && tauri_host.make_new_chain(nick) }}>Create New Chain</Button>
+      <Button variant="contained" type="submit" onClick={(ev) => { ev.preventDefault(); nick && tauri_host.make_new_chain(nick) }}>Create New Chain</Button>
     </FormControl>
   </div>;
 }

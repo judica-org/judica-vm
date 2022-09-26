@@ -57,7 +57,7 @@ export const KeySelector = () => {
         <MenuItem value={""} selected={selected_key === ""}>No Key</MenuItem>
         {key_options}
       </Select>
-      <Button type="submit" onClick={handle_submit}>Select This Key</Button>
+      <Button variant="contained" type="submit" onClick={handle_submit}>Select This Key</Button>
     </FormControl>
   </div>
 }

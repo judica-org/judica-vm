@@ -11,6 +11,26 @@
     flex-direction: row;
 }
 
+.GlobeContent {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+}
+
+.GlobeContent>div {
+    margin: 6px;
+}
+
+.MuiTabs-root{
+    display: flex;
+}
+
+.DataDisplay{
+display: flex;
+flex-direction: column;
+flex-wrap: wrap;
+}
+
 .MoveForm {
     min-height: 20vh;
 }
