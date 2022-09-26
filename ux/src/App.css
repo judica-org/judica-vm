@@ -11,3 +11,16 @@
 .MoveForm>form {
     height: 100vh;
 }
+
+.MintingForm {
+    display:flex;
+    flex-direction: column;
+    align-items: space-around;
+    padding: 1em;
+}
+
+.Estimate {
+    display: flex;
+    flex-direction: column;
+    padding: 1em;
+}

@@ -10,11 +10,10 @@ import { Chat } from './chat/Chat';
 import { AppHeader } from './header/AppHeader';
 import { Inventory } from './inventory/inventory';
 import MintingModal from './mint-power-plant/MintingModal';
+import { listen } from '@tauri-apps/api/event';
 import { Box, Tab, Tabs } from '@mui/material';
 import { TabPanelUnstyled, TabsUnstyled } from '@mui/base';
 import React from 'react';
-
-
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
   id: number,
@@ -163,6 +162,7 @@ export type UserInventory = {
 }
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
+  const [location, setLocation] = useState<[number, number] | null>([0, 0]);
 
   const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
@@ -220,6 +220,13 @@ function App() {
 
 
 
+  useEffect(() => {
+    listen("globe-location", (ev: { payload: any }) => {
+      console.log(["globe-location"], JSON.parse(ev.payload));
+      setLocation(JSON.parse(ev.payload));
+    });
+  });
+
   return (
     <div>
       <AppHeader></AppHeader>
@@ -238,7 +245,7 @@ function App() {
             </Tabs>
           </Box>
           <Panel index={1} current_index={current_tab}>
-            <MintingModal />
+            <MintingModal location={location} />
           </Panel>
           <Panel index={2} current_index={current_tab}>
             {<EnergyExchange listings={listings}></EnergyExchange>}

@@ -207,7 +207,7 @@ pub(crate) async fn list_my_users_inner(
 /// returns qty BTC to purchase materials and mint plant of given type and size
 pub(crate) async fn super_mint_power_plant_cost(
     scale: u64,
-    location: (u64, u64),
+    location: (i64,i64),
     plant_type: PlantType,
     s: GameState<'_>,
     signing_key: State<'_, SigningKeyInner>,
@@ -222,10 +222,10 @@ pub(crate) async fn super_mint_power_plant_cost(
     Ok(cost)
 }
 
-// returns qty of each material necessary to mint plant of given type and size
+/// returns qty of each material necessary to mint plant of given type and size
 pub(crate) async fn mint_power_plant_cost(
     scale: u64,
-    location: (u64, u64),
+    location: (i64,i64),
     plant_type: PlantType,
     s: GameState<'_>,
     signing_key: State<'_, SigningKeyInner>,

@@ -63,7 +63,7 @@ pub struct Trade {
 pub struct MintPowerPlant {
     /// Size of the power plant
     pub scale: u64,
-    pub location: (u64, u64),
+    pub location: (i64, i64),
     pub plant_type: PlantType,
 }
 
