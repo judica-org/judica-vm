@@ -5,6 +5,7 @@ import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent } from '@mui/material';
 import { emit } from '@tauri-apps/api/event';
+import MintingModal from './mint-power-plant/MintingModal';
 const { useState, useEffect } = React;
 
 const stub_plant_data = [{
@@ -39,6 +40,7 @@ const stub_plant_data = [{
 export default () => {
     const [power_plants, set_power_plants] = useState([]); // use empty list for now so it will render
     const [countries, setCountries] = useState([]);
+    const [location, setLocation] = useState({lat:"", lng:""})
 
     useEffect(() => {
         setCountries(countries_data);
@@ -56,14 +58,16 @@ export default () => {
 
     return <div className='globe-container'>
         <Card>
-            <CardHeader title={'Map'}
-                subheader={'Current Energy Grid'}
+            <CardHeader title={'World Energy Grid'}
+                subheader={`Selected Location: ${location.lat}, ${location.lng}`}
             />
             <CardContent className={'content'} style={{
                 position: 'relative'
             }}>
+                {location && <MintingModal location={location}/>}
                 <Globe
                     onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
+                        setLocation({ lat, lng })
                         console.log(['globe-click'], { lat, lng });
                         emit('globe-click', [lat,lng]);
                     }}

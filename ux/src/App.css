@@ -1,26 +1,20 @@
 .App {
     text-align: center;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
+    /* grid-template-columns: 1fr 1fr; */
+    height: 100%;
+}
+
+.Content {
+    display: flex;
+    flex-direction: row;
 }
 
 .MoveForm {
-    height: 100vh;
+    min-height: 20vh;
 }
 
 .MoveForm>form {
-    height: 100vh;
-}
-
-.MintingForm {
-    display:flex;
-    flex-direction: column;
-    align-items: space-around;
-    padding: 1em;
-}
-
-.Estimate {
-    display: flex;
-    flex-direction: column;
-    padding: 1em;
+    min-height: 20vh;
 }

@@ -14,6 +14,7 @@ import { listen } from '@tauri-apps/api/event';
 import { Box, Tab, Tabs } from '@mui/material';
 import { TabPanelUnstyled, TabsUnstyled } from '@mui/base';
 import React from 'react';
+import DrawerAppBar from './menu-bar/MenuDrawer';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
   id: number,
@@ -218,8 +219,6 @@ function App() {
 
 
 
-
-
   useEffect(() => {
     listen("globe-location", (ev: { payload: any }) => {
       console.log(["globe-location"], JSON.parse(ev.payload));
@@ -229,8 +228,9 @@ function App() {
 
   return (
     <div>
-      <AppHeader></AppHeader>
       <div className="App">
+        <DrawerAppBar></DrawerAppBar>
+        <div className="Content">
         <WorkingGlobe></WorkingGlobe>
         <Box>
           <Box sx={{ size: "sm" }}>
@@ -266,6 +266,7 @@ function App() {
             <GameBoard g={game_board}></GameBoard>
           </Panel>
         </Box>
+        </div>
       </div >
     </div >
   );
