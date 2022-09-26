@@ -89,7 +89,7 @@ type game_board = {
   root_user: null | string,
 };
 
-function GameBoard(props: { g: game_board|null }) {
+function GameBoard(props: { g: game_board | null }) {
   return props.g && <ul>
     <li>
       Init: {JSON.stringify(props.g.init)}
@@ -166,22 +166,17 @@ function App() {
 
   const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
+  const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
+  const [chat_log, set_chat_log] = React.useState<[number, number, string][]>([]);
+  const [listings, setListings] = useState<NFTSale[]>([]);
   useEffect(() => {
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
       set_game_board(ev.payload as game_board)
     });
-    tauri_host.game_synchronizer()
-    return () => {
-      (async () => {
-        (await unlisten_game_board)();
-      })();
-    }
-  }, [game_board]);
 
 
-  useEffect(() => {
-    const unlisten = appWindow.listen("materials-price-data", (ev) => {
+    const unlisten_material_prices = appWindow.listen("materials-price-data", (ev) => {
       console.log(ev);
       const materials_data = ev.payload as MaterialPriceData[];
       const transformed: MaterialPriceDisplay[] = materials_data.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b }) => {
@@ -195,56 +190,36 @@ function App() {
       set_materials(transformed)
     });
 
-    return () => {
-      (async () => {
-        (await unlisten)()
-      })();
-    }
-  }, [materials]);
-
-  const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
-
-  useEffect(() => {
     const unlisten_user_inventory = appWindow.listen("user-inventory", (ev) => {
       console.log(['user-inventory'], ev);
       setUserInventory(ev.payload as UserInventory);
     });
 
-    return () => {
-      (async () => {
-        (await unlisten_user_inventory)();
-      })();
-    }
-  }, [userInventory]);
-
-  const [chat_log, set_chat_log] = React.useState<[number, number, string][]>([]);
-  React.useEffect(() => {
-    const unlisten = appWindow.listen("chat-log", (ev) => {
+    const unlisten_chat_log = appWindow.listen("chat-log", (ev) => {
       console.log("Chat:", ev.payload);
       const new_msgs = ev.payload as typeof chat_log;
       set_chat_log(new_msgs)
     })
-    return () => {
-      (async () => {
-        (await unlisten)()
-      })();
-    }
-  });
 
-  const [listings, setListings] = useState<NFTSale[]>([]);
-
-  useEffect(() => {
     const unlisten_energy_exchange = appWindow.listen("energy-exchange", (ev) => {
       console.log(['energy-exchange'], ev);
       setListings(ev.payload as NFTSale[]);
     });
-
+    tauri_host.game_synchronizer()
     return () => {
       (async () => {
-        (await unlisten_energy_exchange)();
+        const unlisten_all = await Promise.all([unlisten_chat_log, unlisten_energy_exchange, unlisten_game_board, unlisten_material_prices, unlisten_user_inventory, unlisten_energy_exchange]);
+        for (const u of unlisten_all) {
+          u()
+        }
       })();
     }
-  }, [listings]);
+  }, []);
+
+
+
+
+
   return (
     <div>
       <AppHeader></AppHeader>
