@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Modal, Button, Paper, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import PurchaseMaterialForm from '../purchase-material';
-import PurchaseOfferForm from '../purchase-offer';
+import PurchaseMaterialForm from '../purchase-material/PurchaseMaterialForm';
+import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
 import { RawMaterialsActions } from '../util';
-import SaleListingForm from '../sale-listing';
+import SaleListingForm from '../sale-listing/SaleListingForm';
 
 type FormModalProps = {
   readonly title: RawMaterialsActions | 'Purchase Plant' | 'Sell Plant';

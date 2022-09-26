@@ -2,34 +2,12 @@ import FactoryIcon from '@mui/icons-material/Factory';
 import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Typography } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import { useEffect, useState } from 'react';
-import { PowerPlant } from '../App';
-import FormModal from '../form-modal';
+import { PowerPlant, UserInventory } from '../App';
+import FormModal from '../form-modal/FormModal';
 import { plant_type_color_map } from '../util';
 
-export type UserPowerPlant = PowerPlant & {
-  readonly hashrate: number | null;
-}
 
-export type UserInventory = {
-  user_power_plants: Record<string, UserPowerPlant>,
-  user_token_balances: [string, number][]
-}
-
-export const Inventory = () => {
-  const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
-
-  useEffect(() => {
-    const unlisten_user_inventory = appWindow.listen("user-inventory", (ev) => {
-      console.log(['user-inventory'], ev);
-      setUserInventory(ev.payload as UserInventory);
-    });
-
-    return () => {
-      (async () => {
-        (await unlisten_user_inventory)();
-      })();
-    }
-  }, [userInventory]);
+export const Inventory = ({ userInventory }: { userInventory: UserInventory | null }) => {
 
   return (
     <div>
@@ -54,7 +32,7 @@ export const Inventory = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {Object.entries(userInventory?.user_power_plants??{}).map(([ptr, plant]) => (
+                {Object.entries(userInventory?.user_power_plants ?? {}).map(([ptr, plant]) => (
                   <TableRow key={`plant-${ptr}`}>
                     <TableCell>
                       <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[plant.plant_type] }} /><p>{plant.plant_type}</p>
