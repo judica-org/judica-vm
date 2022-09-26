@@ -317,7 +317,7 @@ impl ConstantFunctionMarketMaker {
             // (mkt_qty_selling*mkt_qty_buying)/(mkt_qty_buying-buy_amt) - mkt_qty_selling = sell_amt
             let mkt_qty_selling = tokens[selling].balance_check(&mkt.id);
             let mkt_qty_buying = tokens[buying].balance_check(&mkt.id);
-            if buy_amt < mkt_qty_buying {
+            if buy_amt > mkt_qty_buying {
                 return Err(TradeError::InsufficientTokens(
                     "Market has insufficient tokens".into(),
                 ));
