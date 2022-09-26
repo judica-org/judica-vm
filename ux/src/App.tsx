@@ -139,6 +139,7 @@ export type MaterialPriceData = {
   readonly mkt_qty_a: number;
   readonly asset_b: string;
   readonly mkt_qty_b: number;
+  readonly display_asset: string;
 }
 
 export type MaterialType = 'Steel' | 'Silicon' | 'Concrete';
@@ -148,8 +149,9 @@ export type MaterialPriceDisplay = {
     asset_a: number;
     asset_b: number;
   },
+  display_asset: string,
   material_type: MaterialType;
-  price: number | 'not available';
+  price: number | 'No Market';
   currency: string;
 }
 
@@ -180,12 +182,13 @@ function App() {
     const unlisten_material_prices = appWindow.listen("materials-price-data", (ev) => {
       console.log(ev);
       const materials_data = ev.payload as MaterialPriceData[];
-      const transformed: MaterialPriceDisplay[] = materials_data.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b }) => {
+      const transformed: MaterialPriceDisplay[] = materials_data.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b, display_asset }) => {
         return {
           trading_pair,
           material_type: asset_a as MaterialType,
-          price: Math.round(mkt_qty_b / mkt_qty_a),
+          price: Math.round(mkt_qty_b / mkt_qty_a) || "No Market",
           currency: asset_b,
+          display_asset
         }
       })
       set_materials(transformed)

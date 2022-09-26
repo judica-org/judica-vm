@@ -3,9 +3,10 @@ import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { tauri_host } from "../tauri_host";
+import { TradingPairID } from "../Types/GameMove";
 import { RawMaterialsActions } from "../util";
 
-const PurchaseMaterialForm = ({ action, subtitle, currency }: { readonly action: RawMaterialsActions; readonly subtitle: string; readonly currency: string }) => {
+const PurchaseMaterialForm = ({ action, subtitle, currency, trading_pair }: { readonly action: RawMaterialsActions; readonly subtitle: string; readonly currency: string; readonly trading_pair: TradingPairID }) => {
   const [schema, setSchema] = useState<null | any>(null);
 
   useEffect(() => {

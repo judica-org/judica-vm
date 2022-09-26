@@ -5,23 +5,31 @@ import PurchaseMaterialForm from '../purchase-material/PurchaseMaterialForm';
 import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
 import { RawMaterialsActions } from '../util';
 import SaleListingForm from '../sale-listing/SaleListingForm';
+import { TradingPairID } from '../Types/GameMove';
 
 type FormModalProps = {
   readonly title: RawMaterialsActions | 'Purchase Plant' | 'Sell Plant';
   readonly currency: string;
   readonly material_type?: string;
-  readonly nft_id?: number
+  readonly nft_id?: number;
+  readonly trading_pair?: TradingPairID;
 };
 
-function FormModal({ title, currency, material_type, nft_id }: FormModalProps) {
+function FormModal({ title, currency, material_type, nft_id, trading_pair }: FormModalProps) {
   const [open, setOpen] = useState(false);
 
   const pickForm = (title: string) => {
     switch (title) {
       case 'Purchase Materials':
-        return <PurchaseMaterialForm action={title} subtitle={`Purchase ${material_type as string} from the market?`} currency={currency} />;
+        if (trading_pair)
+          return <PurchaseMaterialForm action={title} subtitle={`Purchase ${material_type as string} from the market?`} currency={currency} trading_pair={trading_pair} />;
+        else
+          return null
       case 'Sell Materials':
-        return <PurchaseMaterialForm action={title} subtitle={`Sell some of your ${material_type as string}?`} currency={currency} />;
+        if (trading_pair)
+          return <PurchaseMaterialForm action={title} subtitle={`Sell some of your ${material_type as string}?`} currency={currency} trading_pair={trading_pair} />;
+        else
+          return null
       case 'Purchase Plant':
         return <PurchaseOfferForm subtitle={`Purchase plant ${nft_id as number}`} />;
       case 'Sell Plant':
