@@ -219,7 +219,6 @@ pub(crate) async fn super_mint_power_plant_cost(
     Ok(cost)
 }
 
-// note: this fn is updated in unwrap fix branch
 /// returns qty of each material necessary to mint plant of given type and size
 pub(crate) async fn mint_power_plant_cost(
     scale: u64,
@@ -240,7 +239,5 @@ pub(crate) async fn mint_power_plant_cost(
         .get_power_plant_cost(scale, location, plant_type, signing_key.to_string())
         .unwrap_or_default();
 
-        // let mut current_prices = Vec::new();
-        // current_prices.push(("Silicon".to_string(), u128::MIN, u128::MIN));
     Ok(current_prices)
 }
