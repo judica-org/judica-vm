@@ -160,6 +160,9 @@ export function parse_trading_pair(s: string): TradingPairID {
   const [asset_a, asset_b] = s.split(":");
   return { asset_a:parseInt(asset_a, 16), asset_b:parseInt(asset_b, 16) }
 }
+export function trading_pair_to_string(s:TradingPairID) : string {
+  return `${s.asset_a.toString(16)}:${s.asset_b.toString(16)}`
+}
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
   const [location, setLocation] = useState<[number, number]>([0, 0]);

@@ -3,7 +3,7 @@ import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
 import React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MaterialPriceDisplay, parse_trading_pair } from "../App";
+import { MaterialPriceDisplay, parse_trading_pair, trading_pair_to_string } from "../App";
 import { tauri_host } from "../tauri_host";
 import { TradingPairID } from "../Types/GameMove";
 import { RawMaterialsActions } from "../util";
@@ -34,7 +34,7 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
 
       asset_a: market.asset_b,
       asset_b: market.asset_a,
-      trading_pair: `${pair.asset_b}:${pair.asset_a}`,
+      trading_pair: trading_pair_to_string(pair),
       price_a_b:
         typeof market.price_a_b === "number" ?
           1 / market.price_a_b :
