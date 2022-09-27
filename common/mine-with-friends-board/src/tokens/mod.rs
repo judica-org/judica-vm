@@ -182,6 +182,9 @@ impl TokenPointer {
     pub fn inner(&self) -> u64 {
         self.0 .0
     }
+    pub fn as_id(&self) -> EntityID {
+        self.0 
+    }
 }
 
 /// Holds Tokens and metadata for custom token types

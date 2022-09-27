@@ -120,6 +120,7 @@ impl GameSetup {
             );
             g.users_by_key.insert(player.clone(), id);
             g.tokens[g.real_sats_token_id].mint(&id, self.start_amount as u128);
+            g.tokens[g.bitcoin_token_id].mint(&id, self.start_amount as u128);
         }
     }
 }
@@ -318,7 +319,7 @@ impl GameBoard {
         } else {
             *current_move = sequence;
         }
-        let mv = d.sanitize(())?;
+        let mv = d.sanitize(self)?;
         self.update_current_time(Some((from, time)));
         self.process_ticks();
 
