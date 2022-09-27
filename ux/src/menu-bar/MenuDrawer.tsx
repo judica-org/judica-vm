@@ -21,6 +21,7 @@ const settingsDrawerWidth = '100vw';
 
 
 export default function DrawerAppBar(props: Props) {
+  const gameMoves = false;
   const { window } = props;
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [moveMenuOpen, setMoveMenuOpen] = React.useState(false);
@@ -146,14 +147,14 @@ export default function DrawerAppBar(props: Props) {
           >
             MINE WITH FRIENDS!
           </Typography>
-          <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+         {gameMoves && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
             <Button key={"moves"} sx={{ color: '#fff' }} onClick={toggleMoveDrawer(true)}>
               {'GAME MOVES'}
             </Button>
             <Drawer anchor='right' open={moveMenuOpen} onClose={toggleMoveDrawer(false)}>
               {moveList()}
             </Drawer>
-          </Box>
+          </Box>}
         </Toolbar>
       </AppBar>
       <Box component="nav">
