@@ -11,7 +11,7 @@ function MintingModal({ location }: { location: [number, number] }) {
 
   return (
     <div className="MintingModal">
-      <Button onClick={handleOpen}>Mint Power Plant</Button>
+      <Button variant="contained" onClick={handleOpen}>Mint Power Plant</Button>
       <Modal
         aria-labelledby='minting-modal'
         aria-describedby='minting-power-plant-display'

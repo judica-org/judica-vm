@@ -5,6 +5,7 @@ import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent } from '@mui/material';
 import { emit } from '@tauri-apps/api/event';
+import MintingModal from './mint-power-plant/MintingModal';
 const { useState, useEffect } = React;
 
 const stub_plant_data = [{
@@ -39,6 +40,7 @@ const stub_plant_data = [{
 export default () => {
     const [power_plants, set_power_plants] = useState([]); // use empty list for now so it will render
     const [countries, setCountries] = useState([]);
+    const [location, setLocation] = useState(null)
 
     useEffect(() => {
         setCountries(countries_data);
@@ -56,49 +58,51 @@ export default () => {
 
     return <div className='globe-container'>
         <Card>
-            <CardHeader title={'Map'}
-                subheader={'Current Energy Grid'}
+            <CardHeader title={'World Energy Grid'}
+                subheader={location ? `Selected Location: ${location.lat}, ${location.lng}`: 'Click to select location'}
             />
-            <CardContent className={'content'} style={{
-                position: 'relative'
-            }}>
-                <Globe
-                    onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
-                        console.log(['globe-click'], { lat, lng });
-                        emit('globe-click', [lat,lng]);
-                    }}
-                    globeImageUrl={earth}
-                    width={500}
-                    height={500}
-                    labelsData={power_plants}
-                    labelText={'text'}
-                    labelSize={2}
-                    labelColor={() => 'white'}
-                    labelAltitude={0.1}
-                    labelIncludeDot={true}
-                    labelDotRadius={0.5}
-                    labelDotOrientation={() => 'top'}
-                    labelLabel={
-                        (l) => `
+            <CardContent  >
+                <div className='GlobeContent'>
+                    <Globe
+                        onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
+                            setLocation({ lat, lng })
+                            console.log(['globe-click'], { lat, lng });
+                            emit('globe-click', [lat, lng]);
+                        }}
+                        globeImageUrl={earth}
+                        width={600}
+                        height={600}
+                        labelsData={power_plants}
+                        labelText={'text'}
+                        labelSize={2}
+                        labelColor={() => 'white'}
+                        labelAltitude={0.1}
+                        labelIncludeDot={true}
+                        labelDotRadius={0.5}
+                        labelDotOrientation={() => 'top'}
+                        labelLabel={
+                            (l) => `
                             <b>ID: ${l.id}</b> <br />
                             Owner: <i>${l.owner}</i> <br />
                             Watts: <i>${l.watts}</i> <br />
                             ${l.for_sale ? 'For Sale' : ''}
                             `
-                    }
-                    hexPolygonsData={countries.features}
-                    hexPolygonResolution={3}
-                    hexPolygonMargin={0.3}
-                    hexPolygonColor={
-                        () => `#${Math.round(Math.random() * Math.pow(2, 24)).toString(16).padStart(6, '0')}`
-                    }
-                    hexPolygonLabel={
-                        ({ properties: d }) => `
+                        }
+                        hexPolygonsData={countries.features}
+                        hexPolygonResolution={3}
+                        hexPolygonMargin={0.3}
+                        hexPolygonColor={
+                            () => `#${Math.round(Math.random() * Math.pow(2, 24)).toString(16).padStart(6, '0')}`
+                        }
+                        hexPolygonLabel={
+                            ({ properties: d }) => `
         <b>${d.ADMIN} (${d.ISO_A2})</b> <br />
         Population: <i>${d.POP_EST}</i>
       `
-                    }
-                />
+                        }
+                    />
+                    {location && <MintingModal location={location} />}
+                </div>
             </CardContent>
         </Card>
     </div>;

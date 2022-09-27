@@ -1,12 +1,20 @@
 .App-header {
-    background-color: #282c34;
+    background-color: #227b6c;
     min-height: 10vh;
     font-size: calc(10px + 1vmin);
     color: white;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+    padding: 1em;
+    /* display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr; */
 }
 
 .App-header>* {
     text-align: center;
+}
+
+.MuiOutlinedInput-root {
+    background-color: white
 }
