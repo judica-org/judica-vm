@@ -26,7 +26,7 @@ export interface TradeCoins {
 export interface Trade {
  amount_a: number
  amount_b: number
- pair: TradingPairID
+ pair: string
  sell: boolean
  [k: string]: unknown
 }

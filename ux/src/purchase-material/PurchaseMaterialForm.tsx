@@ -3,7 +3,7 @@ import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
 import React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MaterialPriceDisplay } from "../App";
+import { MaterialPriceDisplay, parse_trading_pair } from "../App";
 import { tauri_host } from "../tauri_host";
 import { TradingPairID } from "../Types/GameMove";
 import { RawMaterialsActions } from "../util";
@@ -15,13 +15,6 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
   const [action, set_action] = React.useState<RawMaterialsActions>(action_in);
   const [market, set_market] = React.useState<MaterialPriceDisplay>(market_in);
   const [trade_amt, set_trade_amt] = React.useState(0);
-  const handle_submit = (ev: React.FormEvent<HTMLDivElement>): void => {
-    // TODO: Detect Trade Direction
-    ev.preventDefault();
-    if (trade_amt)
-      tauri_host.make_move_inner({ trade: { amount_a: trade_amt, amount_b: 0, pair: market.trading_pair, sell: action === "SELL" } }, 0)
-  };
-
   const formula = (a: number) => {
     if (typeof market.price_a_b !== "number")
       return null;
@@ -36,14 +29,12 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
   };
 
   const flip_market = () => {
+    let pair = parse_trading_pair(market.trading_pair);
     let new_obj: MaterialPriceDisplay = {
 
       asset_a: market.asset_b,
       asset_b: market.asset_a,
-      trading_pair: {
-        asset_a: market.trading_pair.asset_b,
-        asset_b: market.trading_pair.asset_a,
-      },
+      trading_pair: `${pair.asset_b}:${pair.asset_a}`,
       price_a_b:
         typeof market.price_a_b === "number" ?
           1 / market.price_a_b :
@@ -67,6 +58,12 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
   if (typeof market.price_a_b !== "number")
     return null;
 
+  const handle_click = (ev: React.MouseEvent<HTMLButtonElement, MouseEvent>): void => {
+
+    ev.preventDefault();
+    if (trade_amt)
+      tauri_host.make_move_inner({ trade: { amount_a: trade_amt, amount_b: 0, pair: market.trading_pair, sell: action === "SELL" } }, "0");
+  };
   // for creater should be extracted out into a form util
   return <Card>
     <CardHeader
@@ -78,9 +75,9 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
         Trading {market.asset_a} for {market.asset_b}
       </Typography>
       <div className='MoveForm' >
-        <FormControl onSubmit={handle_submit}>
+        <FormControl >
           <TextField label={<div>Estimate: {formula(trade_amt)}</div>} type="number" value={trade_amt} onChange={(ev) => { set_trade_amt(parseInt(ev.target.value)) }}></TextField>
-          <Button type="submit">{action}</Button>
+          <Button type="submit" onClick={handle_click}>{action}</Button>
           <Button onClick={() => flip_market()}>Flip Market</Button>
           <Button onClick={() => set_action(opposite_action())}>Switch To {opposite_action()} </Button>
         </FormControl>

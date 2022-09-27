@@ -15,8 +15,7 @@ const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: nu
   console.log("purchase schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
-    if (uid.current?.valueAsNumber)
-      tauri_host.make_move_inner(data.formData, uid.current?.valueAsNumber)
+      tauri_host.make_move_inner(data.formData, "0")
   };
 
   const formData = {
@@ -36,7 +35,6 @@ const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: nu
   }
     , [schema]
   )
-  const uid = useRef<null | HTMLInputElement>(null);
   return schema && <Card>
     <CardHeader
       title={'Purchase?'}
@@ -45,10 +43,6 @@ const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: nu
     </CardHeader>
     <CardContent>
       <div className='MoveForm' >
-        <div>
-          <label>Player ID:</label>
-          <input type={"number"} ref={uid}></input>
-        </div>
         {schema_form}
       </div>
     </CardContent>

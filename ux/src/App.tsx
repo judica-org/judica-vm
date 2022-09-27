@@ -15,6 +15,7 @@ import { Box, Tab, Tabs } from '@mui/material';
 import { TabPanelUnstyled, TabsUnstyled } from '@mui/base';
 import React from 'react';
 import DrawerAppBar from './menu-bar/MenuDrawer';
+import { TradingPairID } from './Types/GameMove';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 export type PowerPlant = {
   id: number,
@@ -40,7 +41,7 @@ function MoveForm() {
     // TODO: Submit from correct user
     const uid_n = uid.current?.valueAsNumber;
     if (uid_n)
-      tauri_host.make_move_inner(data.formData, uid_n)
+      tauri_host.make_move_inner(data.formData, "0")
   };
   const schema_form = useMemo<JSX.Element>(() => {
     const customFormats = { "uint128": (s: string) => { return true; } };
@@ -131,10 +132,7 @@ function Panel(props: React.PropsWithChildren & { index: number, current_index: 
 }
 
 export type MaterialPriceData = {
-  readonly trading_pair: {
-    readonly asset_a: number;
-    readonly asset_b: number;
-  },
+  readonly trading_pair: string,
   readonly asset_a: string;
   readonly mkt_qty_a: number;
   readonly asset_b: string;
@@ -143,10 +141,7 @@ export type MaterialPriceData = {
 }
 
 export type MaterialPriceDisplay = {
-  trading_pair: {
-    asset_a: number;
-    asset_b: number;
-  },
+  trading_pair: string,
   asset_a: string;
   asset_b: string;
   display_asset: string,
@@ -160,6 +155,10 @@ export type UserPowerPlant = PowerPlant & {
 export type UserInventory = {
   user_power_plants: Record<string, UserPowerPlant>,
   user_token_balances: [string, number][]
+}
+export function parse_trading_pair(s: string): TradingPairID {
+  const [asset_a, asset_b] = s.split(":");
+  return { asset_a:parseInt(asset_a, 16), asset_b:parseInt(asset_b, 16) }
 }
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
