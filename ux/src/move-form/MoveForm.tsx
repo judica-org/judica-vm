@@ -16,8 +16,7 @@ export default function MoveForm() {
   console.log("move schema:", schema);
   const handle_submit = (data: FormSubmit) => {
     // TODO: Submit from correct user
-    if (uid.current?.valueAsNumber)
-      tauri_host.make_move_inner(data.formData, uid.current?.valueAsNumber)
+    tauri_host.make_move_inner(data.formData, "0")
   };
 
   const schema_form = useMemo<JSX.Element>(() => {
@@ -32,7 +31,6 @@ export default function MoveForm() {
   }
     , [schema]
   )
-  const uid = useRef<null | HTMLInputElement>(null);
   return schema && <Card>
     <CardHeader
       title={'Enter A Move'}
@@ -41,10 +39,6 @@ export default function MoveForm() {
     </CardHeader>
     <CardContent>
       <div className='MoveForm' >
-        <div>
-          <label>Player ID:</label>
-          <input type={"number"} ref={uid}></input>
-        </div>
         {schema_form}
       </div>
     </CardContent>

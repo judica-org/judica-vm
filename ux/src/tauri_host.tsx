@@ -1,12 +1,13 @@
 import { invoke } from '@tauri-apps/api';
 import { PlantType } from './App';
+import { GameMove } from './Types/GameMove';
 
 let game_synchronizer_invoked = false;
 export const tauri_host = {
   get_move_schema: async () => {
     return await invoke("get_move_schema");
   },
-  make_move_inner: async (nextMove: any, from: number) => {
+  make_move_inner: async (nextMove: GameMove, from: string) => {
     return await invoke("make_move_inner", { nextMove, from });
   },
   game_synchronizer: async () => {

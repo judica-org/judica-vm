@@ -67,7 +67,7 @@ export const EnergyExchange = ({listings}:{listings:NFTSale[]}) => {
                     <TableCell align="right">{listing.price}</TableCell>
                     <TableCell align="right">{listing.currency}</TableCell>
                     <TableCell align="right">{listing.transfer_count}</TableCell>
-                    <TableCell align="right"><FormModal title={"Purchase Plant"} nft_id={listing.nft_id} currency={''} material_type={''} /></TableCell>
+                    <TableCell align="right"><FormModal action="Purchase Plant" title={"Purchase Plant"} nft_id={listing.nft_id}  /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

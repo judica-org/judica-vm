@@ -31,14 +31,14 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
                 {materials && materials.map((material, index) => (
                   <TableRow key={index}>
                     <TableCell>
-                      <ConstructionIcon className='sale-factory-icon' sx={{ color: material_type_color_map[material.material_type] }} fontSize={'medium'} />
-                      <Typography>{material.material_type}</Typography>
+                      <ConstructionIcon className='sale-factory-icon' fontSize={'medium'} />
+                      <Typography>{material.display_asset}</Typography>
                     </TableCell>
-                    <TableCell align="right">{material.price}</TableCell>
-                    <TableCell align="right">{material.currency}</TableCell>
+                    <TableCell align="right">{material.price_a_b}</TableCell>
+                    <TableCell align="right">{material.asset_a} / {material.asset_b}</TableCell>
                     <TableCell align="right">
-                      <FormModal title={"Purchase Materials"} currency={material.currency} material_type={material.material_type} />
-                      <FormModal title={"Sell Materials"} currency={material.currency} material_type={material.material_type} />
+                      <FormModal title={"Buy Tokens"} action={"BUY"} market={material} />
+                      <FormModal title={"Sell Tokens"} action={"SELL"} market={material} />
                     </TableCell>
                   </TableRow>
                 ))}

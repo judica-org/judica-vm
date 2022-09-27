@@ -4,7 +4,7 @@ export const material_type_color_map = {
   'Concrete': 'brown'
 }
 
-export type RawMaterialsActions = 'Purchase Materials' | 'Sell Materials';
+export type RawMaterialsActions = 'BUY' | 'SELL';
 
 export const plant_type_color_map = {
   'Solar': 'yellow',
