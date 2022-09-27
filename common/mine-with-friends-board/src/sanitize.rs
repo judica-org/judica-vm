@@ -56,8 +56,12 @@ impl Sanitizable for NftPtr {
     type Output = NftPtr;
     type Context = GameBoard;
     type Error = ();
-    fn sanitize(self, _context: &Self::Context) -> Result<Self::Output, Self::Error> {
-        Ok(self)
+    fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
+        if context.nfts.nfts.contains_key(&self) {
+            Ok(self)
+        } else {
+            Err(())
+        }
     }
 }
 
@@ -66,6 +70,8 @@ impl Sanitizable for TradingPairID {
     type Context = <TokenPointer as Sanitizable>::Context;
     type Error = <TokenPointer as Sanitizable>::Error;
     fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
+        // No need to check normalization, since we may be using non-normal form
+        // for trade direction
         let pair = TradingPairID {
             asset_a: self.asset_a.sanitize(context)?,
             asset_b: self.asset_b.sanitize(context)?,
@@ -113,6 +119,7 @@ impl Sanitizable for Trade {
             amount_b,
             sell,
         } = self;
+        // TODO: Sanitize amounts?
         Ok(Self {
             pair: pair.sanitize(context)?,
             amount_a,
@@ -138,6 +145,10 @@ impl Sanitizable for MintPowerPlant {
     type Context = GameBoard;
     type Error = ();
     fn sanitize(self, _context: &Self::Context) -> Result<Self::Output, Self::Error> {
+        if self.scale == 0 {
+            return Err(());
+        }
+        // TODO: CHeck that location is a valid coordinate
         Ok(self)
     }
 }
@@ -181,8 +192,21 @@ impl Sanitizable for SendTokens {
     type Output = Self;
     type Context = GameBoard;
     type Error = ();
-    fn sanitize(self, _context: &Self::Context) -> Result<Self::Output, Self::Error> {
-        Ok(self)
+    fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
+        let SendTokens {
+            to,
+            amount,
+            currency,
+        } = self;
+        if context.users.contains_key(&to) {
+            Ok(Self {
+                to,
+                amount,
+                currency: currency.sanitize(context)?,
+            })
+        } else {
+            Err(())
+        }
     }
 }
 

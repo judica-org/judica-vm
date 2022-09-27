@@ -364,7 +364,6 @@ impl GameBoard {
                     ConstantFunctionMarketMaker::do_buy_trade(
                         self, pair, amount_a, amount_b, false, &context,
                     );
-
                 }
             }
             GameMove::MintPowerPlant(MintPowerPlant {
