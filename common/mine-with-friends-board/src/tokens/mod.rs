@@ -183,7 +183,7 @@ impl TokenPointer {
         self.0 .0
     }
     pub fn as_id(&self) -> EntityID {
-        self.0 
+        self.0
     }
 }
 
