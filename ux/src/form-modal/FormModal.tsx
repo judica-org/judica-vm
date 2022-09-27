@@ -6,32 +6,28 @@ import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
 import { RawMaterialsActions } from '../util';
 import SaleListingForm from '../sale-listing/SaleListingForm';
 import { TradingPairID } from '../Types/GameMove';
+import { MaterialPriceDisplay } from '../App';
 
-type FormModalProps = {
-  readonly title: RawMaterialsActions | 'Purchase Plant' | 'Sell Plant';
-  readonly currency: string;
-  readonly material_type?: string;
-  readonly nft_id?: number;
-  readonly trading_pair?: TradingPairID;
-};
+type NFTActions = 'Purchase Plant' | 'Sell Plant';
+type FormModalProps = ({
+  readonly action: RawMaterialsActions;
+  readonly market: MaterialPriceDisplay;
+} | {
+  readonly action: NFTActions;
+  readonly nft_id: number;
+}) & { readonly title?: string };
 
-function FormModal({ title, currency, material_type, nft_id, trading_pair }: FormModalProps) {
+function FormModal(props: FormModalProps) {
   const [open, setOpen] = useState(false);
 
-  const pickForm = (title: string) => {
-    switch (title) {
-      case 'Purchase Materials':
-        if (trading_pair)
-          return <PurchaseMaterialForm action={title} subtitle={`Purchase ${material_type as string} from the market?`} currency={currency} trading_pair={trading_pair} />;
-        else
-          return null
-      case 'Sell Materials':
-        if (trading_pair)
-          return <PurchaseMaterialForm action={title} subtitle={`Sell some of your ${material_type as string}?`} currency={currency} trading_pair={trading_pair} />;
-        else
-          return null
+  const pickForm = (props: FormModalProps) => {
+    switch (props.action) {
+      case 'BUY':
+        return <PurchaseMaterialForm action={props.action} market={props.market}></PurchaseMaterialForm>
+      case 'SELL':
+        return <PurchaseMaterialForm action={props.action} market={props.market}></PurchaseMaterialForm>
       case 'Purchase Plant':
-        return <PurchaseOfferForm subtitle={`Purchase plant ${nft_id as number}`} />;
+        return <PurchaseOfferForm subtitle={`Purchase plant ${props.nft_id as number}`} />;
       case 'Sell Plant':
         return <SaleListingForm subtitle={'Sell'} />
     }
@@ -58,7 +54,7 @@ function FormModal({ title, currency, material_type, nft_id, trading_pair }: For
             <CloseIcon />
           </IconButton>
           {
-            pickForm(title)}
+            pickForm(props)}
         </Paper>
       </Modal>
     )
@@ -80,7 +76,7 @@ function FormModal({ title, currency, material_type, nft_id, trading_pair }: For
             handleOpen();
           }}
         >
-          {title}
+          {props.title ?? props.action}
         </Button>
       </div>
       <CustomModal />

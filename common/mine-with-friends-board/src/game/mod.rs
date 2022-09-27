@@ -353,10 +353,18 @@ impl GameBoard {
                 pair,
                 amount_a,
                 amount_b,
+                sell,
             }) => {
-                ConstantFunctionMarketMaker::do_sell_trade(
-                    self, pair, amount_a, amount_b, false, &context,
-                );
+                if sell {
+                    ConstantFunctionMarketMaker::do_sell_trade(
+                        self, pair, amount_a, amount_b, false, &context,
+                    );
+                } else {
+                    ConstantFunctionMarketMaker::do_buy_trade(
+                        self, pair, amount_a, amount_b, false, &context,
+                    );
+
+                }
             }
             GameMove::MintPowerPlant(MintPowerPlant {
                 scale,
@@ -439,9 +447,11 @@ impl GameBoard {
 
     pub fn get_ux_materials_prices(&mut self) -> Vec<UXMaterialsPriceData> {
         let mut res = vec![];
-        for (id) in  self.tokens.tokens.keys().cloned().collect::<Vec<_>>() {
+        for (id) in self.tokens.tokens.keys().cloned().collect::<Vec<_>>() {
             let ptr = self.tokens.tokens[&id].ptr();
-            let nick = self.tokens.tokens[&id].nickname().unwrap_or_else(|| "Unknown Token".into());
+            let nick = self.tokens.tokens[&id]
+                .nickname()
+                .unwrap_or_else(|| "Unknown Token".into());
 
             let mut trading_pair = TradingPairID {
                 asset_a: ptr,

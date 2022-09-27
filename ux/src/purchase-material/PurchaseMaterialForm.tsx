@@ -1,58 +1,51 @@
-import { Card, CardHeader, CardContent } from "@mui/material";
+import { Card, CardHeader, CardContent, FormControl, TextField, Button } from "@mui/material";
 import Form, { FormSubmit } from "@rjsf/core";
 import { invoke } from "@tauri-apps/api";
+import React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MaterialPriceDisplay } from "../App";
 import { tauri_host } from "../tauri_host";
 import { TradingPairID } from "../Types/GameMove";
 import { RawMaterialsActions } from "../util";
 
-const PurchaseMaterialForm = ({ action, subtitle, currency, trading_pair }: { readonly action: RawMaterialsActions; readonly subtitle: string; readonly currency: string; readonly trading_pair: TradingPairID }) => {
-  const [schema, setSchema] = useState<null | any>(null);
-
-  useEffect(() => {
-    (async () => {
-      setSchema(await tauri_host.get_material_schema());
-    })()
-  }, []);
-  console.log("materials schema:", schema);
-
-  const handle_submit = (data: FormSubmit) => {
-
-    if (uid.current?.valueAsNumber)
-      tauri_host.make_move_inner(data.formData, uid.current?.valueAsNumber)
+const PurchaseMaterialForm = ({ action, market }: {
+  readonly action: RawMaterialsActions;
+  readonly market: MaterialPriceDisplay;
+}) => {
+  const [trade_amt, set_trade_amt] = React.useState(0);
+  const handle_submit = (ev: React.FormEvent<HTMLDivElement>): void => {
+    // TODO: Detect Trade Direction
+    ev.preventDefault();
+    if (trade_amt)
+      tauri_host.make_move_inner({ trade: { amount_a: trade_amt, amount_b: 0, pair: market.trading_pair, sell: action === "SELL" } }, 0)
   };
 
+  const formula = (a: number) => {
+    if (typeof market.price !== "number")
+      return null;
+    switch (action) {
+      case "SELL":
+        return `Recieving ${a / market.price} Units`;
+      case "BUY":
+        return `Buying ${a * market.price} Units`;
+
+    };
+  };
+  if (typeof market.price !== "number")
+    return null;
 
   // for creater should be extracted out into a form util
-  const schema_form = useMemo<JSX.Element>(() => {
-    const formData = {
-      currency
-    };
-    const customFormats = { "uint128": (s: string) => { return true; } };
-    if (schema)
-      return <Form formData={formData} schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
-        <button type="submit">Submit</button>
-      </Form>;
-
-    else
-      return <div></div>
-  }
-    , [currency, schema]
-  )
-  const uid = useRef<null | HTMLInputElement>(null);
-  return schema && <Card>
+  return <Card>
     <CardHeader
       title={action}
-      subheader={subtitle}
     >
     </CardHeader>
     <CardContent>
       <div className='MoveForm' >
-        <div>
-          <label>Player ID:</label>
-          <input type={"number"} ref={uid}></input>
-        </div>
-        {schema_form}
+        <FormControl onSubmit={handle_submit}>
+          <TextField label={<div>Estimate: {formula(trade_amt)}</div>} type="number" value={trade_amt} onChange={(ev) => { set_trade_amt(parseInt(ev.target.value)) }}></TextField>
+          <Button type="submit">{action}</Button>
+        </FormControl>
       </div>
     </CardContent>
   </Card>;

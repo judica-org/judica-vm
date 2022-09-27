@@ -27,6 +27,7 @@ export interface Trade {
  amount_a: number
  amount_b: number
  pair: TradingPairID
+ sell: boolean
  [k: string]: unknown
 }
 /**

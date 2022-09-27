@@ -37,8 +37,8 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
                     <TableCell align="right">{material.price}</TableCell>
                     <TableCell align="right">{material.currency}</TableCell>
                     <TableCell align="right">
-                      <FormModal title={"Purchase Materials"} currency={material.currency} material_type={material.material_type} trading_pair={material.trading_pair} />
-                      <FormModal title={"Sell Materials"} currency={material.currency} material_type={material.material_type} trading_pair={material.trading_pair} />
+                      <FormModal title={"Buy Tokens"} action={"BUY"} market={material} />
+                      <FormModal title={"Sell Tokens"} action={"SELL"} market={material} />
                     </TableCell>
                   </TableRow>
                 ))}

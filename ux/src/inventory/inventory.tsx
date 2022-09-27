@@ -42,7 +42,7 @@ export const Inventory = ({ userInventory }: { userInventory: UserInventory | nu
                     </TableCell>
                     <TableCell align="right">{plant.hashrate}</TableCell>
                     <TableCell align="right">{plant.has_miners ? 'yes' : 'no'}</TableCell>
-                    <TableCell align="right"><FormModal title={'Sell Plant'} currency={'Bitcoin'} nft_id={plant.id} /><div>Plant Detail</div></TableCell>
+                    <TableCell align="right"><FormModal action={"Sell Plant"} title={'Sell Plant'}  nft_id={plant.id} /><div>Plant Detail</div></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
