@@ -63,8 +63,8 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
     }
     if (submitter_id === "mint") {
       // this expects entityID that isn't used. Remove later.
-      await tauri_host.make_move_inner({ scale, location, plant_type }, 12345);
-      await invoke("game-move", { payload: { scale, location, plant_type } });
+      if (plant_type === "Solar" || plant_type === "Hydro" || plant_type === "Flare")
+        await tauri_host.super_mint(scale, location, plant_type!);
     }
   };
 
