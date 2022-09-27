@@ -142,17 +142,15 @@ export type MaterialPriceData = {
   readonly display_asset: string;
 }
 
-export type MaterialType = 'Steel' | 'Silicon' | 'Concrete';
-
 export type MaterialPriceDisplay = {
   trading_pair: {
     asset_a: number;
     asset_b: number;
   },
+  asset_a: string;
+  asset_b: string;
   display_asset: string,
-  material_type: MaterialType;
-  price: number | 'No Market';
-  currency: string;
+  price_a_b: number | 'No Market';
 }
 
 export type UserPowerPlant = PowerPlant & {
@@ -185,9 +183,9 @@ function App() {
       const transformed: MaterialPriceDisplay[] = materials_data.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b, display_asset }) => {
         return {
           trading_pair,
-          material_type: asset_a as MaterialType,
-          price: Math.round(mkt_qty_b / mkt_qty_a) || "No Market",
-          currency: asset_b,
+          price_a_b: Math.round(mkt_qty_a / mkt_qty_b) || "No Market",
+          asset_a: asset_a,
+          asset_b: asset_b,
           display_asset
         }
       })
