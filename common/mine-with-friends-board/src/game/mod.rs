@@ -360,7 +360,7 @@ impl GameBoard {
         todo!()
     }
     pub fn current_time(&self) -> u64 {
-        self.current_time
+        self.elapsed_time
     }
     /// Check if a given user is the root_user
     pub fn user_is_admin(&self, user: EntityID) -> bool {

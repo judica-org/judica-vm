@@ -4,17 +4,17 @@
 //  License, v. 2.0. If a copy of the MPL was not distributed with this
 //  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 //! Payment Pool Contract for Sapio Studio Advent Calendar Entry
-#[deny(missing_docs)]
 use crate::sapio_base::Clause;
-
 use bitcoin::hashes::sha256;
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
 use bitcoin::util::amount::Amount;
-
 use bitcoin::XOnlyPublicKey;
+use game_sequencer::ExtractedMoveEnvelopes;
+use mine_with_friends_board::game::FinishReason;
 use mine_with_friends_board::game::GameBoard;
-use mine_with_friends_board::MoveEnvelope;
+use mine_with_friends_board::game::GameSetup;
+use mine_with_friends_board::game::MoveRejectReason;
 use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
 use sapio::util::amountrange::AmountF64;
@@ -139,62 +139,69 @@ impl GameStarted {
         todo!()
     }
 
+    fn get_finished_board(
+        &self,
+        trace: ExtractedMoveEnvelopes,
+    ) -> Result<(FinishReason, GameBoard), GameBoard> {
+        let mut game = GameBoard::new(&GameSetup {
+            players: self
+                .kernel
+                .players
+                .keys()
+                .map(|PK(k)| k.to_string())
+                .collect(),
+            // TODO: Should this be something else?
+            start_amount: 100_000_000,
+            finish_time: self.kernel.timeout,
+        });
+
+        for (mv, pk) in trace.0 {
+            match game.play(mv, pk.to_string()) {
+                Ok(()) => {}
+                Err(MoveRejectReason::GameIsFinished(g)) => return Ok((g, game)),
+                _ => continue,
+            }
+        }
+        Err(game)
+    }
     #[continuation(
         web_api,
         coerce_args = "coerce_players_win",
         guarded_by = "[Self::all_players_signed]"
     )]
-    fn game_end_players_win(self, ctx: Context, game_trace: Option<MoveSequence>) {
+    fn game_end_players_win(self, ctx: Context, game_trace: Option<ExtractedMoveEnvelopes>) {
         match game_trace {
             None => empty(),
             Some(trace) => {
-                let mut game = GameBoard::new();
-                for (mv, pk) in trace.sequence {
-                    match game.play(mv, pk) {
-                        Ok(()) => {
-                            continue;
+                match self.get_finished_board(trace) {
+                    Ok((FinishReason::TimeExpired, game)) => {
+                        // calculate payouts for each player
+                        let total_bitcoin = ctx.funds();
+                        let mut tmpl = ctx.template();
+                        let dist = game
+                            .get_close_distribution(
+                                total_bitcoin.as_sat(),
+                                self.kernel.game_host.0.to_string(),
+                            )
+                            .map_err(|_| {
+                                CompilationError::TerminateWith(
+                                    "Game Not Finished, Violating Invariant that was finished"
+                                        .into(),
+                                )
+                            })?;
+                        for (strkey, coin) in dist {
+                            let key = XOnlyPublicKey::from_str(&strkey).map_err(|_| {
+                                CompilationError::TerminateWith(format!(
+                                    "Corrupt GameBoard, Invalid Key: {}",
+                                    strkey
+                                ))
+                            })?;
+                            tmpl = tmpl.add_output(Amount::from_sat(coin), &key, None)?;
                         }
-                        Err(()) => {
-                            return Err(CompilationError::TerminateWith(
-                                "GameBoard corrupted".into(),
-                            ));
-                        }
+                        tmpl.into()
                     }
+                    _ => empty(),
                 }
-                // validate that the game has actually timed out
-                if game.current_time() < self.kernel.timeout {
-                    return empty();
-                }
-
-                // calculate payouts for each player
-                let total_bitcoin = ctx.funds();
-                let mut tmpl = ctx.template();
-                let (total_game_coin, users) = game.user_shares();
-                let user_data = game.user_data();
-                for (eid, game_coin) in users {
-                    let total_bitcoin_atomic = total_bitcoin.as_sat() as u128;
-                    let player_share = Amount::from_sat(
-                        ((game_coin * total_bitcoin_atomic) as f64 / total_game_coin as f64) as u64,
-                    );
-                    let player_key = match user_data.get(&eid) {
-                        None => {
-                            // TODO: this is possibly a corruption event and warrants aborting?
-                            // If this has occurred it means there is a user in the user shares map
-                            // that is absent from the key map. This implies inconsistent state.
-                            continue;
-                        }
-                        Some(ud) => match XOnlyPublicKey::from_str(&ud.key) {
-                            Err(_) => {
-                                return Err(CompilationError::TerminateWith(
-                                    "GameBoard corrupted: invalid user key".into(),
-                                ));
-                            }
-                            Ok(pk) => pk,
-                        },
-                    };
-                    tmpl = tmpl.add_output(player_share, &player_key, None)?;
-                }
-                tmpl.into()
             }
         }
     }
@@ -204,29 +211,43 @@ impl GameStarted {
         coerce_args = "coerce_players_lose",
         guarded_by = "[Self::all_players_signed]"
     )]
-    fn game_end_players_lose(self, _ctx: Context, game_trace: Option<MoveSequence>) {
+    fn game_end_players_lose(self, ctx: Context, game_trace: Option<ExtractedMoveEnvelopes>) {
         match game_trace {
             None => empty(),
             Some(trace) => {
-                let mut game = GameBoard::new();
-                for (mv, pk) in trace.sequence {
-                    match game.play(mv, pk) {
-                        Ok(()) => {
-                            continue;
+                match self.get_finished_board(trace) {
+                    Ok((FinishReason::DominatingPlayer(id), game)) => {
+                        // TODO: verify that one player possesses over 50% of the hash rate, else abort with empty
+
+                        // TODO: if there is a player that possesses that hash rate, allocate assets according to the game
+                        // semantics of the players having lost
+
+                        let total_bitcoin = ctx.funds();
+                        let mut tmpl = ctx.template();
+                        let dist = game
+                            .get_close_distribution(
+                                total_bitcoin.as_sat(),
+                                self.kernel.game_host.0.to_string(),
+                            )
+                            .map_err(|_| {
+                                CompilationError::TerminateWith(
+                                    "Game Not Finished, Violating Invariant that was finished"
+                                        .into(),
+                                )
+                            })?;
+                        for (strkey, coin) in dist {
+                            let key = XOnlyPublicKey::from_str(&strkey).map_err(|_| {
+                                CompilationError::TerminateWith(format!(
+                                    "Corrupt GameBoard, Invalid Key: {}",
+                                    strkey
+                                ))
+                            })?;
+                            tmpl = tmpl.add_output(Amount::from_sat(coin), &key, None)?;
                         }
-                        Err(()) => {
-                            return Err(CompilationError::TerminateWith(
-                                "GameBoard corrupted".into(),
-                            ));
-                        }
+                        tmpl.into()
                     }
+                    _ => empty(),
                 }
-
-                // TODO: verify that one player possesses over 50% of the hash rate, else abort with empty
-
-                // TODO: if there is a player that possesses that hash rate, allocate assets according to the game
-                // semantics of the players having lost
-                todo!();
             }
         }
     }
@@ -250,11 +271,6 @@ impl GameStarted {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema)]
-pub struct MoveSequence {
-    sequence: Vec<(MoveEnvelope, String)>,
-}
-
 #[derive(JsonSchema)]
 struct GameStart {
     #[serde(with = "Vec::<sha256::Hash>")]
@@ -268,8 +284,8 @@ pub struct CensorshipProof {}
 pub enum GameEnd {
     HostCheatEquivocate(HostKey),
     HostCheatCensor(CensorshipProof),
-    PlayersWin(MoveSequence),
-    PlayersLose(MoveSequence),
+    PlayersWin(ExtractedMoveEnvelopes),
+    PlayersLose(ExtractedMoveEnvelopes),
     Degrade,
 }
 
@@ -315,7 +331,7 @@ fn coerce_censorship_proof(
 
 fn coerce_players_win(
     k: <GameStarted as Contract>::StatefulArguments,
-) -> Result<Option<MoveSequence>, CompilationError> {
+) -> Result<Option<ExtractedMoveEnvelopes>, CompilationError> {
     match k {
         Some(GameEnd::PlayersWin(ms)) => Ok(Some(ms)),
         Some(_) => Err(CompilationError::ContinuationCoercion(
@@ -327,11 +343,11 @@ fn coerce_players_win(
 
 fn coerce_players_lose(
     k: <GameStarted as Contract>::StatefulArguments,
-) -> Result<Option<MoveSequence>, CompilationError> {
+) -> Result<Option<ExtractedMoveEnvelopes>, CompilationError> {
     match k {
         Some(GameEnd::PlayersLose(ms)) => Ok(Some(ms)),
         Some(_) => Err(CompilationError::ContinuationCoercion(
-            "Failed to coerce GameEnd into MoveSequence".into(),
+            "Failed to coerce GameEnd into ExtractedMoveEnvelopes".into(),
         )),
         None => Ok(None),
     }

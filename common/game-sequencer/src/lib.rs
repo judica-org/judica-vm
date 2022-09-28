@@ -4,11 +4,9 @@ use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::AuthenticationError;
 use attest_messages::CanonicalEnvelopeHash;
-
 use attest_messages::GenericEnvelope;
 use game_host_messages::Peer;
 use game_host_messages::{BroadcastByHost, Channelized};
-
 use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::XOnlyPublicKey;
 use schemars::JsonSchema;
@@ -24,15 +22,17 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::spawn;
-use tokio::sync::futures::Notified;
-use tokio::sync::{
-    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    Mutex, Notify,
+#[cfg(feature = "has_async")]
+use tokio::{
+    spawn,
+    sync::{
+        futures::Notified,
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        Mutex, Notify,
+    },
+    task::{JoinError, JoinHandle},
+    time::sleep,
 };
-use tokio::task::JoinError;
-use tokio::task::JoinHandle;
-use tokio::time::sleep;
 use tracing::debug;
 use tracing::info;
 use tracing::trace;
@@ -196,12 +196,14 @@ impl<M: AttestEnvelopable> OfflineSequencer<M> {
     }
 }
 
+#[cfg(feature = "has_async")]
 impl<M: AttestEnvelopable> From<OfflineSequencer<M>> for OfflineDBFetcher<M> {
     fn from(o: OfflineSequencer<M>) -> Self {
         OfflineDBFetcher::new(o.batches_to_sequence, o.msg_cache)
     }
 }
 
+#[cfg(feature = "has_async")]
 impl<M> TryFrom<OfflineDBFetcher<M>> for OfflineSequencer<M>
 where
     M: AttestEnvelopable,
@@ -224,12 +226,14 @@ where
     }
 }
 
+#[cfg(feature = "has_async")]
 pub struct OfflineDBFetcher<M: AttestEnvelopable> {
     batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
     msg_cache: Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>>>,
     new_msgs_in_cache: Arc<Notify>,
 }
 
+#[cfg(feature = "has_async")]
 impl<M> OfflineDBFetcher<M>
 where
     M: AttestEnvelopable,
@@ -255,6 +259,7 @@ where
         OfflineSequencer::try_from(self)?.directly_sequence_map(|a| Ok(Some(a)))
     }
 }
+#[cfg(feature = "has_async")]
 impl<M: AttestEnvelopable> DBFetcher<M> for OfflineDBFetcher<M> {
     fn batches_to_sequence(
         &self,
@@ -433,6 +438,7 @@ impl<M: AttestEnvelopable> DBFetcher<M> for OnlineDBFetcher<M> {
     }
 }
 
+#[cfg(feature = "has_async")]
 pub trait DBFetcher<M>: Send + Sync
 where
     M: AttestEnvelopable,
@@ -444,6 +450,7 @@ where
     ) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>>>;
     fn notified(&self) -> Notified<'_>;
 }
+#[cfg(feature = "has_async")]
 pub struct GenericSequencer<F, R, E, M: AttestEnvelopable> {
     db_fetcher: Arc<dyn DBFetcher<M>>,
     shutdown: Arc<AtomicBool>,
@@ -456,6 +463,7 @@ pub struct GenericSequencer<F, R, E, M: AttestEnvelopable> {
     _pd: PhantomData<E>,
 }
 
+#[cfg(feature = "has_async")]
 impl<F, R, E, M> GenericSequencer<F, R, E, M>
 where
     F: Fn(Authenticated<GenericEnvelope<M>>) -> Result<R, E> + Send + Sync + 'static,
