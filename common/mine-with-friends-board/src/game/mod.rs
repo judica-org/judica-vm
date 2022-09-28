@@ -158,7 +158,10 @@ impl From<<GameMove as Sanitizable>::Error> for MoveRejectReason {
         Self::MoveSanitizationError(v)
     }
 }
-
+#[derive(Serialize, Clone, Debug)]
+pub enum CloseError {
+    GameNotFinished,
+}
 impl GameBoard {
     /// Creates a new GameBoard
     pub fn new(setup: &GameSetup) -> GameBoard {
@@ -338,6 +341,48 @@ impl GameBoard {
         user == self.root_user
     }
 
+    ///Get the distributions of rewards mapped by player key
+    // TODO: Imbue with Oracle Key somewhere?
+    pub fn get_close_distribution(
+        &self,
+        bounty: u64,
+        host_key: String,
+    ) -> Result<Vec<(String, u64)>, CloseError> {
+        let mut v = vec![];
+        match self.game_is_finished().ok_or(CloseError::GameNotFinished)? {
+            FinishReason::TimeExpired => {
+                let balances = self
+                    .users_by_key
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            self.tokens[self.bitcoin_token_id].balance_check(v),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let total = balances.iter().map(|(_, v)| v).sum::<u128>();
+                let mut rewards: Vec<(String, u64)> = balances
+                    .into_iter()
+                    .map(|(k, v)| (k, ((v * bounty as u128) / total) as u64))
+                    .collect();
+                let excess = bounty - rewards.iter().map(|(_, v)| v).sum::<u64>();
+                if let Some(m) = rewards.first_mut() {
+                    m.1 += excess;
+                }
+                Ok(rewards)
+            }
+            FinishReason::DominatingPlayer(id) => {
+                let key = self.users[&id].key.clone();
+                // 75%
+                let twentyfivepercent = bounty / 4;
+                v.push((key, (bounty - twentyfivepercent)));
+                // 25%
+                v.push((host_key, twentyfivepercent));
+                Ok(v)
+            }
+        }
+    }
     /// Processes a GameMove against the board after verifying it's integrity
     /// and sanitizing it.
     pub fn play(
