@@ -63,7 +63,7 @@ impl From<MoveEnvelope> for ParticipantAction {
     }
 }
 impl ParticipantAction {
-    pub fn new(d: Unsanitized<GameMove>, sequence: u64, time: u64) -> Self {
-        Self::MoveEnvelope(MoveEnvelope { d, sequence, time })
+    pub fn new(d: Unsanitized<GameMove>, sequence: u64, time_millis: u64) -> Self {
+        Self::MoveEnvelope(MoveEnvelope { d, sequence, time_millis })
     }
 }

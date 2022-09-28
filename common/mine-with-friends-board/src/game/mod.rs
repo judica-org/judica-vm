@@ -60,6 +60,12 @@ pub struct UXUserInventory {
 pub struct UserData {
     key: String,
 }
+
+#[derive(Serialize, Clone)]
+pub struct Tick {
+    first_time: u64,
+    elapsed: u64,
+}
 /// GameBoard holds the entire state of the game.
 #[derive(Serialize)]
 pub struct GameBoard {
@@ -86,10 +92,10 @@ pub struct GameBoard {
     /// If init = true, must be Some
     pub(crate) root_user: EntityID,
     pub(crate) callbacks: CallbackRegistry,
-    pub(crate) current_time: u64,
+    pub(crate) elapsed_time: u64,
     pub(crate) finish_time: u64,
     pub(crate) mining_subsidy: u128,
-    pub ticks: BTreeMap<EntityID, u64>,
+    pub ticks: BTreeMap<EntityID, Tick>,
     pub chat: VecDeque<(u64, EntityID, String)>,
     pub chat_counter: u64,
     pub(crate) plant_prices: PowerPlantPrices,
@@ -245,7 +251,7 @@ impl GameBoard {
             nft_sales: Default::default(),
             player_move_sequence: Default::default(),
             callbacks: Default::default(),
-            current_time: 0,
+            elapsed_time: 0,
             finish_time: 0,
             mining_subsidy: 100_000_000_000 * 50,
             ticks: Default::default(),
@@ -272,7 +278,7 @@ impl GameBoard {
             price_asset: self.bitcoin_token_id,
             hash_asset: *self.tokens.hashboards.iter().next().unwrap().0,
             adjusts_every: 100, // what units?
-            current_time: 0,
+            elapsed_time: 0,
             first: true,
         }));
         let steel_id = self.alloc();
@@ -283,7 +289,7 @@ impl GameBoard {
             price_asset: self.bitcoin_token_id,
             hash_asset: self.steel_token_id,
             adjusts_every: 100, // what units?
-            current_time: 0,
+            elapsed_time: 0,
             first: true,
         }));
         let silicon_id = self.alloc();
@@ -294,7 +300,7 @@ impl GameBoard {
             price_asset: self.bitcoin_token_id,
             hash_asset: self.silicon_token_id,
             adjusts_every: 100, // what units?
-            current_time: 0,
+            elapsed_time: 0,
             first: true,
         }));
         let concrete_id = self.alloc();
@@ -305,7 +311,7 @@ impl GameBoard {
             price_asset: self.bitcoin_token_id,
             hash_asset: self.concrete_token_id,
             adjusts_every: 100, // what units?
-            current_time: 0,
+            elapsed_time: 0,
             first: true,
         }));
         // TODO: Initialize Power Plants?
@@ -325,7 +331,7 @@ impl GameBoard {
             &self.nfts,
         );
         self.callbacks.schedule(Box::new(PowerPlantEvent {
-            time: self.current_time + 100,
+            time: self.elapsed_time + 100,
             period: 100,
         }));
     }
@@ -387,7 +393,11 @@ impl GameBoard {
     /// and sanitizing it.
     pub fn play(
         &mut self,
-        MoveEnvelope { d, sequence, time }: MoveEnvelope,
+        MoveEnvelope {
+            d,
+            sequence,
+            time_millis,
+        }: MoveEnvelope,
         signed_by: String,
     ) -> Result<(), MoveRejectReason> {
         if let Some(finish_reason) = self.game_is_finished() {
@@ -406,7 +416,7 @@ impl GameBoard {
             *current_move = sequence;
         }
         let mv = d.sanitize(self)?;
-        self.update_current_time(Some((from, time)));
+        self.update_current_time((from, time_millis));
         self.process_ticks();
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
@@ -419,21 +429,34 @@ impl GameBoard {
         CallbackRegistry::run(self);
     }
 
-    fn update_current_time(&mut self, update_from: Option<(EntityID, u64)>) {
-        if let Some((from, time)) = update_from {
-            let tick = self.ticks.entry(from).or_default();
-            *tick = max(*tick, time);
-        }
-        let mut ticks: Vec<u64> = self.ticks.values().cloned().collect();
-        ticks.sort_unstable();
-        let median_time = ticks.get(ticks.len() / 2).cloned().unwrap_or_default();
-        self.current_time = median_time;
+    fn update_current_time(&mut self, (from, time): (EntityID, u64)) {
+        let tick = self.ticks.entry(from).or_insert(Tick {
+            first_time: time,
+            elapsed: 0,
+        });
+        tick.elapsed = max(
+            tick.elapsed,
+            time.checked_sub(tick.first_time).unwrap_or_default(),
+        );
+        let mut elapsed: Vec<u64> = self.ticks.values().map(|t| t.elapsed).collect();
+        elapsed.sort_unstable();
+        let median_elapsed = if elapsed.len() % 2 == 0 {
+            (elapsed.get(elapsed.len() / 2).cloned().unwrap_or_default()
+                + elapsed
+                    .get((elapsed.len() / 2) - 1)
+                    .cloned()
+                    .unwrap_or_default())
+                / 2
+        } else {
+            elapsed.get(elapsed.len() / 2).cloned().unwrap_or_default()
+        };
+        self.elapsed_time = median_elapsed;
     }
 
     pub fn game_is_finished(&self) -> Option<FinishReason> {
-        if self.current_time >= self.finish_time {
+        if self.elapsed_time >= self.finish_time {
             Some(FinishReason::TimeExpired)
-        } else if self.current_time >= (self.finish_time / 4) {
+        } else if self.elapsed_time >= (self.finish_time / 4) {
             // After 25 % of the game is finished...
             self.get_user_hashrate_share()
                 .iter()

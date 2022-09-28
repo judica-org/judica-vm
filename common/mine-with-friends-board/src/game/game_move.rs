@@ -114,7 +114,7 @@ impl MoveEnvelope {
         MoveEnvelope {
             d: sanitize::Unsanitized(g.into()),
             sequence,
-            time,
+            time_millis: time,
         }
     }
 }

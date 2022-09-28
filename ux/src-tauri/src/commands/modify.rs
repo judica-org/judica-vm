@@ -46,7 +46,7 @@ pub(crate) async fn make_new_chain_inner(
             d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
             sequence: 0,
             /// The player who is making the move, myst be figured out somewhere...
-            time: attest_util::now() as u64,
+            time_millis: attest_util::now() as u64,
         },
     )
     .err_to_string()?;
@@ -102,7 +102,7 @@ pub(crate) async fn make_move_inner_inner(
     let mve = MoveEnvelope {
         d: Unsanitized(next_move),
         sequence: last + 1,
-        time: attest_util::now() as u64,
+        time_millis: attest_util::now() as u64,
     };
     let keys = handle.get_keymap().or(Err("Could not get keys"))?;
     let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;

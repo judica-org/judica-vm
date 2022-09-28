@@ -18,7 +18,7 @@ pub struct MoveEnvelope {
     pub d: Unsanitized<GameMove>,
     /// The data should be immediately preceded by sequence - 1
     pub sequence: u64,
-    pub time: u64,
+    pub time_millis: u64,
 }
 
 #[cfg(test)]
