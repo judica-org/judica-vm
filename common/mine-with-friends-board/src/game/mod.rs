@@ -652,7 +652,7 @@ impl GameBoard {
         });
         power_plant_data
     }
-    
+
     pub fn get_user_power_plants(&self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
         let mut power_plant_data = BTreeMap::new();
         let mut power_plant_vec = self.get_ux_power_plant_data();
