@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
@@ -46,13 +48,13 @@ pub(crate) async fn super_mint(
     plant_type: PlantType,
     s: GameState<'_>,
     signing_key: State<'_, SigningKeyInner>,
-    secp: State<'_, Secp256k1<All>>,
+    secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
 ) -> Result<(), &'static str> {
     modify::make_move_inner_inner(
-        secp,
-        db,
-        signing_key,
+        secp.inner().clone(),
+        db.inner().clone(),
+        signing_key.inner().clone(),
         GameMove::SuperMintPowerPlant(MintPowerPlant {
             scale,
             location,
@@ -106,7 +108,7 @@ pub(crate) async fn list_my_users(
 #[tauri::command]
 pub(crate) async fn make_new_chain(
     nickname: String,
-    secp: State<'_, Secp256k1<All>>,
+    secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
 ) -> Result<String, String> {
     modify::make_new_chain_inner(nickname, secp, db).await
@@ -114,29 +116,31 @@ pub(crate) async fn make_new_chain(
 
 #[tauri::command]
 pub(crate) async fn send_chat(
-    secp: State<'_, Secp256k1<All>>,
+    secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
     sk: State<'_, SigningKeyInner>,
     chat: String,
 ) -> Result<(), &'static str> {
-    modify::make_move_inner_inner(secp, db, sk, GameMove::from(Chat(chat)), EntityID(0)).await
+    modify::make_move_inner_inner(secp.inner().clone(), db.inner().clone(), sk.inner().clone(), GameMove::from(Chat(chat)), EntityID(0)).await
 }
 #[tauri::command]
 pub(crate) async fn switch_to_game(
+    secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
+    sk: State<'_, SigningKeyInner>,
     game: GameState<'_>,
     key: XOnlyPublicKey,
 ) -> Result<(), ()> {
-    modify::switch_to_game_inner(db, game, key).await
+    modify::switch_to_game_inner(secp.inner().clone(), sk.inner().clone(), db.inner().clone(), game, key).await
 }
 
 #[tauri::command]
 pub(crate) async fn make_move_inner(
-    secp: State<'_, Secp256k1<All>>,
+    secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
     sk: State<'_, SigningKeyInner>,
     nextMove: GameMove,
     from: EntityID,
 ) -> Result<(), &'static str> {
-    modify::make_move_inner_inner(secp, db, sk, nextMove, from).await
+    modify::make_move_inner_inner(secp.inner().clone(), db.inner().clone(), sk.inner().clone(), nextMove, from).await
 }

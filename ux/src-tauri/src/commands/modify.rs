@@ -37,7 +37,7 @@ impl<E, T: std::fmt::Debug> ErrToString<E> for Result<E, T> {
 
 pub(crate) async fn make_new_chain_inner(
     nickname: String,
-    secp: State<'_, Secp256k1<All>>,
+    secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
 ) -> Result<String, String> {
     let (kp, next_nonce, genesis) = generate_new_user::<_, ParticipantAction, _>(
@@ -64,13 +64,13 @@ pub(crate) async fn make_new_chain_inner(
 }
 
 pub(crate) async fn make_move_inner_inner(
-    secp: State<'_, Secp256k1<All>>,
-    db: State<'_, Database>,
-    sk: State<'_, SigningKeyInner>,
+    secp: Arc<Secp256k1<All>>,
+    db:  Database,
+    sk: SigningKeyInner,
     next_move: GameMove,
     _from: EntityID,
 ) -> Result<(), &'static str> {
-    let xpubkey = sk.inner().lock().await.ok_or("No Key Selected")?;
+    let xpubkey = sk.lock().await.ok_or("No Key Selected")?;
     let msgdb = db.get().await.map_err(|_e| "No DB Available")?;
     let mut handle = msgdb.get_handle().await;
     // Seek the last game move -- in *most* cases should be the immediate prior
@@ -106,13 +106,13 @@ pub(crate) async fn make_move_inner_inner(
     };
     let keys = handle.get_keymap().or(Err("Could not get keys"))?;
     let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;
-    let keypair = KeyPair::from_secret_key(secp.inner(), sk);
+    let keypair = KeyPair::from_secret_key(&secp, sk);
     // TODO: Runa tipcache
     let msg = handle
         .wrap_message_in_envelope_for_user_by_key::<_, ParticipantAction, _>(
             mve,
             &keypair,
-            secp.inner(),
+            &secp,
             None,
             None,
             TipControl::AllTips,
@@ -120,7 +120,7 @@ pub(crate) async fn make_move_inner_inner(
         .or(Err("Could Not Wrap Message"))?
         .or(Err("Signing Failed"))?;
     let authenticated = msg
-        .self_authenticate(secp.inner())
+        .self_authenticate(&secp)
         .ok()
         .ok_or("Signature Incorrect")?;
     let _ = handle
@@ -131,11 +131,12 @@ pub(crate) async fn make_move_inner_inner(
 }
 
 pub(crate) async fn switch_to_game_inner(
-    db: State<'_, Database>,
+    secp: Arc<Secp256k1<All>>,
+    singing_key: SigningKeyInner,
+    db: Database,
     game: GameState<'_>,
     key: XOnlyPublicKey,
 ) -> Result<(), ()> {
-    let db = db.inner().clone();
     let game = game.inner().clone();
     spawn(async move {
         let genesis = {
@@ -166,7 +167,7 @@ pub(crate) async fn switch_to_game_inner(
             server: None,
         };
         *g = Some(new_game);
-        GameServer::start(&db, g, game).await?;
+        GameServer::start(secp, singing_key, db, g, game).await?;
         Ok::<(), &'static str>(())
     });
     Ok(())
