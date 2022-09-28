@@ -59,7 +59,7 @@ pub struct UXUserInventory {
 }
 #[derive(Serialize)]
 pub struct UserData {
-    key: String,
+    pub key: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -349,6 +349,18 @@ impl GameBoard {
     }
     pub fn root_user(&self) -> EntityID {
         self.root_user
+    }
+    pub fn user_data(&self) -> &BTreeMap<EntityID, UserData> {
+        todo!()
+    }
+    pub fn user_shares(&self) -> (u128, BTreeMap<EntityID, u128>) {
+        todo!()
+    }
+    pub fn user_hashrates(&self) -> (u128, BTreeMap<EntityID, u128>) {
+        todo!()
+    }
+    pub fn current_time(&self) -> u64 {
+        self.current_time
     }
     /// Check if a given user is the root_user
     pub fn user_is_admin(&self, user: EntityID) -> bool {
