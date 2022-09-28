@@ -10,21 +10,32 @@
     "@mui/styled-engine": "^5.10.4",
     "@rjsf/core": "^4.2.3",
     "@tauri-apps/api": "^1.0.2",
-    "@testing-library/jest-dom": "^5.14.1",
-    "@testing-library/react": "^13.0.0",
-    "@testing-library/user-event": "^13.2.1",
-    "@types/jest": "^27.0.1",
     "@types/node": "^16.7.13",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
-    "babel-standalone": "^6.26.0",
     "cross-env": "^7.0.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-globe.gl": "^2.22.3",
-    "react-scripts": "5.0.1",
-    "typescript": "^4.4.2",
     "web-vitals": "^2.1.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.19.3",
+    "@babel/plugin-syntax-flow": "^7.18.6",
+    "@babel/plugin-transform-react-jsx": "^7.19.0",
+    "@tauri-apps/cli": "^1.1.1",
+    "@testing-library/dom": "^8.18.1",
+    "@testing-library/jest-dom": "^5.14.1",
+    "@testing-library/react": "^13.0.0",
+    "@testing-library/user-event": "^13.2.1",
+    "@types/jest": "^27.0.1",
+    "babel-plugin-syntax-flow": "^6.18.0",
+    "babel-standalone": "^6.26.0",
+    "eslint": "^8.24.0",
+    "eslint-config-react-app": "^7.0.1",
+    "eslint-plugin-flowtype": "^8.0.3",
+    "react-scripts": "5.0.1",
+    "typescript": "^4.4.2"
   },
   "scripts": {
     "start": "cross-env BROWSER=none react-scripts start",
@@ -45,7 +56,7 @@
       "last 1 safari version"
     ]
   },
-  "devDependencies": {
-    "@tauri-apps/cli": "^1.1.1"
+  "peerDependencies": {
+    "@babel/plugin-syntax-flow": "*"
   }
 }
