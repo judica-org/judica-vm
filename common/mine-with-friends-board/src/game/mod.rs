@@ -433,11 +433,14 @@ impl GameBoard {
     pub fn game_is_finished(&self) -> Option<FinishReason> {
         if self.current_time >= self.finish_time {
             Some(FinishReason::TimeExpired)
-        } else {
+        } else if self.current_time >= (self.finish_time / 4) {
+            // After 25 % of the game is finished...
             self.get_user_hashrate_share()
                 .iter()
                 .find_map(|(k, v)| if v.0 * 2 >= v.1 { Some(*k) } else { None })
                 .map(FinishReason::DominatingPlayer)
+        } else {
+            None
         }
     }
     /// Processes a GameMove without any sanitization
