@@ -10,5 +10,5 @@ use std::path::PathBuf;
 use tauri::{State, Window};
 
 pub mod bindings;
-mod modify;
-mod view;
+pub mod modify;
+pub mod view;

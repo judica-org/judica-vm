@@ -48,7 +48,7 @@ impl CallbackRegistry {
     pub fn run(game: &mut GameBoard) {
         let s = &mut game.callbacks;
         // get everything that is to_do in the future and remove it...
-        let mut to_do = s.callbacks.split_off(&(game.current_time + 1));
+        let mut to_do = s.callbacks.split_off(&(game.elapsed_time + 1));
         // swap it with the things in the present
         std::mem::swap(&mut s.callbacks, &mut to_do);
         for (_k, v) in to_do {

@@ -27,13 +27,13 @@ pub struct SiliconRefinery {
     pub price_asset: TokenPointer,
     pub hash_asset: TokenPointer,
     pub adjusts_every: u64,
-    pub current_time: u64,
+    pub elapsed_time: u64,
     pub first: bool,
 }
 
 impl Callback for SiliconRefinery {
     fn time(&self) -> u64 {
-        self.current_time
+        self.elapsed_time
     }
 
     fn action(&mut self, game: &mut crate::game::GameBoard) {
@@ -70,7 +70,7 @@ impl Callback for SiliconRefinery {
             &CallContext { sender: self.id },
         );
 
-        self.current_time += self.adjusts_every;
+        self.elapsed_time += self.adjusts_every;
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);
         if balance > 0 {
             game.callbacks.schedule(Box::new(self.clone()))

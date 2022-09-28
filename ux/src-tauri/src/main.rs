@@ -85,7 +85,7 @@ fn main() {
             });
             Ok(())
         })
-        .manage(Secp256k1::new())
+        .manage(Arc::new(Secp256k1::new()))
         .manage(game)
         .manage(db)
         .manage(sk)
