@@ -332,8 +332,9 @@ impl GameBoard {
             &self.nfts,
         );
         self.callbacks.schedule(Box::new(PowerPlantEvent {
-            time: self.elapsed_time + 100,
-            period: 100,
+            // Next Move
+            time: self.elapsed_time + 1,
+            period: 11_003 // 11 seconds,
         }));
     }
     /// Creates a new EntityID
