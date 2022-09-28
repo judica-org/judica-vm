@@ -17,9 +17,14 @@ export function Users(props: { users: Array<[string, string, boolean]>; url: str
       headerName: 'New Message',
       field: 'actions',
       type: 'actions',
-      getActions: (params: GridRowParams) => [
-        <GridActionsCellItem icon={<Create></Create>} onClick={() => handle_new_msg(props.url, rows[params.id as number].pubkey)} label="Create New Message" />,
-      ]
+      getActions: (params: GridRowParams) => {
+        if (rows[params.id as number].has_private_key)
+          return [
+            <GridActionsCellItem icon={<Create></Create>} onClick={() => handle_new_msg(props.url, rows[params.id as number].pubkey)} label="Create New Message" />,
+          ];
+        else
+          return []
+      }
     }
   ];
 

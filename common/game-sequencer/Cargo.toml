@@ -12,8 +12,9 @@ serde_derive = "1.0.136"
 schemars = "0.8.10"
 tracing-subscriber = "0.3.11"
 tracing = "0.1.35"
-
+ruma-serde = "0.6.0"
 tokio = { version = "1.19.0", features = ["full"] }
+
 [dependencies.mine-with-friends-board]
 path = "../mine-with-friends-board"
 
@@ -31,9 +32,9 @@ optional=true
 [dependencies.game-host-messages]
 path = "../game-host-messages"
 
+[dependencies.game-player-messages]
+path = "../game-player-messages"
+
 [features]
 default = ["database_access"]
 database_access = ["attest-database"]
-
-[dev-dependencies]
-ruma-serde = "0.6.0"

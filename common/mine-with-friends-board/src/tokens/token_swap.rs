@@ -8,6 +8,9 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::fmt::Display;
+use tracing::Instrument;
 
 /// Data for a single trading pair (e.g. Apples to Oranges tokens)
 ///
@@ -24,6 +27,10 @@ pub(crate) struct ConstantFunctionMarketMakerPair {
 }
 
 impl ConstantFunctionMarketMakerPair {
+    pub fn has_market(game: &GameBoard, mut pair: TradingPairID) -> bool {
+        pair.normalize();
+        game.swap.markets.contains_key(&pair)
+    }
     /// ensure makes sure that a given trading pair exists in the GameBoard
     fn ensure(game: &mut GameBoard, mut pair: TradingPairID) -> TradingPairID {
         pair.normalize();
@@ -71,16 +78,57 @@ impl ConstantFunctionMarketMakerPair {
 #[derive(
     Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema, Debug,
 )]
+#[serde(into = "String", try_from = "String")]
 pub struct TradingPairID {
     pub asset_a: TokenPointer,
     pub asset_b: TokenPointer,
+}
+
+#[derive(Debug)]
+pub enum TradingPairIDParseError {
+    WrongNumberOfTerms,
+    EntityIDParseError(<EntityID as TryFrom<String>>::Error),
+}
+
+impl Display for TradingPairIDParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+impl std::error::Error for TradingPairIDParseError {}
+
+impl TryFrom<String> for TradingPairID {
+    type Error = TradingPairIDParseError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let a: Vec<&str> = value.split(':').collect();
+        if a.len() != 2 {
+            return Err(TradingPairIDParseError::WrongNumberOfTerms);
+        }
+        let asset_a = TokenPointer(
+            EntityID::try_from(a[0]).map_err(TradingPairIDParseError::EntityIDParseError)?,
+        );
+        let asset_b = TokenPointer(
+            EntityID::try_from(a[1]).map_err(TradingPairIDParseError::EntityIDParseError)?,
+        );
+        Ok(TradingPairID { asset_a, asset_b })
+    }
+}
+impl From<TradingPairID> for String {
+    fn from(s: TradingPairID) -> Self {
+        format!(
+            "{}:{}",
+            String::from(s.asset_a.0),
+            String::from(s.asset_b.0)
+        )
+    }
 }
 
 impl TradingPairID {
     /// Sort the key for use in e.g. Maps
     /// N.B. don't normalize without sorting the amounts in the same order.
     /// TODO: Make a type-safer way of represnting this
-    fn normalize(&mut self) {
+    pub fn normalize(&mut self) {
         if self.asset_a <= self.asset_b {
         } else {
             *self = Self {
@@ -89,12 +137,32 @@ impl TradingPairID {
             }
         }
     }
+    fn is_normal(&self) -> bool {
+        self.asset_a <= self.asset_b
+    }
 }
 
 /// Registry of all Market Pairs
 #[derive(Serialize, Default)]
 pub(crate) struct ConstantFunctionMarketMaker {
     pub(crate) markets: BTreeMap<TradingPairID, ConstantFunctionMarketMakerPair>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub enum TradeError {
+    InvalidTrade(String),
+    InsufficientTokens(String),
+}
+
+impl Display for TradeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TradeError::InvalidTrade(msg) => write!(f, "Error: Invalid trade. {:?}", msg),
+            TradeError::InsufficientTokens(msg) => {
+                write!(f, "Error: Insufficient tokens to complete trade.{:?}", msg)
+            }
+        }
+    }
 }
 
 impl ConstantFunctionMarketMaker {
@@ -166,13 +234,14 @@ impl ConstantFunctionMarketMaker {
     /// Perform a trade op by using the X*Y = K formula for a CFMM
     ///
     /// Parameters: One of amount_a or amount_b should be 0, which implies the trade direction
-    pub(crate) fn do_trade(
+    pub(crate) fn do_sell_trade(
         game: &mut GameBoard,
         mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
-        CallContext { ref sender }: &CallContext,
-    ) {
+        simulate: bool,
+        ctx: &CallContext,
+    ) -> Result<TradeOutcome, TradeError> {
         let unnormalized_id = id;
         id.normalize();
         if id != unnormalized_id {
@@ -180,7 +249,120 @@ impl ConstantFunctionMarketMaker {
         }
         // the zero is the one to be computed
         if !(amount_a == 0 || amount_b == 0) {
-            return;
+            return Err(TradeError::InvalidTrade(
+                "Both token amounts cannot be zero".into(),
+            ));
+        }
+        ConstantFunctionMarketMaker::internal_do_trade_sell_fixed_amount(
+            game, id, amount_a, amount_b, simulate, ctx,
+        )
+    }
+
+    pub(crate) fn do_buy_trade(
+        game: &mut GameBoard,
+        mut id: TradingPairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
+        simulate: bool,
+        ctx: &CallContext,
+    ) -> Result<TradeOutcome, TradeError> {
+        let unnormalized_id = id;
+        id.normalize();
+        if id != unnormalized_id {
+            std::mem::swap(&mut amount_a, &mut amount_b);
+        }
+        // the zero is the one to be computed
+        if !(amount_a == 0 || amount_b == 0) {
+            return Err(TradeError::InvalidTrade(
+                "Both token amounts cannot be zero".into(),
+            ));
+        }
+        ConstantFunctionMarketMaker::internal_do_trade_buy_fixed_amount(
+            game, id, amount_a, amount_b, simulate, ctx,
+        )
+    }
+
+    pub(crate) fn internal_do_trade_buy_fixed_amount(
+        game: &mut GameBoard,
+        mut id: TradingPairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
+        simulate: bool,
+        CallContext { ref sender }: &CallContext,
+    ) -> Result<TradeOutcome, TradeError> {
+        if !id.is_normal() {
+            panic!("Expects normalized IDs")
+        }
+        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
+        let mkt = &game.swap.markets[&id];
+        let tokens: &mut TokenRegistry = &mut game.tokens;
+        let (buying, selling, buy_amt) = match (amount_a, amount_b) {
+            (0, b) => (id.asset_b, id.asset_a, b),
+            (a, 0) => (id.asset_a, id.asset_b, a),
+            _ => panic!("Expected one to be 0"),
+        };
+
+        let (
+            asset_player_purchased,
+            amount_player_purchased,
+            asset_player_sold,
+            amount_player_sold,
+        ) = {
+            let selling_asset_name = tokens[selling].nickname().unwrap();
+            let buying_asset_name = tokens[buying].nickname().unwrap();
+            // if a is zero, a is token being "purchased"
+            // otherwise b is token being "purchased"
+            //
+            // mkt_qty_selling * y = k
+            // (mkt_qty_selling + sell_amt) * (mkt_qty_buying - buy_amt) = k
+            // (mkt_qty_selling + sell_amt) * (mkt_qty_buying - buy_amt) = (mkt_qty_selling * mkt_qty_buying)
+            // (mkt_qty_selling*mkt_qty_buying)/(mkt_qty_buying-buy_amt) - mkt_qty_selling = sell_amt
+            let mkt_qty_selling = tokens[selling].balance_check(&mkt.id);
+            let mkt_qty_buying = tokens[buying].balance_check(&mkt.id);
+            if buy_amt > mkt_qty_buying {
+                return Err(TradeError::InsufficientTokens(
+                    "Market has insufficient tokens".into(),
+                ));
+            }
+            let k = mkt_qty_selling * mkt_qty_buying;
+            let sell_amt = (k / (mkt_qty_buying - buy_amt)) - mkt_qty_selling;
+
+            if !simulate {
+                // Only check this condition when not similating... as we're
+                // looking to find out how much we would need!
+                if sell_amt > tokens[selling].balance_check(sender) {
+                    return Err(TradeError::InsufficientTokens(
+                        "User has insufficient tokens".into(),
+                    ));
+                }
+                tokens[buying].transaction();
+                tokens[selling].transaction();
+                let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
+                let _ = tokens[buying].transfer(&mkt.id, sender, buy_amt);
+                tokens[buying].end_transaction();
+                tokens[selling].end_transaction();
+            }
+            (buying_asset_name, buy_amt, selling_asset_name, sell_amt)
+        };
+
+        Ok(TradeOutcome {
+            trading_pair: id,
+            asset_player_purchased,
+            amount_player_purchased,
+            asset_player_sold,
+            amount_player_sold,
+        })
+    }
+    pub(crate) fn internal_do_trade_sell_fixed_amount(
+        game: &mut GameBoard,
+        mut id: TradingPairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
+        simulate: bool,
+        CallContext { ref sender }: &CallContext,
+    ) -> Result<TradeOutcome, TradeError> {
+        if !id.is_normal() {
+            panic!("Expects normalized IDs")
         }
         let id = ConstantFunctionMarketMakerPair::ensure(game, id);
         let mkt = &game.swap.markets[&id];
@@ -190,31 +372,58 @@ impl ConstantFunctionMarketMaker {
         if !(tokens[id.asset_a].balance_check(sender) >= amount_a
             && tokens[id.asset_b].balance_check(sender) >= amount_b)
         {
-            return;
+            return Err(TradeError::InsufficientTokens(
+                "Sender has insufficient tokens".into(),
+            ));
         }
 
         if !(amount_a <= mkt.amt_a(tokens) && amount_b <= mkt.amt_b(tokens)) {
-            return;
+            return Err(TradeError::InsufficientTokens(
+                "Market has insufficient tokens".into(),
+            ));
         }
 
-        if amount_a == 0 {
-            let new_amount_a = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
-            let _ = tokens[id.asset_b].transfer(sender, &mkt.id, amount_b);
-            let _ = tokens[id.asset_a].transfer(&mkt.id, sender, new_amount_a);
-        } else {
-            let new_amount_b = (mkt.amt_b(tokens) * amount_a) / mkt.amt_a(tokens);
-            let _ = tokens[id.asset_a].transfer(sender, &mkt.id, amount_a);
-            let _ = tokens[id.asset_b].transfer(&mkt.id, sender, new_amount_b);
-        }
-
+        let (
+            asset_player_purchased,
+            amount_player_purchased,
+            asset_player_sold,
+            amount_player_sold,
+        ) = {
+            let asset_a_name = tokens[id.asset_a].nickname().unwrap();
+            let asset_b_name = tokens[id.asset_b].nickname().unwrap();
+            tokens[id.asset_b].transaction();
+            // if a is zero, a is token being "purchased"
+            if amount_a == 0 {
+                // the amount player receives of a
+                let new_amount_a = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
+                if !simulate {
+                    let _ = tokens[id.asset_b].transfer(sender, &mkt.id, amount_b);
+                    let _ = tokens[id.asset_a].transfer(&mkt.id, sender, new_amount_a);
+                }
+                (asset_a_name, new_amount_a, asset_b_name, amount_b)
+            } else {
+                // otherwise b is token being "purchased"
+                let new_amount_b = (mkt.amt_b(tokens) * amount_a) / mkt.amt_a(tokens);
+                if !simulate {
+                    let _ = tokens[id.asset_a].transfer(sender, &mkt.id, amount_a);
+                    let _ = tokens[id.asset_b].transfer(&mkt.id, sender, new_amount_b);
+                }
+                (asset_b_name, new_amount_b, asset_a_name, amount_a)
+            }
+        };
         tokens[id.asset_a].end_transaction();
         tokens[id.asset_b].end_transaction();
+
+        Ok(TradeOutcome {
+            trading_pair: id,
+            asset_player_purchased,
+            amount_player_purchased,
+            asset_player_sold,
+            amount_player_sold,
+        })
     }
 
-    pub(crate) fn get_pair_price_data(
-        game: &mut GameBoard,
-        id: TradingPairID,
-    ) -> Result<(u128, u128), ()> {
+    pub(crate) fn get_pair_price_data(game: &mut GameBoard, id: TradingPairID) -> (u128, u128) {
         // check that a these two tokens are a valid pairing (do we need to?)
         let id = ConstantFunctionMarketMakerPair::ensure(game, id);
         let tokens: &mut TokenRegistry = &mut game.tokens;
@@ -223,16 +432,26 @@ impl ConstantFunctionMarketMaker {
         let mkt_qty_a = mkt.amt_a(tokens);
         let mkt_qty_b = mkt.amt_b(tokens);
 
-        Ok((mkt_qty_a, mkt_qty_b))
+        (mkt_qty_a, mkt_qty_b)
     }
 }
 
 /// A struct for passing token qty information to the UX for price calculation
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct UXMaterialsPriceData {
     pub trading_pair: TradingPairID,
     pub asset_a: String,
     pub mkt_qty_a: u128,
     pub asset_b: String,
     pub mkt_qty_b: u128,
+    pub display_asset: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct TradeOutcome {
+    pub trading_pair: TradingPairID,
+    pub asset_player_purchased: String,
+    pub amount_player_purchased: u128,
+    pub asset_player_sold: String,
+    pub amount_player_sold: u128,
 }

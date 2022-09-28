@@ -47,6 +47,7 @@ impl Serialize for NFTRegistry {
 #[derive(
     Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Clone, Copy, JsonSchema, Debug,
 )]
+#[serde(transparent)]
 pub struct NftPtr(EntityID);
 
 impl NFTRegistry {
@@ -108,7 +109,7 @@ impl NFT for BaseNFT {
     }
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct UXPlantData {
     pub coordinates: Location,
     pub for_sale: ForSale,

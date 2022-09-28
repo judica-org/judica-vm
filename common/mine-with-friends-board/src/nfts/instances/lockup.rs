@@ -54,7 +54,7 @@ impl Callback for CoinLockup {
     fn action(&mut self, game: &mut GameBoard) {
         let owner = game.nfts[self.id].owner();
         // this shouldn't happen if our scheduler is correct...
-        if game.current_time < self.time_when_free {
+        if game.elapsed_time < self.time_when_free {
             return;
         }
         let token = &mut game.tokens[self.asset];

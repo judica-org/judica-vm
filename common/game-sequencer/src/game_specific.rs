@@ -1,55 +1,70 @@
-use std::sync::{atomic::AtomicBool, Arc};
-
 use attest_messages::{Authenticated, GenericEnvelope};
+use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
-use sapio_bitcoin::XOnlyPublicKey;
+use ruma_serde::CanonicalJsonValue;
+use sapio_bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use tokio::task::JoinError;
+use std::sync::{atomic::AtomicBool, Arc};
+use tokio::{
+    spawn,
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        Mutex,
+    },
+    task::JoinError,
+};
 
 use crate::{DBFetcher, GenericSequencer, OfflineSequencer, SequenceingError};
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(try_from = "OfflineSequencer<MoveEnvelope>")]
-#[schemars(with = "OfflineSequencer<MoveEnvelope>")]
+#[serde(try_from = "OfflineSequencer<ParticipantAction>")]
+#[schemars(with = "OfflineSequencer<ParticipantAction>")]
 pub struct ExtractedMoveEnvelopes(
     #[schemars(with = "Vec<(MoveEnvelope, String)>")] pub Vec<(MoveEnvelope, XOnlyPublicKey)>,
 );
 
 impl ExtractedMoveEnvelopes {}
 
-impl TryFrom<OfflineSequencer<MoveEnvelope>> for ExtractedMoveEnvelopes {
+impl TryFrom<OfflineSequencer<ParticipantAction>> for ExtractedMoveEnvelopes {
     type Error = SequenceingError<serde_json::Error>;
 
-    fn try_from(mut value: OfflineSequencer<MoveEnvelope>) -> Result<Self, Self::Error> {
-        let x = value.directly_sequence_map(|m| Ok((m.msg().to_owned(), m.header().key())))?;
+    fn try_from(mut value: OfflineSequencer<ParticipantAction>) -> Result<Self, Self::Error> {
+        let x = value.directly_sequence_map(read_move)?;
         Ok(ExtractedMoveEnvelopes(x))
     }
 }
 
 type MoveReadFn = fn(
-    Authenticated<GenericEnvelope<MoveEnvelope>>,
-) -> Result<(MoveEnvelope, XOnlyPublicKey), serde_json::Error>;
+    Authenticated<GenericEnvelope<ParticipantAction>>,
+) -> Result<Option<(MoveEnvelope, XOnlyPublicKey)>, serde_json::Error>;
 #[derive(Clone)]
 pub struct Sequencer(
     pub  Arc<
         GenericSequencer<
             MoveReadFn,
-            (MoveEnvelope, XOnlyPublicKey),
+            Option<(MoveEnvelope, XOnlyPublicKey)>,
             serde_json::Error,
-            MoveEnvelope,
+            ParticipantAction,
         >,
     >,
 );
 
 fn read_move(
-    a: Authenticated<GenericEnvelope<MoveEnvelope>>,
-) -> Result<(MoveEnvelope, XOnlyPublicKey), serde_json::Error> {
-    Ok((a.msg().to_owned(), a.header().key()))
+    m: Authenticated<GenericEnvelope<ParticipantAction>>,
+) -> Result<Option<(MoveEnvelope, XOnlyPublicKey)>, serde_json::Error> {
+    match m.msg().to_owned() {
+        ParticipantAction::MoveEnvelope(me) => Ok(Some((me, m.header().key()))),
+        ParticipantAction::Custom(_) => Ok(None),
+        ParticipantAction::PsbtSigningCoordination(_) => Ok(None),
+    }
 }
 
 impl Sequencer {
-    pub fn new(shutdown: Arc<AtomicBool>, db_fetcher: Arc<dyn DBFetcher<MoveEnvelope>>) -> Self {
+    pub fn new(
+        shutdown: Arc<AtomicBool>,
+        db_fetcher: Arc<dyn DBFetcher<ParticipantAction>>,
+    ) -> Self {
         Sequencer(GenericSequencer::new(shutdown, db_fetcher, read_move))
     }
 
@@ -58,6 +73,63 @@ impl Sequencer {
     }
 
     pub async fn output_move(&self) -> Option<(MoveEnvelope, XOnlyPublicKey)> {
-        self.0.output_move().await
+        self.0.output_move().await.flatten()
+    }
+}
+
+type AGP = Authenticated<GenericEnvelope<ParticipantAction>>;
+type EnvReadFn = fn(AGP) -> Result<AGP, serde_json::Error>;
+#[derive(Clone)]
+pub struct DemuxedSequencer {
+    pub sequencer: Arc<GenericSequencer<EnvReadFn, AGP, serde_json::Error, ParticipantAction>>,
+    pub send_move: UnboundedSender<(MoveEnvelope, XOnlyPublicKey)>,
+    pub recieve_move: Arc<Mutex<UnboundedReceiver<(MoveEnvelope, XOnlyPublicKey)>>>,
+    pub send_psbt: UnboundedSender<(PartiallySignedTransaction, String)>,
+    pub recieve_psbt: Arc<Mutex<UnboundedReceiver<(PartiallySignedTransaction, String)>>>,
+    pub send_custom: UnboundedSender<CanonicalJsonValue>,
+    pub recieve_custom: Arc<Mutex<UnboundedReceiver<CanonicalJsonValue>>>,
+}
+
+impl DemuxedSequencer {
+    pub fn new(
+        shutdown: Arc<AtomicBool>,
+        db_fetcher: Arc<dyn DBFetcher<ParticipantAction>>,
+    ) -> Self {
+        let (send_move, recieve_move) = unbounded_channel();
+        let (send_psbt, recieve_psbt) = unbounded_channel();
+        let (send_custom, recieve_custom) = unbounded_channel::<CanonicalJsonValue>();
+        DemuxedSequencer {
+            sequencer: GenericSequencer::new(shutdown, db_fetcher, Ok),
+            send_move,
+            recieve_move: Arc::new(Mutex::new(recieve_move)),
+            send_psbt,
+            recieve_psbt: Arc::new(Mutex::new(recieve_psbt)),
+            send_custom,
+            recieve_custom: Arc::new(Mutex::new(recieve_custom)),
+        }
+    }
+
+    pub async fn run(self) -> Result<(), JoinError> {
+        spawn(self.sequencer.clone().run());
+        spawn({
+            let this = self;
+            async move {
+                match this.sequencer.output_move().await {
+                    Some(e) => match e.msg() {
+                        ParticipantAction::MoveEnvelope(m) => {
+                            this.send_move.send((m.clone(), e.header().key()));
+                        }
+                        ParticipantAction::Custom(c) => {
+                            this.send_custom.send(c.clone());
+                        }
+                        ParticipantAction::PsbtSigningCoordination(c) => {
+                            this.send_psbt.send((c.data.0.clone(), c.channel.clone()));
+                        }
+                    },
+                    None => (),
+                }
+            }
+        });
+        Ok(())
     }
 }

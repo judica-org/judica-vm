@@ -1,11 +1,13 @@
 import { invoke } from '@tauri-apps/api';
+import { PlantType } from './App';
+import { GameMove } from './Types/GameMove';
 
 let game_synchronizer_invoked = false;
 export const tauri_host = {
   get_move_schema: async () => {
     return await invoke("get_move_schema");
   },
-  make_move_inner: async (nextMove: any, from: number) => {
+  make_move_inner: async (nextMove: GameMove, from: string) => {
     return await invoke("make_move_inner", { nextMove, from });
   },
   game_synchronizer: async () => {
@@ -31,5 +33,11 @@ export const tauri_host = {
   },
   make_new_chain: async (nickname: string) => {
     return invoke("make_new_chain", { nickname });
+  },
+  mint_power_plant_cost: async(scale: number, location: [number, number], plantType: PlantType) => {
+    return invoke("mint_power_plant_cost", {scale, location, plantType});
+  },
+  super_mint: async(scale: number, location: [number, number], plantType: PlantType) => {
+    return invoke("super_mint", {scale, location, plantType});
   }
 };

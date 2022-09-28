@@ -11,7 +11,7 @@ use super::*;
 pub async fn push_to_peer(
     g: Arc<Globals>,
     client: AttestationClient,
-    service: (String, u16),
+    service: &ServiceUrl,
     conn: MsgDB,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     #[derive(Hash, PartialEq, PartialOrd, Ord, Eq, Debug, Copy, Clone)]
@@ -25,29 +25,29 @@ pub async fn push_to_peer(
         Arc::new(Mutex::new(HashMap::new()));
     let new_tips = Arc::new(Notify::new());
     let mut t1 = spawn({
-        let service = service.clone();
         let g = g.clone();
         let tip_tracker = tip_tracker.clone();
         let client = client.clone();
-        let (url, port) = service;
         let new_tips = new_tips.clone();
+        let service = service.clone();
         async move {
             while !g.shutdown.should_quit() {
                 // Get the tips this client claims to have
                 let tips: Vec<_> = client
-                    .get_latest_tips(&url, port)
-                    .await?
+                    .get_latest_tips(&service)
+                    .await
+                    .ok_or("Failed to Fetch Latest Tips")?
                     .iter()
                     .flat_map(|e| e.self_authenticate(&g.secp))
                     .collect();
                 trace!(
-                    url,
-                    port,
+                    ?service,
                     task = "PUSH::tip_tracker",
                     ?tips,
                     "Fetching saw peer at state"
                 );
-                debug!(url, port,
+                debug!(
+                    ?service,
                         task = "PUSH::tip_tracker",
                     tips=?tips.iter().map(|t| (t.get_genesis_hash(), t.canonicalized_hash_ref())).collect::<Vec<_>>(), "Fetching saw peer at state");
                 {
@@ -56,15 +56,14 @@ pub async fn push_to_peer(
                     for t in tips {
                         let genesis = GenesisHash::from(t.inner_ref());
                         let previous = tip_tracker.entry(genesis).or_insert_with(|| {
-                            debug!(url, port, ?t, ?genesis, "Inserting Unseen Genesis");
+                            debug!(?service, ?t, ?genesis, "Inserting Unseen Genesis");
                             t.clone()
                         });
                         // TODO: detect if previous is in our chain?
                         match t.header().height().cmp(&previous.header().height()) {
                             std::cmp::Ordering::Less => {
                                 warn!(
-                                    url,
-                                    port,
+                                    ?service,
                                     ?t,
                                     ?genesis,
                                     task = "PUSH::tip_tracker",
@@ -73,24 +72,22 @@ pub async fn push_to_peer(
                             }
                             std::cmp::Ordering::Equal => {
                                 if t != *previous {
-                                    warn!(url, port, ?t, ?previous, ?genesis, "Conflict Seen");
+                                    warn!(?service, ?t, ?previous, ?genesis, "Conflict Seen");
                                 } else {
-                                    info!(url, port, hash=?t.canonicalized_hash_ref(), ?genesis, task="PUSH::tip_tracker", "Nothing New");
-                                    trace!(url, port, ?t, task = "PUSH::tip_tracker", "No Updates");
+                                    info!(?service, hash=?t.canonicalized_hash_ref(), ?genesis, task="PUSH::tip_tracker", "Nothing New");
+                                    trace!(?service, ?t, task = "PUSH::tip_tracker", "No Updates");
                                 }
                             }
                             std::cmp::Ordering::Greater => {
                                 trace!(
-                                    url,
-                                    port,
+                                    ?service,
                                     ?t,
                                     ?genesis,
                                     task = "PUSH::tip_tracker",
                                     "Advancing Tip"
                                 );
                                 info!(
-                                    url,
-                                    port,
+                                    ?service,
                                     height = t.header().height(),
                                     old_height = previous.header().height(),
                                     task = "PUSH::tip_tracker",
@@ -113,12 +110,11 @@ pub async fn push_to_peer(
         }
     });
     let mut t2 = spawn({
-        let service = service.clone();
         let g = g.clone();
         let tip_tracker = tip_tracker.clone();
         let client = client.clone();
-        let (url, port) = service.clone();
         let new_tips = new_tips.clone();
+        let service = service.clone();
         async move {
             while !g.shutdown.should_quit() {
                 new_tips.notified().await;
@@ -168,10 +164,10 @@ pub async fn push_to_peer(
                     let res = client
                         .post_messages(
                             &to_broadcast.into_iter().map(|x| x.inner()).collect(),
-                            &url,
-                            port,
+                            &service,
                         )
-                        .await?;
+                        .await
+                        .ok_or("Messages Failed To Post")?;
 
                     info!(
                         accepted = res.iter().filter(|s| s.success).count(),

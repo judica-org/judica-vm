@@ -4,6 +4,7 @@ use self::game_move::Heartbeat;
 use self::game_move::ListNFTForSale;
 use self::game_move::MintPowerPlant;
 use self::game_move::PurchaseNFT;
+use self::game_move::RemoveTokens;
 use self::game_move::SendTokens;
 use self::game_move::Trade;
 use crate::callbacks::CallbackRegistry;
@@ -11,7 +12,6 @@ use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::instances::powerplant::PlantType;
-
 use crate::nfts::instances::powerplant::PowerPlantPrices;
 use crate::nfts::instances::powerplant::PowerPlantProducer;
 use crate::nfts::sale::NFTSaleRegistry;
@@ -33,6 +33,9 @@ use crate::tokens::instances::steel::Steel;
 use crate::tokens::instances::steel::SteelSmelter;
 use crate::tokens::token_swap;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
+use crate::tokens::token_swap::ConstantFunctionMarketMakerPair;
+use crate::tokens::token_swap::TradeError;
+use crate::tokens::token_swap::TradeOutcome;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::token_swap::UXMaterialsPriceData;
 use crate::MoveEnvelope;
@@ -43,13 +46,13 @@ use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::ops::Index;
+use std::time::Duration;
 use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
 use tracing::info;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Debug)]
 pub struct UXUserInventory {
     user_power_plants: BTreeMap<NftPtr, UXPlantData>,
     user_token_balances: Vec<(String, u128)>,
@@ -57,6 +60,12 @@ pub struct UXUserInventory {
 #[derive(Serialize)]
 pub struct UserData {
     pub key: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct Tick {
+    first_time: u64,
+    elapsed: u64,
 }
 /// GameBoard holds the entire state of the game.
 #[derive(Serialize)]
@@ -74,7 +83,7 @@ pub struct GameBoard {
     /// If init = true, must be Some
     pub(crate) bitcoin_token_id: TokenPointer,
     /// If init = true, must be Some
-    pub(crate) dollar_token_id: TokenPointer,
+    pub(crate) real_sats_token_id: TokenPointer,
     /// If init = true, must be Some
     pub(crate) steel_token_id: TokenPointer,
     /// If init = true, must be Some
@@ -84,9 +93,10 @@ pub struct GameBoard {
     /// If init = true, must be Some
     pub(crate) root_user: EntityID,
     pub(crate) callbacks: CallbackRegistry,
-    pub(crate) current_time: u64,
+    pub(crate) elapsed_time: u64,
+    pub(crate) finish_time: u64,
     pub(crate) mining_subsidy: u128,
-    pub ticks: BTreeMap<EntityID, u64>,
+    pub ticks: BTreeMap<EntityID, Tick>,
     pub chat: VecDeque<(u64, EntityID, String)>,
     pub chat_counter: u64,
     pub(crate) plant_prices: PowerPlantPrices,
@@ -101,9 +111,17 @@ pub struct GameSetup {
     // TODO: Make Set to guarantee Unique...
     pub players: Vec<String>,
     pub start_amount: u64,
+    // TODO: maybe remove no_finish_time default, but helps with existing chains...
+    #[serde(default = "no_finish_time")]
+    pub finish_time: u64,
+}
+fn no_finish_time() -> u64 {
+    // otherwise breaks json
+    9_007_199_254_740_991u64
 }
 impl GameSetup {
     fn setup_game(&self, g: &mut GameBoard) {
+        g.finish_time = self.finish_time;
         let mut p = self.players.clone();
         p.sort();
         p.dedup();
@@ -116,25 +134,64 @@ impl GameSetup {
                 },
             );
             g.users_by_key.insert(player.clone(), id);
-            g.tokens[g.dollar_token_id].mint(&id, self.start_amount as u128);
+            g.tokens[g.real_sats_token_id].mint(&id, self.start_amount as u128);
+            g.tokens[g.bitcoin_token_id].mint(&id, self.start_amount as u128);
         }
     }
 }
 
+#[derive(Serialize, Clone, Debug)]
+pub enum FinishReason {
+    TimeExpired,
+    DominatingPlayer(EntityID),
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub enum MoveRejectReason {
+    NoSuchUser,
+    GameIsFinished(FinishReason),
+    MoveSanitizationError(<GameMove as Sanitizable>::Error),
+    TradeRejected(TradeError),
+}
+
+impl From<TradeError> for MoveRejectReason {
+    fn from(v: TradeError) -> Self {
+        Self::TradeRejected(v)
+    }
+}
+
+impl From<FinishReason> for MoveRejectReason {
+    fn from(v: FinishReason) -> Self {
+        Self::GameIsFinished(v)
+    }
+}
+
+impl From<<GameMove as Sanitizable>::Error> for MoveRejectReason {
+    fn from(v: <GameMove as Sanitizable>::Error) -> Self {
+        Self::MoveSanitizationError(v)
+    }
+}
+#[derive(Serialize, Clone, Debug)]
+pub enum CloseError {
+    GameNotFinished,
+}
 impl GameBoard {
     /// Creates a new GameBoard
     pub fn new(setup: &GameSetup) -> GameBoard {
         let mut alloc = EntityIDAllocator::new();
 
-        let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Bitcoin".into()));
-        let dollar = Box::new(TokenBase::new_from_alloc(&mut alloc, "US Dollar".into()));
+        let btc = Box::new(TokenBase::new_from_alloc(&mut alloc, "Virtual Sats".into()));
+        let real_sats = Box::new(TokenBase::new_from_alloc(
+            &mut alloc,
+            "Real World Sats".into(),
+        ));
         let concrete = Box::new(TokenBase::new_from_alloc(&mut alloc, "Concrete".into()));
         let asic = Box::new(TokenBase::new_from_alloc(&mut alloc, "ASIC Gen 1".into()));
         let steel = Box::new(TokenBase::new_from_alloc(&mut alloc, "Steel".into()));
         let silicon = Box::new(TokenBase::new_from_alloc(&mut alloc, "Silicon".into()));
         let mut tokens = TokenRegistry::default();
         let bitcoin_token_id = tokens.new_token(btc);
-        let dollar_token_id = tokens.new_token(dollar);
+        let real_sats_token_id = tokens.new_token(real_sats);
         let concrete_token_id = tokens.new_token(concrete);
         let steel_token_id = tokens.new_token(steel);
         let silicon_token_id = tokens.new_token(silicon);
@@ -161,15 +218,27 @@ impl GameBoard {
         let mut plant_prices = HashMap::new();
         plant_prices.insert(
             PlantType::Solar,
-            Vec::from([(steel_token_id, 57), (silicon_token_id, 437)]),
+            Vec::from([
+                (steel_token_id, 57),
+                (silicon_token_id, 437),
+                (concrete_token_id, 62),
+            ]),
         );
         plant_prices.insert(
             PlantType::Hydro,
-            Vec::from([(steel_token_id, 247), (silicon_token_id, 96)]),
+            Vec::from([
+                (steel_token_id, 247),
+                (silicon_token_id, 96),
+                (concrete_token_id, 144),
+            ]),
         );
         plant_prices.insert(
             PlantType::Flare,
-            Vec::from([(steel_token_id, 76), (silicon_token_id, 84)]),
+            Vec::from([
+                (steel_token_id, 76),
+                (silicon_token_id, 84),
+                (concrete_token_id, 54),
+            ]),
         );
 
         let mut g = GameBoard {
@@ -177,7 +246,7 @@ impl GameBoard {
             swap: Default::default(),
             turn_count: 0,
             bitcoin_token_id,
-            dollar_token_id,
+            real_sats_token_id,
             steel_token_id,
             silicon_token_id,
             concrete_token_id,
@@ -189,7 +258,8 @@ impl GameBoard {
             nft_sales: Default::default(),
             player_move_sequence: Default::default(),
             callbacks: Default::default(),
-            current_time: 0,
+            elapsed_time: 0,
+            finish_time: 0,
             mining_subsidy: 100_000_000_000 * 50,
             ticks: Default::default(),
             chat: VecDeque::with_capacity(1000),
@@ -205,7 +275,7 @@ impl GameBoard {
         // DEMO CODE:
         // REMOVE BEFORE FLIGHT
         self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10000000);
-        self.tokens[self.dollar_token_id].mint(&self.root_user, 30000);
+        self.tokens[self.real_sats_token_id].mint(&self.root_user, 30000);
         //
         let id = self.alloc();
         self.callbacks.schedule(Box::new(ASICProducer {
@@ -214,8 +284,8 @@ impl GameBoard {
             base_price: 20,
             price_asset: self.bitcoin_token_id,
             hash_asset: *self.tokens.hashboards.iter().next().unwrap().0,
-            adjusts_every: 100, // what units?
-            current_time: 0,
+            adjusts_every: 10_007, // 10 seconds -- prime rounded for chaos
+            elapsed_time: 0,
             first: true,
         }));
         let steel_id = self.alloc();
@@ -225,8 +295,8 @@ impl GameBoard {
             base_price: 1,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.steel_token_id,
-            adjusts_every: 100, // what units?
-            current_time: 0,
+            adjusts_every: 5_003, // 5 seconds
+            elapsed_time: 0,
             first: true,
         }));
         let silicon_id = self.alloc();
@@ -236,8 +306,8 @@ impl GameBoard {
             base_price: 38,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.silicon_token_id,
-            adjusts_every: 100, // what units?
-            current_time: 0,
+            adjusts_every: 25_013, // 25 seconds
+            elapsed_time: 0,
             first: true,
         }));
         let concrete_id = self.alloc();
@@ -247,8 +317,8 @@ impl GameBoard {
             base_price: 290,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.concrete_token_id,
-            adjusts_every: 100, // what units?
-            current_time: 0,
+            adjusts_every: 14_009, // 14 seconds
+            elapsed_time: 0,
             first: true,
         }));
         // TODO: Initialize Power Plants?
@@ -268,8 +338,9 @@ impl GameBoard {
             &self.nfts,
         );
         self.callbacks.schedule(Box::new(PowerPlantEvent {
-            time: self.current_time + 100,
-            period: 100,
+            // Next Move
+            time: self.elapsed_time + 1,
+            period: 11_003, // 11 seconds,
         }));
     }
     /// Creates a new EntityID
@@ -296,14 +367,66 @@ impl GameBoard {
         user == self.root_user
     }
 
+    ///Get the distributions of rewards mapped by player key
+    // TODO: Imbue with Oracle Key somewhere?
+    pub fn get_close_distribution(
+        &self,
+        bounty: u64,
+        host_key: String,
+    ) -> Result<Vec<(String, u64)>, CloseError> {
+        let mut v = vec![];
+        match self.game_is_finished().ok_or(CloseError::GameNotFinished)? {
+            FinishReason::TimeExpired => {
+                let balances = self
+                    .users_by_key
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            self.tokens[self.bitcoin_token_id].balance_check(v),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let total = balances.iter().map(|(_, v)| v).sum::<u128>();
+                let mut rewards: Vec<(String, u64)> = balances
+                    .into_iter()
+                    .map(|(k, v)| (k, ((v * bounty as u128) / total) as u64))
+                    .collect();
+                let excess = bounty - rewards.iter().map(|(_, v)| v).sum::<u64>();
+                if let Some(m) = rewards.first_mut() {
+                    m.1 += excess;
+                }
+                Ok(rewards)
+            }
+            FinishReason::DominatingPlayer(id) => {
+                let key = self.users[&id].key.clone();
+                // 75%
+                let twentyfivepercent = bounty / 4;
+                v.push((key, (bounty - twentyfivepercent)));
+                // 25%
+                v.push((host_key, twentyfivepercent));
+                Ok(v)
+            }
+        }
+    }
     /// Processes a GameMove against the board after verifying it's integrity
     /// and sanitizing it.
     pub fn play(
         &mut self,
-        MoveEnvelope { d, sequence, time }: MoveEnvelope,
+        MoveEnvelope {
+            d,
+            sequence,
+            time_millis,
+        }: MoveEnvelope,
         signed_by: String,
-    ) -> Result<(), ()> {
-        let from = *self.users_by_key.get(&signed_by).ok_or(())?;
+    ) -> Result<(), MoveRejectReason> {
+        if let Some(finish_reason) = self.game_is_finished() {
+            return Err(MoveRejectReason::GameIsFinished(finish_reason));
+        }
+        let from = *self
+            .users_by_key
+            .get(&signed_by)
+            .ok_or(MoveRejectReason::NoSuchUser)?;
         info!(key = signed_by, ?from, "Got Move {} From Player", sequence);
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from).or_default();
@@ -312,8 +435,8 @@ impl GameBoard {
         } else {
             *current_move = sequence;
         }
-        let mv = d.sanitize(())?;
-        self.update_current_time(Some((from, time)));
+        let mv = d.sanitize(self)?;
+        self.update_current_time((from, time_millis));
         self.process_ticks();
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
@@ -326,19 +449,45 @@ impl GameBoard {
         CallbackRegistry::run(self);
     }
 
-    fn update_current_time(&mut self, update_from: Option<(EntityID, u64)>) {
-        if let Some((from, time)) = update_from {
-            let tick = self.ticks.entry(from).or_default();
-            *tick = max(*tick, time);
-        }
-        let mut ticks: Vec<u64> = self.ticks.values().cloned().collect();
-        ticks.sort_unstable();
-        let median_time = ticks.get(ticks.len() / 2).cloned().unwrap_or_default();
-        self.current_time = median_time;
+    fn update_current_time(&mut self, (from, time): (EntityID, u64)) {
+        let tick = self.ticks.entry(from).or_insert(Tick {
+            first_time: time,
+            elapsed: 0,
+        });
+        tick.elapsed = max(
+            tick.elapsed,
+            time.checked_sub(tick.first_time).unwrap_or_default(),
+        );
+        let mut elapsed: Vec<u64> = self.ticks.values().map(|t| t.elapsed).collect();
+        elapsed.sort_unstable();
+        let median_elapsed = if elapsed.len() % 2 == 0 {
+            (elapsed.get(elapsed.len() / 2).cloned().unwrap_or_default()
+                + elapsed
+                    .get((elapsed.len() / 2) - 1)
+                    .cloned()
+                    .unwrap_or_default())
+                / 2
+        } else {
+            elapsed.get(elapsed.len() / 2).cloned().unwrap_or_default()
+        };
+        self.elapsed_time = median_elapsed;
     }
 
+    pub fn game_is_finished(&self) -> Option<FinishReason> {
+        if self.elapsed_time >= self.finish_time {
+            Some(FinishReason::TimeExpired)
+        } else if self.elapsed_time >= (self.finish_time / 4) {
+            // After 25 % of the game is finished...
+            self.get_user_hashrate_share()
+                .iter()
+                .find_map(|(k, v)| if v.0 * 2 >= v.1 { Some(*k) } else { None })
+                .map(FinishReason::DominatingPlayer)
+        } else {
+            None
+        }
+    }
     /// Processes a GameMove without any sanitization
-    pub fn play_inner(&mut self, d: GameMove, from: EntityID) -> Result<(), ()> {
+    pub fn play_inner(&mut self, d: GameMove, from: EntityID) -> Result<(), MoveRejectReason> {
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         let context = CallContext { sender: from };
         match d {
@@ -347,8 +496,17 @@ impl GameBoard {
                 pair,
                 amount_a,
                 amount_b,
+                sell,
             }) => {
-                ConstantFunctionMarketMaker::do_trade(self, pair, amount_a, amount_b, &context);
+                if sell {
+                    ConstantFunctionMarketMaker::do_sell_trade(
+                        self, pair, amount_a, amount_b, false, &context,
+                    )?;
+                } else {
+                    ConstantFunctionMarketMaker::do_buy_trade(
+                        self, pair, amount_a, amount_b, false, &context,
+                    )?;
+                }
             }
             GameMove::MintPowerPlant(MintPowerPlant {
                 scale,
@@ -361,7 +519,14 @@ impl GameBoard {
                     location,
                     plant_type,
                     context.sender,
-                );
+                )?;
+            }
+            GameMove::SuperMintPowerPlant(MintPowerPlant {
+                scale,
+                location,
+                plant_type,
+            }) => {
+                PowerPlantProducer::super_mint(self, scale, location, plant_type, context.sender)?;
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,
@@ -391,6 +556,20 @@ impl GameBoard {
                 let _ = self.tokens[currency].transfer(&from, &to, amount);
                 self.tokens[currency].end_transaction();
             }
+            GameMove::RemoveTokens(RemoveTokens {
+                nft_id,
+                amount,
+                currency,
+            }) => {
+                let shipping_time = 1000;
+                let owner = &self.nfts.nfts[&nft_id].owner();
+                if owner.eq(&from) {
+                    let plant = &self.nfts.power_plants[&nft_id];
+                    plant
+                        .to_owned()
+                        .ship_hashrate(currency, amount, shipping_time, self);
+                }
+            }
             GameMove::Chat(Chat(s)) => {
                 self.chat_counter += 1;
                 // only log the last 1000 messages
@@ -408,96 +587,43 @@ impl GameBoard {
         self.chat.clone()
     }
 
-    pub fn get_ux_materials_prices(&mut self) -> Result<Vec<UXMaterialsPriceData>, ()> {
-        let mut price_data = Vec::new();
-        // get pointer and human name for materials and
-        let bitcoin_token_id = self.bitcoin_token_id;
-        let steel_token_id = self.steel_token_id;
-        let silicon_token_id = self.silicon_token_id;
-        let concrete_token_id = self.concrete_token_id;
-        // get ux names
-        let registry = &self.tokens;
-        let human_name_bitcoin = registry
-            .index(bitcoin_token_id)
-            .nickname()
-            .unwrap_or_else(|| "Bitcoin".into());
-        let human_name_steel = registry
-            .index(steel_token_id)
-            .nickname()
-            .unwrap_or_else(|| "Steel".into());
-        let human_name_silicon = registry
-            .index(silicon_token_id)
-            .nickname()
-            .unwrap_or_else(|| "Silicon".into());
-        let human_name_concrete = registry
-            .index(concrete_token_id)
-            .nickname()
-            .unwrap_or_else(|| "Concrete".into());
-        // get steel/btc
-        let (steel_qty_btc, btc_qty_steel) = ConstantFunctionMarketMaker::get_pair_price_data(
-            self,
-            TradingPairID {
-                asset_a: steel_token_id,
-                asset_b: bitcoin_token_id,
-            },
-        )
-        .unwrap();
-        // get silicon/btc
-        let (silicon_qty_btc, btc_qty_silicon) = ConstantFunctionMarketMaker::get_pair_price_data(
-            self,
-            TradingPairID {
-                asset_a: silicon_token_id,
-                asset_b: bitcoin_token_id,
-            },
-        )
-        .unwrap();
-        // get concrete/btc
-        let (concrete_qty_btc, btc_qty_concrete) =
-            ConstantFunctionMarketMaker::get_pair_price_data(
-                self,
-                TradingPairID {
-                    asset_a: concrete_token_id,
-                    asset_b: bitcoin_token_id,
-                },
-            )
-            .unwrap();
+    pub fn get_ux_materials_prices(&mut self) -> Vec<UXMaterialsPriceData> {
+        let mut res = vec![];
+        for (id) in self.tokens.tokens.keys().cloned().collect::<Vec<_>>() {
+            let ptr = self.tokens.tokens[&id].ptr();
+            let nick = self.tokens.tokens[&id]
+                .nickname()
+                .unwrap_or_else(|| "Unknown Token".into());
 
-        price_data.push(UXMaterialsPriceData {
-            trading_pair: TradingPairID {
-                asset_a: steel_token_id,
-                asset_b: bitcoin_token_id,
-            },
-            asset_a: human_name_steel,
-            mkt_qty_a: steel_qty_btc,
-            asset_b: human_name_bitcoin.clone(),
-            mkt_qty_b: btc_qty_steel,
-        });
-        price_data.push(UXMaterialsPriceData {
-            trading_pair: TradingPairID {
-                asset_a: silicon_token_id,
-                asset_b: bitcoin_token_id,
-            },
-            asset_a: human_name_silicon,
-            mkt_qty_a: silicon_qty_btc,
-            asset_b: human_name_bitcoin.clone(),
-            mkt_qty_b: btc_qty_silicon,
-        });
-        price_data.push(UXMaterialsPriceData {
-            trading_pair: TradingPairID {
-                asset_a: concrete_token_id,
-                asset_b: bitcoin_token_id,
-            },
-            asset_a: human_name_concrete,
-            mkt_qty_a: concrete_qty_btc,
-            asset_b: human_name_bitcoin,
-            mkt_qty_b: btc_qty_concrete,
-        });
-
-        Ok(price_data)
+            let mut trading_pair = TradingPairID {
+                asset_a: ptr,
+                asset_b: self.bitcoin_token_id,
+            };
+            trading_pair.normalize();
+            // N.B. Pairs may not show up on first pass if not formerly ensured
+            if !ConstantFunctionMarketMakerPair::has_market(self, trading_pair) {
+                continue;
+            }
+            let (mkt_qty_a, mkt_qty_b) =
+                ConstantFunctionMarketMaker::get_pair_price_data(self, trading_pair);
+            res.push(UXMaterialsPriceData {
+                asset_a: self.tokens[trading_pair.asset_a]
+                    .nickname()
+                    .unwrap_or_else(|| format!("Unknown Token: {:?}", trading_pair.asset_a)),
+                asset_b: self.tokens[trading_pair.asset_b]
+                    .nickname()
+                    .unwrap_or_else(|| format!("Unknown Token: {:?}", trading_pair.asset_b)),
+                mkt_qty_a,
+                mkt_qty_b,
+                trading_pair,
+                display_asset: nick,
+            })
+        }
+        res
     }
 
     // where does miner status come from
-    pub fn get_ux_power_plant_data(&mut self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
+    pub fn get_ux_power_plant_data(&self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
         let mut power_plant_data = Vec::new();
         let plants = &self.nfts.power_plants.clone();
         plants.iter().for_each(|(pointer, power_plant)| {
@@ -535,7 +661,7 @@ impl GameBoard {
         Ok(UXNFTRegistry { power_plant_data })
     }
 
-    pub fn get_user_power_plants(&mut self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
+    pub fn get_user_power_plants(&self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
         let mut power_plant_data = BTreeMap::new();
         let mut power_plant_vec = self.get_ux_power_plant_data();
         // should use something other than drain_filter?
@@ -547,14 +673,15 @@ impl GameBoard {
         Ok(UXNFTRegistry { power_plant_data })
     }
 
-    pub fn get_ux_user_inventory(&mut self, user_id: EntityID) -> Result<UXUserInventory, ()> {
+    pub fn get_ux_user_inventory(&self, user_key: String) -> Result<UXUserInventory, ()> {
+        let user_id = self.users_by_key.get(&user_key).unwrap().to_owned();
         let user_power_plants = self
             .get_user_power_plants(user_id)
             .unwrap()
             .power_plant_data;
         let user_token_balances = {
             let mut balances = Vec::new();
-            for token in self.tokens.tokens.values_mut() {
+            for token in self.tokens.tokens.values() {
                 let balance = token.balance_check(&user_id);
                 let nickname = token.nickname().unwrap();
                 balances.push((nickname, balance))
@@ -588,7 +715,7 @@ impl GameBoard {
         // accumulation step
         for (ptr, plant) in reg.power_plants.iter() {
             let rate = plant.compute_hashrate(self) as u64;
-            let player = reg.nfts.get(ptr).unwrap().owner();
+            let player = reg.nfts[ptr].owner();
             match res.get_mut(&player) {
                 None => {
                     res.insert(player, (rate * denominator, denominator));
@@ -602,6 +729,37 @@ impl GameBoard {
         // normalization step
         res.iter_mut().for_each(|(_, v)| v.0 /= total);
         res
+    }
+
+    pub fn simulate_sell_trade(
+        &mut self,
+        pair: TradingPairID,
+        amount_a: u128,
+        amount_b: u128,
+        sender: EntityID,
+    ) -> Result<TradeOutcome, TradeError> {
+        match ConstantFunctionMarketMaker::do_sell_trade(
+            self,
+            pair,
+            amount_a,
+            amount_b,
+            true,
+            &CallContext { sender },
+        ) {
+            Ok(outcome) => Ok(outcome),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn get_power_plant_cost(
+        &mut self,
+        scale: u64,
+        location: (i64, i64),
+        plant_type: PlantType,
+        signing_key: String,
+    ) -> Result<Vec<(String, u128, u128)>, TradeError> {
+        let owner = self.users_by_key.get(&signing_key).unwrap().to_owned();
+        PowerPlantProducer::estimate_materials_cost(self, scale, location, plant_type, owner)
     }
 }
 

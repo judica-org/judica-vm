@@ -1,14 +1,40 @@
 .App {
     text-align: center;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
+    /* grid-template-columns: 1fr 1fr; */
     height: 100%;
 }
 
+.Content {
+    display: flex;
+    flex-direction: row;
+}
+
+.GlobeContent {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+}
+
+.GlobeContent>div {
+    margin: 6px;
+}
+
+.MuiTabs-root{
+    display: flex;
+}
+
+.DataDisplay{
+display: flex;
+flex-direction: column;
+flex-wrap: wrap;
+}
+
 .MoveForm {
-    height: 100vh;
+    min-height: 20vh;
 }
 
 .MoveForm>form {
-    height: 100vh;
+    min-height: 20vh;
 }

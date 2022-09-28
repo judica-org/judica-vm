@@ -8,8 +8,9 @@ use mine_with_friends_board::game::GameBoard;
 use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
 use std::{error::Error, path::PathBuf, sync::Arc};
 use tasks::GameServer;
-use tauri::{async_runtime::Mutex, State};
+use tauri::{async_runtime::Mutex, window, Manager, State};
 use tokio::sync::Notify;
+use tracing::info;
 use tracing::warn;
 
 mod commands;
@@ -74,8 +75,17 @@ fn main() {
     };
     let sk = SigningKeyInner::new(Mutex::new(None));
     tauri::Builder::default()
-        .setup(|_app| Ok(()))
-        .manage(Secp256k1::new())
+        .setup(|app| {
+            let app_handle = app.app_handle();
+            app.listen_global("globe-click", move |e| {
+                info!("globe-click payload {:?}:", e.payload().unwrap());
+                app_handle
+                    .emit_all("globe-location", e.payload().unwrap())
+                    .unwrap();
+            });
+            Ok(())
+        })
+        .manage(Arc::new(Secp256k1::new()))
         .manage(game)
         .manage(db)
         .manage(sk)

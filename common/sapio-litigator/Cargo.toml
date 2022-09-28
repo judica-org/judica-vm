@@ -14,14 +14,17 @@ directories = "3.0.1"
 jsonschema-valid = "0.4.0"
 bitcoincore-rpc-async = "4.0.1-alpha.1"
 ruma-serde = "0.6.0"
+tracing = "0.1.35"
+tracing-subscriber = "0.3.11"
 
 
-
+[dependencies.mine-with-friends-board]
+path = "../mine-with-friends-board"
 
 [dependencies.bitcoin]
 package = "sapio-bitcoin"
 version = "0.28.0"
-features = ['use-serde', 'rand', 'base64']
+features = ['use-serde', 'rand', 'base64', 'bitcoinconsensus']
 
 
 [dependencies.sapio]
@@ -37,10 +40,6 @@ path = "../../submodule/sapio/ctv_emulators"
 version = "0.2.0"
 
 
-
-
-
-
 [dependencies.sapio-wasm-plugin]
 path = "../../submodule/sapio/plugins"
 version = "0.2.0"
@@ -54,4 +53,17 @@ path = "../event-log"
 
 [dependencies.attest-util]
 path = "../attest-util"
-features=["bitcoin"]
+features = ["bitcoin"]
+
+[dependencies.simps]
+path = "../simps"
+
+[dependencies.game-sequencer]
+path = "../game-sequencer"
+features = ["database_access"]
+
+[dependencies.game-host-messages]
+path = "../game-host-messages"
+
+[dependencies.bitcoinconsensus]
+version = "0.19.0-3"

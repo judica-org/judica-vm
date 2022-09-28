@@ -41,6 +41,9 @@ macro_rules! row_type_id (
 #[derive(PartialEq, PartialOrd, Ord, Eq, Clone, Copy, serde::Serialize, serde::Deserialize, Debug)]
 pub struct $RowType(i64);
 impl $RowType {
+    pub fn before_first_row() -> Self {
+        Self(0)
+    }
     pub fn inner(&self) -> i64 {
         self.0
     }

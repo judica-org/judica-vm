@@ -1,14 +1,9 @@
 use crate::nfts::instances::powerplant::PlantType;
 use crate::nfts::NftPtr;
+use crate::tokens::token_swap::TradingPairID;
 use crate::util::Currency;
 use crate::{entity::EntityID, util::Price};
-
-use crate::sanitize;
-
-use crate::tokens::token_swap::TradingPairID;
-
-use super::super::MoveEnvelope;
-
+use crate::{sanitize, MoveEnvelope};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -28,10 +23,14 @@ pub enum GameMove {
     ListNFTForSale(ListNFTForSale),
     /// # Send Coins
     SendTokens(SendTokens),
+    /// # Remove Tokens
+    RemoveTokens(RemoveTokens),
     /// # Send a logged Chat Message to All Players
     Chat(Chat),
     /// # Mint Power Plant NFT
     MintPowerPlant(MintPowerPlant),
+    /// # Purchase Materials, then Mint Power Plant NFT
+    SuperMintPowerPlant(MintPowerPlant),
 }
 
 // Convenience to marshall a move into a GameMove
@@ -50,6 +49,7 @@ derive_from!(MintPowerPlant);
 derive_from!(PurchaseNFT);
 derive_from!(ListNFTForSale);
 derive_from!(SendTokens);
+derive_from!(RemoveTokens);
 derive_from!(Chat);
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
@@ -60,13 +60,14 @@ pub struct Trade {
     pub pair: TradingPairID,
     pub amount_a: u128,
     pub amount_b: u128,
+    pub sell: bool,
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct MintPowerPlant {
     /// Size of the power plant
     pub scale: u64,
-    pub location: (u64, u64),
+    pub location: (i64, i64),
     pub plant_type: PlantType,
 }
 
@@ -92,6 +93,14 @@ pub struct SendTokens {
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
+pub struct RemoveTokens {
+    pub nft_id: NftPtr,
+    pub amount: Price,
+    pub currency: Currency,
+    // do we need time here?
+}
+
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Chat(pub String);
 
 impl MoveEnvelope {
@@ -105,7 +114,7 @@ impl MoveEnvelope {
         MoveEnvelope {
             d: sanitize::Unsanitized(g.into()),
             sequence,
-            time,
+            time_millis: time,
         }
     }
 }

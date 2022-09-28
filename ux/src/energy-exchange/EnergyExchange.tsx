@@ -3,7 +3,8 @@ import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, T
 import { appWindow } from '@tauri-apps/api/window';
 import { useState, useEffect } from 'react';
 import { PlantType } from '../App';
-import FormModal from '../form-modal';
+import FormModal from '../form-modal/FormModal';
+import { NftPtr } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
 
 export type NFTSale = {
@@ -31,21 +32,7 @@ const stub_listings: NFTSale[] = [{
   transfer_count: 1,
 }]
 
-export const EnergyExchange = () => {
-  const [listings, setListings] = useState<NFTSale[] | null>(null);
-
-  useEffect(() => {
-    const unlisten_energy_exchange = appWindow.listen("energy-exchange", (ev) => {
-      console.log(['energy-exchange'], ev);
-      setListings(JSON.parse(ev.payload as string) as NFTSale[]);
-    });
-
-    return () => {
-      (async () => {
-        (await unlisten_energy_exchange)();
-      })();
-    }
-  }, [listings]);
+export const EnergyExchange = ({listings}:{listings:NFTSale[]}) => {
   return (
     <div>
       <div className='energy-exchange-container'>
@@ -80,7 +67,7 @@ export const EnergyExchange = () => {
                     <TableCell align="right">{listing.price}</TableCell>
                     <TableCell align="right">{listing.currency}</TableCell>
                     <TableCell align="right">{listing.transfer_count}</TableCell>
-                    <TableCell align="right"><FormModal title={"Purchase Plant"} nft_id={listing.nft_id} currency={''} material_type={''} /></TableCell>
+                    <TableCell align="right"><FormModal action="Purchase Plant" title={"Purchase Plant"} nft_id={listing.nft_id}  /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

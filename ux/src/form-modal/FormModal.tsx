@@ -1,29 +1,33 @@
 import { useState } from 'react';
 import { Modal, Button, Paper, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import PurchaseMaterialForm from '../purchase-material';
-import PurchaseOfferForm from '../purchase-offer';
+import PurchaseMaterialForm from '../purchase-material/PurchaseMaterialForm';
+import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
 import { RawMaterialsActions } from '../util';
-import SaleListingForm from '../sale-listing';
+import SaleListingForm from '../sale-listing/SaleListingForm';
+import { TradingPairID } from '../Types/GameMove';
+import { MaterialPriceDisplay } from '../App';
 
-type FormModalProps = {
-  readonly title: RawMaterialsActions | 'Purchase Plant' | 'Sell Plant';
-  readonly currency: string;
-  readonly material_type?: string;
-  readonly nft_id?: number
-};
+type NFTActions = 'Purchase Plant' | 'Sell Plant';
+type FormModalProps = ({
+  readonly action: RawMaterialsActions;
+  readonly market: MaterialPriceDisplay;
+} | {
+  readonly action: NFTActions;
+  readonly nft_id: number;
+}) & { readonly title?: string };
 
-function FormModal({ title, currency, material_type, nft_id }: FormModalProps) {
+function FormModal(props: FormModalProps) {
   const [open, setOpen] = useState(false);
 
-  const pickForm = (title: string) => {
-    switch (title) {
-      case 'Purchase Materials':
-        return <PurchaseMaterialForm action={title} subtitle={`Purchase ${material_type as string} from the market?`} currency={currency} />;
-      case 'Sell Materials':
-        return <PurchaseMaterialForm action={title} subtitle={`Sell some of your ${material_type as string}?`} currency={currency} />;
+  const pickForm = (props: FormModalProps) => {
+    switch (props.action) {
+      case 'BUY':
+        return <PurchaseMaterialForm action={props.action} market={props.market}></PurchaseMaterialForm>
+      case 'SELL':
+        return <PurchaseMaterialForm action={props.action} market={props.market}></PurchaseMaterialForm>
       case 'Purchase Plant':
-        return <PurchaseOfferForm subtitle={`Purchase plant ${nft_id as number}`} />;
+        return <PurchaseOfferForm subtitle={`Purchase plant ${props.nft_id as number}`} />;
       case 'Sell Plant':
         return <SaleListingForm subtitle={'Sell'} />
     }
@@ -50,7 +54,7 @@ function FormModal({ title, currency, material_type, nft_id }: FormModalProps) {
             <CloseIcon />
           </IconButton>
           {
-            pickForm(title)}
+            pickForm(props)}
         </Paper>
       </Modal>
     )
@@ -72,7 +76,7 @@ function FormModal({ title, currency, material_type, nft_id }: FormModalProps) {
             handleOpen();
           }}
         >
-          {title}
+          {props.title ?? props.action}
         </Button>
       </div>
       <CustomModal />

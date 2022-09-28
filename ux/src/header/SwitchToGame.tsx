@@ -4,7 +4,7 @@ import React from 'react';
 import { tauri_host } from '../tauri_host';
 
 export function SwitchToGame() {
-  const [which_game, set_which_game] = React.useState<string | null>(null);
+  const [which_game, set_which_game] = React.useState<string>("");
 
   const [which_game_loaded, set_which_game_loaded] = React.useState<string | null>(null);
   const [available_sequencers, set_available_sequencers] = React.useState<Array<[string, string]>>([]);
@@ -31,7 +31,7 @@ export function SwitchToGame() {
     }
   });
   let options = available_sequencers.map(([pkey, name]) => {
-    return <MenuItem value={pkey}>
+    return <MenuItem value={pkey} key={pkey}>
       {name}
     </MenuItem>;
   });
@@ -43,12 +43,13 @@ export function SwitchToGame() {
     <h6>Sequencer: {which_game_loaded}</h6>
     <FormControl fullWidth>
       <InputLabel>Game Key</InputLabel>
-      <Select onChange={(ev) => set_which_game(ev.target.value as string)}>
+      <Select onChange={(ev) => set_which_game(ev.target.value as string)} value={which_game}>
+        <MenuItem value={""} selected={which_game == ""}>No Key</MenuItem>
         {options}
       </Select>
-      <Button type="submit"
+      <Button type="submit" variant="contained"
         onClick={handle_submit}
-      >Switch</Button>
+      >Switch Game</Button>
     </FormControl>
   </div>;
 }

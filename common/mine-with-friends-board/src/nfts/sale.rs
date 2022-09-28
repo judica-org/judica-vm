@@ -9,11 +9,11 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 // Listings formatted for UX consumption
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct UXForSaleList {
     pub listings: Vec<UXNFTSale>,
 }
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct UXNFTSale {
     pub nft_id: NftPtr,
     pub price: Price,
@@ -22,7 +22,7 @@ pub struct UXNFTSale {
     pub transfer_count: u128,
 }
 /// Represents an offer to sell an NFT
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct NFTSale {
     /// The Price the owner will accept
     pub price: Price,
@@ -34,7 +34,7 @@ pub struct NFTSale {
     pub transfer_count: u128,
 }
 /// A Registry of all pending sales
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Debug)]
 pub(crate) struct NFTSaleRegistry {
     pub(crate) nfts: BTreeMap<NftPtr, NFTSale>,
 }

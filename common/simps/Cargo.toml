@@ -1,0 +1,19 @@
+[package]
+name = "simps"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+schemars = "0.8.10"
+serde = "1.0.144"
+serde_json = "1.0.85"
+
+[dependencies.sapio]
+path = "../../submodule/sapio/sapio"
+version = "0.2.0"
+
+[dependencies.sapio-base]
+path = "../../submodule/sapio/sapio-base"
+version = "0.2.0"

@@ -7,6 +7,11 @@ type AddChainToGroupArgs = {
   genesis_hash: string
 
 };
+type GameSetup = {
+  players: Array<string>,
+  start_amount: number,
+  finish_time: number
+};
 class Client {
   base_url: string;
   constructor() {
@@ -16,7 +21,7 @@ class Client {
     if (this.base_url === "")
       throw "Service URL Required";
   }
-  async create_new_chain(obj: [Array<string>, { players: Array<string>, start_amount: number }]): Promise<CreatedNewChain> {
+  async create_new_chain(obj: [Array<string>, GameSetup]): Promise<CreatedNewChain> {
 
     let res = await fetch(`${this.base_url}/attestation_chain/new`,
       {
@@ -96,6 +101,7 @@ type CreatedNewChain = {
 };
 function NewGame() {
   const [amount, set_amount] = React.useState(0);
+  const [finish_time, set_finish_time] = React.useState(0);
   const [ct, set_ct] = React.useState(1);
   const [values, set_values] = React.useState<Record<number, [string, string]>>({});
   const [view_flash, flash] = React.useState<string | null>(null);
@@ -104,7 +110,12 @@ function NewGame() {
   }, [view_flash])
   async function handle_click() {
     console.log(values);
-    let obj: [Array<string>, { players: Array<string>, start_amount: number }] = [[], { players: [], start_amount: amount }]
+    let obj: [Array<string>, GameSetup] =
+      [[], {
+        players: [],
+        start_amount: amount,
+        finish_time
+      }]
     let reg = /^([0-9]|[a-f]|[A-F]){64}$/;
     for (const [id, [genesis, key]] of Object.entries(values)) {
       if (!genesis.match(reg)) {
@@ -135,6 +146,7 @@ function NewGame() {
     {view_flash && <h4>{view_flash}</h4>}
     {elts}
     <input type="number" min={0} onChange={(ev) => set_amount(ev.target.valueAsNumber)}></input>
+    <input type="number" min={0} onChange={(ev) => set_finish_time(ev.target.valueAsNumber)}></input>
     <button onClick={(ev) => set_ct(ct + 1)}>+</button>
     <button onClick={(ev) => set_ct(Math.max(ct - 1, 1))}>-</button>
     <button onClick={handle_click}>New Game</button>

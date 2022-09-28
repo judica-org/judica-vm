@@ -171,17 +171,21 @@ impl<M: AttestEnvelopable> OfflineSequencer<M> {
     pub fn directly_sequence(
         &mut self,
     ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, SequenceingError<Void>> {
-        self.directly_sequence_map(Ok::<Authenticated<GenericEnvelope<M>>, Void>)
+        self.directly_sequence_map(|a| {
+            Ok::<Option<Authenticated<GenericEnvelope<M>>>, Void>(Some(a))
+        })
     }
     pub fn directly_sequence_map<F, R, E>(&mut self, f: F) -> Result<Vec<R>, SequenceingError<E>>
     where
-        F: Fn(Authenticated<GenericEnvelope<M>>) -> Result<R, E>,
+        F: Fn(Authenticated<GenericEnvelope<M>>) -> Result<Option<R>, E>,
     {
         let mut v = vec![];
         for batch in &self.batches_to_sequence {
             for h in batch {
                 if let Some(e) = self.msg_cache.remove(h) {
-                    v.push(f(e)?);
+                    if let Some(r) = f(e)? {
+                        v.push(r);
+                    }
                 } else {
                     return Err(SequenceingError::MissingEnvelope);
                 }
@@ -248,7 +252,7 @@ where
     pub fn directly_sequence(
         self,
     ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, SequenceingError<()>> {
-        OfflineSequencer::try_from(self)?.directly_sequence_map(Ok)
+        OfflineSequencer::try_from(self)?.directly_sequence_map(|a| Ok(Some(a)))
     }
 }
 impl<M: AttestEnvelopable> DBFetcher<M> for OfflineDBFetcher<M> {
@@ -577,10 +581,10 @@ mod test {
 
     use super::*;
     use attest_messages::{nonce::PrecomittedNonce, Header, Unsigned};
+    use game_player_messages::ParticipantAction;
     use mine_with_friends_board::{
         game::game_move::{GameMove, Heartbeat},
         sanitize::Unsanitized,
-        MoveEnvelope,
     };
     use sapio_bitcoin::{
         secp256k1::{rand, SecretKey},
@@ -588,7 +592,7 @@ mod test {
     };
     use std::collections::VecDeque;
 
-    fn make_random_moves() -> Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>> {
+    fn make_random_moves() -> Vec<VecDeque<Authenticated<GenericEnvelope<ParticipantAction>>>> {
         let secp = &sapio_bitcoin::secp256k1::Secp256k1::new();
 
         (0..10)
@@ -618,7 +622,7 @@ mod test {
                                 unsigned,
                                 checkpoints,
                             ),
-                            MoveEnvelope::new(
+                            ParticipantAction::new(
                                 Unsanitized(GameMove::Heartbeat(Heartbeat())),
                                 1,
                                 sent_time_ms as u64,
@@ -664,7 +668,7 @@ mod test {
             for envelope in batch {
                 if let Some((m, x)) = s.output_move().await {
                     let game_move = envelope.msg();
-                    assert_eq!(m, *game_move);
+                    assert_eq!(ParticipantAction::MoveEnvelope(m), *game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
                     unreachable!("Offline GenericSequencer did not sequence all messages")
@@ -673,17 +677,19 @@ mod test {
         }
     }
     struct TestDBFetcher {
-        to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>>,
+        to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<ParticipantAction>>>>,
         schedule_batches_to_sequence: UnboundedSender<VecDeque<CanonicalEnvelopeHash>>,
         batches_to_sequence: Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>>,
         msg_cache: Arc<
-            Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<MoveEnvelope>>>>,
+            Mutex<
+                HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<ParticipantAction>>>,
+            >,
         >,
         new_msgs_in_cache: Arc<Notify>,
     }
     impl TestDBFetcher {
         pub fn new(
-            to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<MoveEnvelope>>>>,
+            to_seq: Vec<VecDeque<Authenticated<GenericEnvelope<ParticipantAction>>>>,
         ) -> Arc<Self> {
             let (schedule_batches_to_sequence, batches_to_sequence) = unbounded_channel();
             let batches_to_sequence = Arc::new(Mutex::new(batches_to_sequence));
@@ -759,7 +765,7 @@ mod test {
             }
         }
     }
-    impl DBFetcher<MoveEnvelope> for TestDBFetcher {
+    impl DBFetcher<ParticipantAction> for TestDBFetcher {
         fn batches_to_sequence(
             &self,
         ) -> Arc<Mutex<UnboundedReceiver<VecDeque<CanonicalEnvelopeHash>>>> {
@@ -768,8 +774,11 @@ mod test {
 
         fn msg_cache(
             &self,
-        ) -> Arc<Mutex<HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<MoveEnvelope>>>>>
-        {
+        ) -> Arc<
+            Mutex<
+                HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<ParticipantAction>>>,
+            >,
+        > {
             self.msg_cache.clone()
         }
 
@@ -791,7 +800,7 @@ mod test {
             for envelope in batch {
                 if let Some((m, x)) = s.output_move().await {
                     let game_move = envelope.msg();
-                    assert_eq!(m, *game_move);
+                    assert_eq!(ParticipantAction::MoveEnvelope(m), *game_move);
                     assert_eq!(x, envelope.header().key());
                 } else {
                     unreachable!("Online GenericSequencer did not sequence all messages")

@@ -33,14 +33,14 @@ pub struct ASICProducer {
     pub price_asset: TokenPointer,
     pub hash_asset: TokenPointer,
     pub adjusts_every: u64,
-    pub current_time: u64,
+    pub elapsed_time: u64,
     // On our first round we'll set some things up differently
     pub first: bool,
 }
 
 impl Callback for ASICProducer {
     fn time(&self) -> u64 {
-        self.current_time
+        self.elapsed_time
     }
 
     fn action(&mut self, game: &mut crate::game::GameBoard) {
@@ -76,15 +76,16 @@ impl Callback for ASICProducer {
         // the current price is above the current price, then sell enough to get
         // the price back to base_price.
         // Maybe worth implementing logic inside the swap contract directly for these.
-        ConstantFunctionMarketMaker::do_trade(
+        ConstantFunctionMarketMaker::do_sell_trade(
             game,
             pair,
             min(balance / 100, balance),
             0,
+            false,
             &CallContext { sender: self.id },
         );
 
-        self.current_time += self.adjusts_every;
+        self.elapsed_time += self.adjusts_every;
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);
         if balance > 0 {
             game.callbacks.schedule(Box::new(self.clone()))

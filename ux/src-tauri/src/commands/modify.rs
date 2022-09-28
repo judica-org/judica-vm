@@ -8,6 +8,7 @@ use attest_database::db_handle::create::TipControl;
 use attest_database::generate_new_user;
 use game_host_messages::BroadcastByHost;
 use game_host_messages::Channelized;
+use game_player_messages::ParticipantAction;
 use mine_with_friends_board::entity::EntityID;
 use mine_with_friends_board::game::game_move::GameMove;
 use mine_with_friends_board::game::game_move::Heartbeat;
@@ -36,16 +37,16 @@ impl<E, T: std::fmt::Debug> ErrToString<E> for Result<E, T> {
 
 pub(crate) async fn make_new_chain_inner(
     nickname: String,
-    secp: State<'_, Secp256k1<All>>,
+    secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
 ) -> Result<String, String> {
-    let (kp, next_nonce, genesis) = generate_new_user::<_, MoveEnvelope, _>(
+    let (kp, next_nonce, genesis) = generate_new_user::<_, ParticipantAction, _>(
         secp.inner(),
         MoveEnvelope {
             d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
             sequence: 0,
             /// The player who is making the move, myst be figured out somewhere...
-            time: attest_util::now() as u64,
+            time_millis: attest_util::now() as u64,
         },
     )
     .err_to_string()?;
@@ -63,33 +64,61 @@ pub(crate) async fn make_new_chain_inner(
 }
 
 pub(crate) async fn make_move_inner_inner(
-    secp: State<'_, Secp256k1<All>>,
-    db: State<'_, Database>,
-    sk: State<'_, SigningKeyInner>,
+    secp: Arc<Secp256k1<All>>,
+    db: Database,
+    sk: SigningKeyInner,
     next_move: GameMove,
     _from: EntityID,
 ) -> Result<(), &'static str> {
-    let xpubkey = sk.inner().lock().await.ok_or("No Key Selected")?;
+    let xpubkey = sk.lock().await.ok_or("No Key Selected")?;
     let msgdb = db.get().await.map_err(|_e| "No DB Available")?;
     let mut handle = msgdb.get_handle().await;
-    let tip = handle
-        .get_tip_for_user_by_key::<MoveEnvelope>(xpubkey)
-        .or(Err("No Tip Found"))?;
-    let last: &MoveEnvelope = tip.msg();
+    // Seek the last game move -- in *most* cases should be the immediate prior
+    // message, but this isn't quite ideal.
+    let last = {
+        let mut h = None;
+        loop {
+            let tip = if let Some(prev) = h {
+                let mut v = handle
+                    .messages_by_hash::<_, _, ParticipantAction>([prev].iter())
+                    .map_err(|e| {
+                        tracing::trace!(error=?e, "Error Finding Predecessor");
+                        "No Tip Found"
+                    })?;
+                v.pop().unwrap()
+            } else {
+                handle
+                    .get_tip_for_user_by_key::<ParticipantAction>(xpubkey)
+                    .map_err(|e| {
+                        tracing::trace!(error=?e, "Error First Tip");
+                        "No Tip Found"
+                    })?
+            };
+            match tip.msg() {
+                ParticipantAction::MoveEnvelope(m) => break m.sequence,
+                ParticipantAction::PsbtSigningCoordination(_) | ParticipantAction::Custom(_) => {
+                    if tip.header().ancestors().is_none() {
+                        return Err("No MoveEnvelope Found");
+                    }
+                    h = tip.header().ancestors().map(|a| a.prev_msg())
+                }
+            }
+        }
+    };
     let mve = MoveEnvelope {
         d: Unsanitized(next_move),
-        sequence: last.sequence + 1,
-        time: attest_util::now() as u64,
+        sequence: last + 1,
+        time_millis: attest_util::now() as u64,
     };
     let keys = handle.get_keymap().or(Err("Could not get keys"))?;
     let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;
-    let keypair = KeyPair::from_secret_key(secp.inner(), sk);
+    let keypair = KeyPair::from_secret_key(&secp, sk);
     // TODO: Runa tipcache
     let msg = handle
-        .wrap_message_in_envelope_for_user_by_key::<_, MoveEnvelope, _>(
+        .wrap_message_in_envelope_for_user_by_key::<_, ParticipantAction, _>(
             mve,
             &keypair,
-            secp.inner(),
+            &secp,
             None,
             None,
             TipControl::AllTips,
@@ -97,7 +126,7 @@ pub(crate) async fn make_move_inner_inner(
         .or(Err("Could Not Wrap Message"))?
         .or(Err("Signing Failed"))?;
     let authenticated = msg
-        .self_authenticate(secp.inner())
+        .self_authenticate(&secp)
         .ok()
         .ok_or("Signature Incorrect")?;
     let _ = handle
@@ -108,13 +137,16 @@ pub(crate) async fn make_move_inner_inner(
 }
 
 pub(crate) async fn switch_to_game_inner(
-    db: State<'_, Database>,
+    secp: Arc<Secp256k1<All>>,
+    singing_key: SigningKeyInner,
+    db: Database,
     game: GameState<'_>,
     key: XOnlyPublicKey,
 ) -> Result<(), ()> {
-    let db = db.inner().clone();
+    tracing::info!(?key, "Switching to Sequencer Key");
     let game = game.inner().clone();
     spawn(async move {
+        tracing::info!("Spawned Game switching Task");
         let genesis = {
             let db = db.state.lock().await;
             let db: &DatabaseInner = db.as_ref().ok_or("No Database Set Up")?;
@@ -124,6 +156,7 @@ pub(crate) async fn switch_to_game_inner(
                 .map_err(|e| "Internal Databse Error")?
                 .ok_or("No Genesis found for selected Key")?
         };
+        tracing::trace!(?genesis, "Found Genesis");
         let game_setup = {
             let m: &Channelized<BroadcastByHost> = genesis.msg();
             match &m.data {
@@ -131,6 +164,7 @@ pub(crate) async fn switch_to_game_inner(
                 _ => return Err("First Message was not a GameSetup"),
             }
         };
+        tracing::trace!(?game_setup, "Found GameSetup");
 
         let game2 = game.clone();
         let mut g = game2.lock().await;
@@ -143,7 +177,7 @@ pub(crate) async fn switch_to_game_inner(
             server: None,
         };
         *g = Some(new_game);
-        GameServer::start(&db, g, game).await?;
+        GameServer::start(secp, singing_key, db, g, game).await?;
         Ok::<(), &'static str>(())
     });
     Ok(())
@@ -154,6 +188,7 @@ pub(crate) async fn set_signing_key_inner(
     selected: Option<XOnlyPublicKey>,
     sk: State<'_, SigningKeyInner>,
 ) -> Result<(), ()> {
+    tracing::info!(?selected, "Selecting Key");
     {
         let mut l = sk.inner().lock().await;
         *l = selected;

@@ -2,7 +2,7 @@ use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_util::bitcoin::BitcoinConfig;
 use bitcoin::psbt::PartiallySignedTransaction;
-use bitcoin::{OutPoint, Transaction, Txid};
+use bitcoin::{OutPoint, Transaction, Txid, XOnlyPublicKey};
 use bitcoincore_rpc_async::Client;
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::connection::EventLog;
@@ -12,7 +12,7 @@ use ruma_serde::CanonicalJsonValue;
 use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::{CompilationError, Compiled};
-use sapio_base::effects::{EditableMapEffectDB, EffectPath, PathFragment};
+use sapio_base::effects::{EditableMapEffectDB, PathFragment};
 use sapio_base::serialization_helpers::SArc;
 use sapio_base::txindex::TxIndexLogger;
 use sapio_wasm_plugin::host::PluginHandle;
@@ -21,23 +21,25 @@ use sapio_wasm_plugin::CreateArgs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use simps::AutoBroadcast;
-use std::collections::btree_map::Values;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
+
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::spawn;
 use tokio::sync::Notify;
-mod simps;
+mod universe;
 
 #[derive(Serialize, Deserialize)]
-enum Event {
+pub enum Event {
     Initialization(CreateArgs<Value>),
     ExternalEvent(simps::Event),
+    TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
-    SyntheticPeriodicActions,
+    SyntheticPeriodicActions(i64),
 }
 
 impl ToOccurrence for Event {
@@ -64,46 +66,21 @@ impl AppState {
     }
 }
 
-/// Traverses a Compiled object and outputs all ContinuationPoints
-// TODO: Do away with allocations?
-struct ContractContinuations<'a>(
-    Vec<&'a Compiled>,
-    Option<Values<'a, SArc<EffectPath>, ContinuationPoint>>,
-);
-
 trait CompiledExt {
-    fn continuation_points(&self) -> ContractContinuations;
+    fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a>;
 }
+// TODO: Do away with allocations?
 impl CompiledExt for Compiled {
-    fn continuation_points(&self) -> ContractContinuations {
-        ContractContinuations(vec![], Some(self.continue_apis.values()))
-    }
-}
-impl<'a> Iterator for ContractContinuations<'a> {
-    type Item = &'a ContinuationPoint;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(ref mut value) = self.1 {
-            let next = value.next();
-            if next.is_some() {
-                next
-            } else {
-                if let Some(contract) = self.0.pop() {
-                    self.1 = Some(contract.continue_apis.values());
-                    self.0.extend(
-                        contract
-                            .suggested_txs
-                            .values()
-                            .chain(contract.ctv_to_tx.values())
-                            .flat_map(|t| t.outputs.iter())
-                            .map(|out| &out.contract),
-                    );
-                }
-                self.next()
-            }
-        } else {
-            None
-        }
+    fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a> {
+        Box::new(
+            self.continue_apis.values().chain(
+                self.suggested_txs
+                    .values()
+                    .chain(self.ctv_to_tx.values())
+                    .flat_map(|x| &x.outputs)
+                    .flat_map(|x| x.contract.continuation_points()),
+            ),
+        )
     }
 }
 
@@ -134,6 +111,7 @@ struct Config {
     app_instance: String,
     logfile: PathBuf,
     event_log: EventLogConfig,
+    oracle_key: XOnlyPublicKey,
 }
 
 #[derive(Deserialize)]
@@ -165,13 +143,14 @@ impl Config {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
     do_main().await
 }
 
 async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Arc::new(Config::from_env()?);
     let evlog = config.get_event_log().await?;
-    let _db = config.get_db().await?;
+    let msg_db = config.get_db().await?;
     let _bitcoin = config.get_bitcoin_rpc().await?;
     let typ = "org";
     let org = "judica";
@@ -215,61 +194,47 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
         let evlog = evlog.clone();
         let new_synthetic_event = new_synthetic_event.clone();
         tokio::spawn(async move {
-            let mut last = None;
-            loop {
-                let wait_for_new_synth = {
-                    let accessor = evlog.get_accessor().await;
-                    let to_process = if let Some(last) = last {
-                        accessor.get_occurrences_for_group_after_id(evlog_group_id, last)
-                    } else {
-                        accessor.get_occurrences_for_group(evlog_group_id)
-                    }?;
-
-                    for (occurrence_id, occurrence) in to_process {
-                        let ev = Event::from_occurrence(occurrence)?;
-                        if tx.send(ev).await.is_err() {
-                            return Ok(());
-                        }
-                        last = Some(occurrence_id);
-                    }
-                    new_synthetic_event.notified()
-                };
-                tokio::select! {
-                    _ = wait_for_new_synth => {}
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => {}
-                }
-            }
+            universe::linearized::event_log_processor(
+                evlog,
+                evlog_group_id,
+                tx,
+                new_synthetic_event,
+            )
+            .await?;
             OK_T
         });
     }
-    let periodic_action_complete = Arc::new(Notify::new());
     {
-        let periodic_action_complete = periodic_action_complete.clone();
         let evlog = evlog.clone();
+        let new_synthetic_event = new_synthetic_event.clone();
         tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(Duration::from_secs(30)).await;
-                // order is important here: wait registers to get the signal before
-                // tx.send enables the periodic call, guaranteeing it will see
-                // the corresponding wake up
-                //
-                // we do this so that we don't ever have more than one active Periodic Action
-                let wait = periodic_action_complete.notified();
-                {
-                    let accessor = evlog.get_accessor().await;
-                    let o: &dyn ToOccurrence = &Event::SyntheticPeriodicActions;
-                    accessor.insert_new_occurrence_now_from(evlog_group_id, o)?;
-                    new_synthetic_event.notify_one();
-                }
-                wait.await;
-            }
+            universe::extractors::time::time_event_extractor(
+                evlog,
+                evlog_group_id,
+                new_synthetic_event,
+            )
+            .await?;
             OK_T
         });
+    }
+
+    {
+        let config = config.clone();
+        let evlog = evlog.clone();
+        let new_synthetic_event = new_synthetic_event.clone();
+        spawn(universe::extractors::sequencer::sequencer_extractor(
+            config.oracle_key,
+            msg_db,
+            evlog,
+            evlog_group_id,
+            new_synthetic_event,
+        ));
     }
     let mut state = AppState::Uninitialized;
     loop {
         match rx.recv().await {
-            Some(Event::SyntheticPeriodicActions) => {
+            Some(Event::TransactionFinalized(_s, _tx)) => {}
+            Some(Event::SyntheticPeriodicActions(_t)) => {
                 match &mut state {
                     AppState::Uninitialized => (),
                     AppState::Initialized {
@@ -306,8 +271,6 @@ async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-
-                periodic_action_complete.notify_waiters()
             }
             Some(Event::Initialization(x)) => {
                 if state.is_uninitialized() {

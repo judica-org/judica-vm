@@ -1,14 +1,18 @@
 use super::Database;
 use crate::Game;
 use crate::GameStateInner;
+use crate::SigningKeyInner;
 use game_sequencer::OnlineDBFetcher;
 use game_sequencer::Sequencer;
+use mine_with_friends_board::entity::EntityID;
+use mine_with_friends_board::game::game_move::GameMove;
 use sapio_bitcoin::hashes::hex::ToHex;
+use sapio_bitcoin::secp256k1::All;
+use sapio_bitcoin::secp256k1::Secp256k1;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-
 use tokio::spawn;
 use tokio::sync::MutexGuard;
 use tokio::task::JoinHandle;
@@ -28,24 +32,29 @@ impl GameServer {
     }
     /// Start all Game Server functions
     pub async fn start(
-        db: &Database,
+        secp: Arc<Secp256k1<All>>,
+        signing_key: SigningKeyInner,
+        database: Database,
         mut g_lock: MutexGuard<'_, Option<Game>>,
         g: GameStateInner,
     ) -> Result<(), &'static str> {
+        tracing::trace!("Starting Game Server");
         if !std::ptr::eq(MutexGuard::mutex(&g_lock), &*g) {
             return Err("Must be same Mutex Passed in");
         }
         match g_lock.as_mut() {
             None => {
+                tracing::trace!("No Such Game");
                 return Err("No Game Available");
             }
             Some(game) => {
                 if game.server.is_some() {
+                    tracing::trace!("Game Already Started");
                     return Err("Game Already has a Server");
                 }
 
                 info!(key=?game.host_key, "Starting Game");
-                let db = db.get().await.unwrap();
+                let db = database.get().await.unwrap();
                 let k = game.host_key;
                 let shutdown: Arc<AtomicBool> = Default::default();
                 let db_fetcher = OnlineDBFetcher::new(
@@ -66,6 +75,33 @@ impl GameServer {
                     let g = g;
                     start_game(shutdown.clone(), g, game_sequencer)
                 };
+                spawn({
+                    let database = database.clone();
+                    let shutdown = shutdown.clone();
+                    let secp = secp;
+                    let signing_key = signing_key.clone();
+                    async move {
+                        let mut t = tokio::time::interval(Duration::from_millis(5000));
+                        loop {
+                            let a = t.tick().await;
+                            if shutdown.load(Ordering::Relaxed) {
+                                break;
+                            }
+                            tracing::trace!("Game Heartbeat!");
+                            crate::commands::modify::make_move_inner_inner(
+                                secp.clone(),
+                                database.clone(),
+                                signing_key.clone(),
+                                GameMove::Heartbeat(
+                                    mine_with_friends_board::game::game_move::Heartbeat(),
+                                ),
+                                EntityID(0),
+                            )
+                            .await
+                            .map_err(|e| tracing::trace!(err=?e, "Game Heartbeat!"));
+                        }
+                    }
+                });
                 game.server = Some(Arc::new(GameServer { shutdown }));
             }
         }
