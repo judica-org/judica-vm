@@ -84,7 +84,7 @@ pub struct GameBoard {
     pub(crate) silicon_token_id: TokenPointer,
     /// If init = true, must be Some
     pub(crate) concrete_token_id: TokenPointer,
-    /// If init = true, must be Some
+    pub(crate) asic_token_id: TokenPointer,
     pub(crate) root_user: EntityID,
     pub(crate) callbacks: CallbackRegistry,
     pub(crate) current_time: u64,
@@ -200,6 +200,7 @@ impl GameBoard {
             steel_token_id,
             silicon_token_id,
             concrete_token_id,
+            asic_token_id,
             root_user,
             alloc,
             users: Default::default(),
@@ -481,7 +482,7 @@ impl GameBoard {
     }
 
     // where does miner status come from
-    pub fn get_ux_power_plant_data(&self) -> Vec<(crate::nfts::NftPtr, UXPlantData)> {
+    pub fn get_ux_power_plant_data(&self) -> Vec<UXPlantData> {
         let mut power_plant_data = Vec::new();
         let plants = &self.nfts.power_plants.clone();
         plants.iter().for_each(|(pointer, power_plant)| {
@@ -490,42 +491,33 @@ impl GameBoard {
                 for_sale = true;
             }
             // unwrap should be safe here - we have problems if we have a pointer and cant find the NFT.
-            let owner = &self.nfts.nfts.get(pointer).unwrap().owner();
+            let nft = self.nfts.nfts.get(pointer).unwrap();
+            let owner = nft.owner();
+            let nft_entity_id = nft.id();
+            let asic_token_id = self.asic_token_id;
+            let miners = self.tokens[asic_token_id].balance_check(&nft_entity_id);
 
-            power_plant_data.push((
-                *pointer,
-                UXPlantData {
-                    coordinates: power_plant.coordinates,
-                    for_sale,
-                    has_miners: false,
-                    owner: *owner,
-                    plant_type: power_plant.plant_type.clone(),
-                    watts: power_plant.watts,
-                    hashrate: power_plant.compute_hashrate(self),
-                },
-            ));
+            power_plant_data.push(UXPlantData {
+                id: *pointer,
+                coordinates: power_plant.coordinates,
+                for_sale,
+                miners: miners,
+                owner: owner,
+                plant_type: power_plant.plant_type.clone(),
+                watts: power_plant.watts,
+                hashrate: power_plant.compute_hashrate(self),
+            });
         });
         power_plant_data
     }
-    // how do we tell whether hashbox is colocated?
-    pub fn get_all_power_plants(&mut self) -> Result<UXNFTRegistry, ()> {
-        let mut power_plant_data = BTreeMap::new();
-
-        let power_plant_vec = self.get_ux_power_plant_data();
-        power_plant_vec.iter().for_each(|(ptr, plant)| {
-            power_plant_data.insert(*ptr, plant.clone());
-        });
-
-        Ok(UXNFTRegistry { power_plant_data })
-    }
-
+    
     pub fn get_user_power_plants(&self, user_id: EntityID) -> Result<UXNFTRegistry, ()> {
         let mut power_plant_data = BTreeMap::new();
         let mut power_plant_vec = self.get_ux_power_plant_data();
         // should use something other than drain_filter?
-        power_plant_vec.retain(|(_ptr, plant)| plant.owner.eq(&user_id));
-        power_plant_vec.iter().for_each(|(ptr, plant)| {
-            power_plant_data.insert(*ptr, plant.clone());
+        power_plant_vec.retain(|plant| plant.owner.eq(&user_id));
+        power_plant_vec.iter().for_each(|plant| {
+            power_plant_data.insert(plant.id, plant.clone());
         });
         // return shape?
         Ok(UXNFTRegistry { power_plant_data })

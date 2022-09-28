@@ -23,7 +23,7 @@ export type PowerPlant = {
   watts: number,
   coordinates: number[],
   owner: number,
-  has_miners: boolean,
+  miners: number,
   for_sale: boolean,
 }
 
@@ -74,7 +74,7 @@ type NFTs = {
   }[]
 }
 
-type game_board = {
+export type game_board = {
   erc20s: any,
   swap: any, // determine TS swap shape
   turn_count: number,
@@ -87,6 +87,7 @@ type game_board = {
   new_users_allowed: boolean,
   bitcoin_token_id: null | string,
   dollar_token_id: null | string,
+  asic_token_id: null | string,
   root_user: null | string,
 };
 
