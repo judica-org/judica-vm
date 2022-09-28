@@ -5,7 +5,7 @@ import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent } from '@mui/material';
 import { emit } from '@tauri-apps/api/event';
-import MintingModal from './mint-power-plant/MintingModal';
+import MintingModal from './mint-power-plant/Minting';
 const { useState, useEffect } = React;
 
 const stub_plant_data = [{
@@ -101,7 +101,6 @@ export default () => {
       `
                         }
                     />
-                    {location && <MintingModal location={location} />}
                 </div>
             </CardContent>
         </Card>

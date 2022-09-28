@@ -7,9 +7,8 @@ import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials/RawMaterialsMarket';
 import { tauri_host } from './tauri_host';
 import { Chat } from './chat/Chat';
-import { AppHeader } from './header/AppHeader';
 import { Inventory } from './inventory/inventory';
-import MintingModal from './mint-power-plant/MintingModal';
+import Minting from './mint-power-plant/Minting';
 import { listen } from '@tauri-apps/api/event';
 import { Box, Tab, Tabs } from '@mui/material';
 import { TabPanelUnstyled, TabsUnstyled } from '@mui/base';
@@ -248,7 +247,7 @@ function App() {
             </Tabs>
           </Box>
           <Panel index={1} current_index={current_tab}>
-            <MintingModal location={location} />
+            <Minting/>
           </Panel>
           <Panel index={2} current_index={current_tab}>
             {<EnergyExchange listings={listings}></EnergyExchange>}
