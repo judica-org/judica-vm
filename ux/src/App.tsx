@@ -11,18 +11,19 @@ import { Inventory } from './inventory/inventory';
 import Minting from './mint-power-plant/Minting';
 import { listen } from '@tauri-apps/api/event';
 import { Box, Tab, Tabs } from '@mui/material';
-import { TabPanelUnstyled, TabsUnstyled } from '@mui/base';
 import React from 'react';
 import DrawerAppBar from './menu-bar/MenuDrawer';
 import { TradingPairID } from './Types/GameMove';
+import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
+
 export type PowerPlant = {
   id: number,
   plant_type: PlantType //how does PlantType enum show up
   watts: number,
   coordinates: number[],
   owner: number,
-  has_miners: boolean,
+  miners: number,
   for_sale: boolean,
 }
 
@@ -73,7 +74,7 @@ type NFTs = {
   }[]
 }
 
-type game_board = {
+export type game_board = {
   erc20s: any,
   swap: any, // determine TS swap shape
   turn_count: number,
@@ -86,6 +87,7 @@ type game_board = {
   new_users_allowed: boolean,
   bitcoin_token_id: null | string,
   dollar_token_id: null | string,
+  asic_token_id: null | string,
   root_user: null | string,
 };
 
@@ -157,20 +159,22 @@ export type UserInventory = {
 }
 export function parse_trading_pair(s: string): TradingPairID {
   const [asset_a, asset_b] = s.split(":");
-  return { asset_a:parseInt(asset_a, 16), asset_b:parseInt(asset_b, 16) }
+  return { asset_a: parseInt(asset_a, 16), asset_b: parseInt(asset_b, 16) }
 }
-export function trading_pair_to_string(s:TradingPairID) : string {
+export function trading_pair_to_string(s: TradingPairID): string {
   return `${s.asset_a.toString(16)}:${s.asset_b.toString(16)}`
 }
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
   const [location, setLocation] = useState<[number, number]>([0, 0]);
-
+  const [selected_plant, set_selected_plant]= useState<PlantLabel | null>(null);
   const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
   const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
+  const [powerPlants, setPowerPlants] = useState<UserPowerPlant[] | null>(null);
   const [chat_log, set_chat_log] = React.useState<[number, number, string][]>([]);
   const [listings, setListings] = useState<NFTSale[]>([]);
+
   useEffect(() => {
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
@@ -198,6 +202,11 @@ function App() {
       setUserInventory(ev.payload as UserInventory);
     });
 
+    const unlisten_power_plants = appWindow.listen("user-inventory", (ev) => {
+      console.log(['power-plants'], ev);
+      setPowerPlants(ev.payload as UserPowerPlant[]);
+    });
+
     const unlisten_chat_log = appWindow.listen("chat-log", (ev) => {
       console.log("Chat:", ev.payload);
       const new_msgs = ev.payload as typeof chat_log;
@@ -211,7 +220,7 @@ function App() {
     tauri_host.game_synchronizer()
     return () => {
       (async () => {
-        const unlisten_all = await Promise.all([unlisten_chat_log, unlisten_energy_exchange, unlisten_game_board, unlisten_material_prices, unlisten_user_inventory, unlisten_energy_exchange]);
+        const unlisten_all = await Promise.all([unlisten_chat_log, unlisten_energy_exchange, unlisten_game_board, unlisten_material_prices, unlisten_user_inventory, unlisten_power_plants]);
         for (const u of unlisten_all) {
           u()
         }
@@ -226,6 +235,10 @@ function App() {
       console.log(["globe-location"], JSON.parse(ev.payload));
       setLocation(JSON.parse(ev.payload));
     });
+
+    listen("plant-selected", (ev) => {
+      set_selected_plant(ev.payload as PlantLabel)
+    });
   });
 
   return (
@@ -233,41 +246,50 @@ function App() {
       <div className="App">
         <DrawerAppBar></DrawerAppBar>
         <div className="Content">
-        <WorkingGlobe></WorkingGlobe>
-        <Box className="DataDisplay">
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
-              <Tab value={1} label="Minting"></Tab>
-              <Tab value={2} label="Energy Exchange"></Tab>
-              <Tab value={3} label="Materials Market"></Tab>
-              <Tab value={4} label="Inventory"></Tab>
-              <Tab value={5} label="Raw Move"></Tab>
-              <Tab value={6} label="Chat"></Tab>
-              <Tab value={7} label="Board JSON"></Tab>
-            </Tabs>
+          <WorkingGlobe></WorkingGlobe>
+          <Box className="DataDisplay">
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
+                <Tab value={1} label="Minting"></Tab>
+                <Tab value={2} label="Energy Exchange"></Tab>
+                <Tab value={3} label="Materials Market"></Tab>
+                <Tab value={4} label="Inventory"></Tab>
+                <Tab value={5} label="Raw Move"></Tab>
+                <Tab value={6} label="Chat"></Tab>
+                <Tab value={7} label="Board JSON"></Tab>
+                <Tab value={8} label="Manage Plant"></Tab>
+              </Tabs>
+            </Box>
+            <Panel index={1} current_index={current_tab}>
+              <Minting/>
+            </Panel>
+            <Panel index={2} current_index={current_tab}>
+              {<EnergyExchange listings={listings}></EnergyExchange>}
+            </Panel>
+            <Panel index={3} current_index={current_tab}>
+              <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
+            </Panel>
+            <Panel index={4} current_index={current_tab}>
+              <Inventory userInventory={userInventory}></Inventory>
+            </Panel>
+            <Panel index={5} current_index={current_tab}>
+              <MoveForm></MoveForm>
+            </Panel>
+            <Panel index={6} current_index={current_tab}>
+              <Chat chat_log={chat_log}></Chat>
+            </Panel>
+            <Panel index={7} current_index={current_tab}>
+              <GameBoard g={game_board}></GameBoard>
+            </Panel>
+            <Panel index={8} current_index={current_tab}>
+              <ManagePlant
+              asic_token_id={game_board?.asic_token_id ?? null}
+              selected_plant={selected_plant}
+              power_plants={powerPlants}
+              user_inventory={userInventory}
+              />
+            </Panel>
           </Box>
-          <Panel index={1} current_index={current_tab}>
-            <Minting/>
-          </Panel>
-          <Panel index={2} current_index={current_tab}>
-            {<EnergyExchange listings={listings}></EnergyExchange>}
-          </Panel>
-          <Panel index={3} current_index={current_tab}>
-            <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
-          </Panel>
-          <Panel index={4} current_index={current_tab}>
-            <Inventory userInventory={userInventory}></Inventory>
-          </Panel>
-          <Panel index={5} current_index={current_tab}>
-            <MoveForm></MoveForm>
-          </Panel>
-          <Panel index={6} current_index={current_tab}>
-            <Chat chat_log={chat_log}></Chat>
-          </Panel>
-          <Panel index={7} current_index={current_tab}>
-            <GameBoard g={game_board}></GameBoard>
-          </Panel>
-        </Box>
         </div>
       </div >
     </div >
