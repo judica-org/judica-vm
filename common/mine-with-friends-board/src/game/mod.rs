@@ -46,6 +46,7 @@ use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::time::Duration;
 use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
@@ -277,7 +278,7 @@ impl GameBoard {
             base_price: 20,
             price_asset: self.bitcoin_token_id,
             hash_asset: *self.tokens.hashboards.iter().next().unwrap().0,
-            adjusts_every: 100, // what units?
+            adjusts_every: 10_007, // 10 seconds -- prime rounded for chaos
             elapsed_time: 0,
             first: true,
         }));
@@ -288,7 +289,7 @@ impl GameBoard {
             base_price: 1,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.steel_token_id,
-            adjusts_every: 100, // what units?
+            adjusts_every: 5_003, // 5 seconds
             elapsed_time: 0,
             first: true,
         }));
@@ -299,7 +300,7 @@ impl GameBoard {
             base_price: 38,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.silicon_token_id,
-            adjusts_every: 100, // what units?
+            adjusts_every: 25_013, // 25 seconds
             elapsed_time: 0,
             first: true,
         }));
@@ -310,7 +311,7 @@ impl GameBoard {
             base_price: 290,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.concrete_token_id,
-            adjusts_every: 100, // what units?
+            adjusts_every: 14_009, // 14 seconds
             elapsed_time: 0,
             first: true,
         }));
