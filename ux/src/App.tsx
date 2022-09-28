@@ -16,7 +16,9 @@ import { TabPanelUnstyled, TabsUnstyled } from '@mui/base';
 import React from 'react';
 import DrawerAppBar from './menu-bar/MenuDrawer';
 import { TradingPairID } from './Types/GameMove';
+import { ManagePlant } from './manage-plant/ManagePlant';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
+
 export type PowerPlant = {
   id: number,
   plant_type: PlantType //how does PlantType enum show up
@@ -159,9 +161,9 @@ export type UserInventory = {
 }
 export function parse_trading_pair(s: string): TradingPairID {
   const [asset_a, asset_b] = s.split(":");
-  return { asset_a:parseInt(asset_a, 16), asset_b:parseInt(asset_b, 16) }
+  return { asset_a: parseInt(asset_a, 16), asset_b: parseInt(asset_b, 16) }
 }
-export function trading_pair_to_string(s:TradingPairID) : string {
+export function trading_pair_to_string(s: TradingPairID): string {
   return `${s.asset_a.toString(16)}:${s.asset_b.toString(16)}`
 }
 function App() {
@@ -235,41 +237,45 @@ function App() {
       <div className="App">
         <DrawerAppBar></DrawerAppBar>
         <div className="Content">
-        <WorkingGlobe></WorkingGlobe>
-        <Box className="DataDisplay">
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
-              <Tab value={1} label="Minting"></Tab>
-              <Tab value={2} label="Energy Exchange"></Tab>
-              <Tab value={3} label="Materials Market"></Tab>
-              <Tab value={4} label="Inventory"></Tab>
-              <Tab value={5} label="Raw Move"></Tab>
-              <Tab value={6} label="Chat"></Tab>
-              <Tab value={7} label="Board JSON"></Tab>
-            </Tabs>
+          <WorkingGlobe></WorkingGlobe>
+          <Box className="DataDisplay">
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
+                <Tab value={1} label="Minting"></Tab>
+                <Tab value={2} label="Energy Exchange"></Tab>
+                <Tab value={3} label="Materials Market"></Tab>
+                <Tab value={4} label="Inventory"></Tab>
+                <Tab value={5} label="Raw Move"></Tab>
+                <Tab value={6} label="Chat"></Tab>
+                <Tab value={7} label="Board JSON"></Tab>
+                <Tab value={8} label="Manage Plant"></Tab>
+              </Tabs>
+            </Box>
+            <Panel index={1} current_index={current_tab}>
+              <MintingModal location={location} />
+            </Panel>
+            <Panel index={2} current_index={current_tab}>
+              {<EnergyExchange listings={listings}></EnergyExchange>}
+            </Panel>
+            <Panel index={3} current_index={current_tab}>
+              <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
+            </Panel>
+            <Panel index={4} current_index={current_tab}>
+              <Inventory userInventory={userInventory}></Inventory>
+            </Panel>
+            <Panel index={5} current_index={current_tab}>
+              <MoveForm></MoveForm>
+            </Panel>
+            <Panel index={6} current_index={current_tab}>
+              <Chat chat_log={chat_log}></Chat>
+            </Panel>
+            <Panel index={7} current_index={current_tab}>
+              <GameBoard g={game_board}></GameBoard>
+            </Panel>
+            <Panel index={8} current_index={current_tab}>
+              <ManagePlant/>
+            </Panel>
           </Box>
-          <Panel index={1} current_index={current_tab}>
-            <MintingModal location={location} />
-          </Panel>
-          <Panel index={2} current_index={current_tab}>
-            {<EnergyExchange listings={listings}></EnergyExchange>}
-          </Panel>
-          <Panel index={3} current_index={current_tab}>
-            <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
-          </Panel>
-          <Panel index={4} current_index={current_tab}>
-            <Inventory userInventory={userInventory}></Inventory>
-          </Panel>
-          <Panel index={5} current_index={current_tab}>
-            <MoveForm></MoveForm>
-          </Panel>
-          <Panel index={6} current_index={current_tab}>
-            <Chat chat_log={chat_log}></Chat>
-          </Panel>
-          <Panel index={7} current_index={current_tab}>
-            <GameBoard g={game_board}></GameBoard>
-          </Panel>
-        </Box>
         </div>
       </div >
     </div >

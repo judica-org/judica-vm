@@ -5,15 +5,14 @@ import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent } from '@mui/material';
 import { emit } from '@tauri-apps/api/event';
-import MintingModal from './mint-power-plant/MintingModal';
 const { useState, useEffect } = React;
 
 const stub_plant_data = [{
     id: 45637,
     lat: 46.818188,
     lng: 8.227512,
-    plant_type: "nuclear",
-    text: "Nuclear Plant",
+    plant_type: "Flare",
+    text: "Flare Plant",
     owner: 12345566,
     watts: 345634,
     for_sale: false
@@ -21,8 +20,8 @@ const stub_plant_data = [{
     id: 13436,
     lat: 49.817492,
     lng: 15.472962,
-    plant_type: "wind",
-    text: "Wind Plant",
+    plant_type: "Hydro",
+    text: "Hydroelectric Plant",
     owner: 12345566,
     watts: 67897,
     for_sale: false
@@ -30,7 +29,7 @@ const stub_plant_data = [{
     id: 95944,
     lat: 9.145,
     lng: 40.489673,
-    plant_type: "solar",
+    plant_type: "Solar",
     text: "Solar Farm",
     owner: 12345566,
     watts: 23795,
@@ -40,7 +39,8 @@ const stub_plant_data = [{
 export default () => {
     const [power_plants, set_power_plants] = useState([]); // use empty list for now so it will render
     const [countries, setCountries] = useState([]);
-    const [location, setLocation] = useState(null)
+    const [location, setLocation] = useState(null);
+    const [selected_plant, setSelectedPlant] = useState(null);
 
     useEffect(() => {
         setCountries(countries_data);
@@ -59,7 +59,7 @@ export default () => {
     return <div className='globe-container'>
         <Card>
             <CardHeader title={'World Energy Grid'}
-                subheader={location ? `Selected Location: ${location.lat}, ${location.lng}`: 'Click to select location'}
+                subheader={location ? `Selected Location: ${location.lat}, ${location.lng}` : 'Click to select location'}
             />
             <CardContent  >
                 <div className='GlobeContent'>
@@ -88,6 +88,11 @@ export default () => {
                             ${l.for_sale ? 'For Sale' : ''}
                             `
                         }
+                        onLabelClick={(label, _ev, _data) => {
+                            setSelectedPlant(label);
+                            console.log(['label-click'], label);
+                            emit('plant-selected', label);
+                        }}
                         hexPolygonsData={countries.features}
                         hexPolygonResolution={3}
                         hexPolygonMargin={0.3}
@@ -101,7 +106,6 @@ export default () => {
       `
                         }
                     />
-                    {location && <MintingModal location={location} />}
                 </div>
             </CardContent>
         </Card>
