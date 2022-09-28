@@ -111,7 +111,13 @@ pub struct GameSetup {
     // TODO: Make Set to guarantee Unique...
     pub players: Vec<String>,
     pub start_amount: u64,
+    // TODO: maybe remove no_finish_time default, but helps with existing chains...
+    #[serde(default = "no_finish_time")]
     pub finish_time: u64,
+}
+fn no_finish_time() -> u64 {
+    // otherwise breaks json
+    9_007_199_254_740_991u64
 }
 impl GameSetup {
     fn setup_game(&self, g: &mut GameBoard) {
@@ -334,7 +340,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(PowerPlantEvent {
             // Next Move
             time: self.elapsed_time + 1,
-            period: 11_003 // 11 seconds,
+            period: 11_003, // 11 seconds,
         }));
     }
     /// Creates a new EntityID
