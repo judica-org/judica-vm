@@ -35,17 +35,11 @@ version = "0.2.0"
 path = "../../../submodule/sapio/sapio-base"
 version = "0.2.0"
 
-[dependencies.sapio-contrib]
-path = "../../../submodule/sapio/sapio-contrib"
-version = "0.2.0"
-
-[dependencies.sapio-ctv-emulator-trait]
-path = "../../../submodule/sapio/emulator-trait"
-version = "0.2.0"
 
 [dependencies.sapio-wasm-plugin]
 path = "../../../submodule/sapio/plugins"
 version = "0.2.0"
+default-features = false
 features = ["client"]
 
 [dependencies.schemars]
@@ -55,6 +49,13 @@ features = ['impl_json_schema']
 [dependencies.mine-with-friends-board]
 path = "../../../common/mine-with-friends-board"
 version = "0.1.0"
+default-features = false
+
+[dependencies.game-sequencer]
+path = "../../../common/game-sequencer"
+version = "0.1.0"
+features = []
+default-features = false
 
 
 [lib]

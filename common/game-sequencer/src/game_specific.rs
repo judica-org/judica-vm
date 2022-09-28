@@ -6,6 +6,7 @@ use sapio_bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::sync::{atomic::AtomicBool, Arc};
+#[cfg(feature = "has_async")]
 use tokio::{
     spawn,
     sync::{
@@ -15,7 +16,12 @@ use tokio::{
     task::JoinError,
 };
 
-use crate::{DBFetcher, GenericSequencer, OfflineSequencer, SequenceingError};
+#[cfg(feature = "has_async")]
+use crate::DBFetcher;
+#[cfg(feature = "has_async")]
+use crate::GenericSequencer;
+use crate::OfflineSequencer;
+use crate::SequenceingError;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(try_from = "OfflineSequencer<ParticipantAction>")]
@@ -38,6 +44,7 @@ impl TryFrom<OfflineSequencer<ParticipantAction>> for ExtractedMoveEnvelopes {
 type MoveReadFn = fn(
     Authenticated<GenericEnvelope<ParticipantAction>>,
 ) -> Result<Option<(MoveEnvelope, XOnlyPublicKey)>, serde_json::Error>;
+#[cfg(feature = "has_async")]
 #[derive(Clone)]
 pub struct Sequencer(
     pub  Arc<
@@ -60,6 +67,7 @@ fn read_move(
     }
 }
 
+#[cfg(feature = "has_async")]
 impl Sequencer {
     pub fn new(
         shutdown: Arc<AtomicBool>,
@@ -79,6 +87,7 @@ impl Sequencer {
 
 type AGP = Authenticated<GenericEnvelope<ParticipantAction>>;
 type EnvReadFn = fn(AGP) -> Result<AGP, serde_json::Error>;
+#[cfg(feature = "has_async")]
 #[derive(Clone)]
 pub struct DemuxedSequencer {
     pub sequencer: Arc<GenericSequencer<EnvReadFn, AGP, serde_json::Error, ParticipantAction>>,
@@ -90,6 +99,7 @@ pub struct DemuxedSequencer {
     pub recieve_custom: Arc<Mutex<UnboundedReceiver<CanonicalJsonValue>>>,
 }
 
+#[cfg(feature = "has_async")]
 impl DemuxedSequencer {
     pub fn new(
         shutdown: Arc<AtomicBool>,
@@ -109,6 +119,7 @@ impl DemuxedSequencer {
         }
     }
 
+    #[cfg(feature = "has_async")]
     pub async fn run(self) -> Result<(), JoinError> {
         spawn(self.sequencer.clone().run());
         spawn({
