@@ -1,9 +1,7 @@
 use super::Database;
-use crate::commands::bindings::make_move_inner;
 use crate::Game;
 use crate::GameStateInner;
 use crate::SigningKeyInner;
-use game_player_messages::ParticipantAction;
 use game_sequencer::OnlineDBFetcher;
 use game_sequencer::Sequencer;
 use mine_with_friends_board::entity::EntityID;
@@ -11,14 +9,10 @@ use mine_with_friends_board::game::game_move::GameMove;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::secp256k1::Secp256k1;
-use sapio_bitcoin::XOnlyPublicKey;
-use tokio::task::yield_now;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::async_runtime::Mutex;
-use tauri::State;
 use tokio::spawn;
 use tokio::sync::MutexGuard;
 use tokio::task::JoinHandle;
@@ -44,15 +38,18 @@ impl GameServer {
         mut g_lock: MutexGuard<'_, Option<Game>>,
         g: GameStateInner,
     ) -> Result<(), &'static str> {
+        tracing::trace!("Starting Game Server");
         if !std::ptr::eq(MutexGuard::mutex(&g_lock), &*g) {
             return Err("Must be same Mutex Passed in");
         }
         match g_lock.as_mut() {
             None => {
+                tracing::trace!("No Such Game");
                 return Err("No Game Available");
             }
             Some(game) => {
                 if game.server.is_some() {
+                    tracing::trace!("Game Already Started");
                     return Err("Game Already has a Server");
                 }
 
@@ -84,12 +81,13 @@ impl GameServer {
                     let secp = secp;
                     let signing_key = signing_key.clone();
                     async move {
-                        let mut t = tokio::time::interval(Duration::from_millis(1000));
+                        let mut t = tokio::time::interval(Duration::from_millis(5000));
                         loop {
                             let a = t.tick().await;
                             if shutdown.load(Ordering::Relaxed) {
                                 break;
                             }
+                            tracing::trace!("Game Heartbeat!");
                             crate::commands::modify::make_move_inner_inner(
                                 secp.clone(),
                                 database.clone(),
@@ -99,7 +97,8 @@ impl GameServer {
                                 ),
                                 EntityID(0),
                             )
-                            .await;
+                            .await
+                            .map_err(|e| tracing::trace!(err=?e, "Game Heartbeat!"));
                         }
                     }
                 });

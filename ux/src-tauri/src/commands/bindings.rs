@@ -121,7 +121,14 @@ pub(crate) async fn send_chat(
     sk: State<'_, SigningKeyInner>,
     chat: String,
 ) -> Result<(), &'static str> {
-    modify::make_move_inner_inner(secp.inner().clone(), db.inner().clone(), sk.inner().clone(), GameMove::from(Chat(chat)), EntityID(0)).await
+    modify::make_move_inner_inner(
+        secp.inner().clone(),
+        db.inner().clone(),
+        sk.inner().clone(),
+        GameMove::from(Chat(chat)),
+        EntityID(0),
+    )
+    .await
 }
 #[tauri::command]
 pub(crate) async fn switch_to_game(
@@ -131,7 +138,14 @@ pub(crate) async fn switch_to_game(
     game: GameState<'_>,
     key: XOnlyPublicKey,
 ) -> Result<(), ()> {
-    modify::switch_to_game_inner(secp.inner().clone(), sk.inner().clone(), db.inner().clone(), game, key).await
+    modify::switch_to_game_inner(
+        secp.inner().clone(),
+        sk.inner().clone(),
+        db.inner().clone(),
+        game,
+        key,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -142,5 +156,12 @@ pub(crate) async fn make_move_inner(
     nextMove: GameMove,
     from: EntityID,
 ) -> Result<(), &'static str> {
-    modify::make_move_inner_inner(secp.inner().clone(), db.inner().clone(), sk.inner().clone(), nextMove, from).await
+    modify::make_move_inner_inner(
+        secp.inner().clone(),
+        db.inner().clone(),
+        sk.inner().clone(),
+        nextMove,
+        from,
+    )
+    .await
 }

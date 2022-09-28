@@ -65,7 +65,7 @@ pub(crate) async fn make_new_chain_inner(
 
 pub(crate) async fn make_move_inner_inner(
     secp: Arc<Secp256k1<All>>,
-    db:  Database,
+    db: Database,
     sk: SigningKeyInner,
     next_move: GameMove,
     _from: EntityID,
@@ -81,12 +81,18 @@ pub(crate) async fn make_move_inner_inner(
             let tip = if let Some(prev) = h {
                 let mut v = handle
                     .messages_by_hash::<_, _, ParticipantAction>([prev].iter())
-                    .or(Err("No Tip Found"))?;
+                    .map_err(|e| {
+                        tracing::trace!(error=?e, "Error Finding Predecessor");
+                        "No Tip Found"
+                    })?;
                 v.pop().unwrap()
             } else {
                 handle
                     .get_tip_for_user_by_key::<ParticipantAction>(xpubkey)
-                    .or(Err("No Tip Found"))?
+                    .map_err(|e| {
+                        tracing::trace!(error=?e, "Error First Tip");
+                        "No Tip Found"
+                    })?
             };
             match tip.msg() {
                 ParticipantAction::MoveEnvelope(m) => break m.sequence,
@@ -137,8 +143,10 @@ pub(crate) async fn switch_to_game_inner(
     game: GameState<'_>,
     key: XOnlyPublicKey,
 ) -> Result<(), ()> {
+    tracing::info!(?key, "Switching to Sequencer Key");
     let game = game.inner().clone();
     spawn(async move {
+        tracing::info!("Spawned Game switching Task");
         let genesis = {
             let db = db.state.lock().await;
             let db: &DatabaseInner = db.as_ref().ok_or("No Database Set Up")?;
@@ -148,6 +156,7 @@ pub(crate) async fn switch_to_game_inner(
                 .map_err(|e| "Internal Databse Error")?
                 .ok_or("No Genesis found for selected Key")?
         };
+        tracing::trace!(?genesis, "Found Genesis");
         let game_setup = {
             let m: &Channelized<BroadcastByHost> = genesis.msg();
             match &m.data {
@@ -155,6 +164,7 @@ pub(crate) async fn switch_to_game_inner(
                 _ => return Err("First Message was not a GameSetup"),
             }
         };
+        tracing::trace!(?game_setup, "Found GameSetup");
 
         let game2 = game.clone();
         let mut g = game2.lock().await;
