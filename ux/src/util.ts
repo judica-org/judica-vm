@@ -11,3 +11,5 @@ export const plant_type_color_map = {
   'Flare': 'orange',
   'Hydro': 'blue'
 }
+
+export type MoveHashboardsActions = "ADD" | "REMOVE";
