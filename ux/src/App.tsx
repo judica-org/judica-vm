@@ -7,16 +7,14 @@ import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials/RawMaterialsMarket';
 import { tauri_host } from './tauri_host';
 import { Chat } from './chat/Chat';
-import { AppHeader } from './header/AppHeader';
 import { Inventory } from './inventory/inventory';
 import MintingModal from './mint-power-plant/MintingModal';
 import { listen } from '@tauri-apps/api/event';
 import { Box, Tab, Tabs } from '@mui/material';
-import { TabPanelUnstyled, TabsUnstyled } from '@mui/base';
 import React from 'react';
 import DrawerAppBar from './menu-bar/MenuDrawer';
 import { TradingPairID } from './Types/GameMove';
-import { ManagePlant } from './manage-plant/ManagePlant';
+import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export type PowerPlant = {
@@ -169,12 +167,14 @@ export function trading_pair_to_string(s: TradingPairID): string {
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
   const [location, setLocation] = useState<[number, number]>([0, 0]);
-
+  const [selected_plant, set_selected_plant]= useState<PlantLabel | null>(null);
   const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
   const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
+  const [powerPlants, setPowerPlants] = useState<UserPowerPlant[] | null>(null);
   const [chat_log, set_chat_log] = React.useState<[number, number, string][]>([]);
   const [listings, setListings] = useState<NFTSale[]>([]);
+
   useEffect(() => {
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
@@ -202,6 +202,11 @@ function App() {
       setUserInventory(ev.payload as UserInventory);
     });
 
+    const unlisten_power_plants = appWindow.listen("user-inventory", (ev) => {
+      console.log(['power-plants'], ev);
+      setPowerPlants(ev.payload as UserPowerPlant[]);
+    });
+
     const unlisten_chat_log = appWindow.listen("chat-log", (ev) => {
       console.log("Chat:", ev.payload);
       const new_msgs = ev.payload as typeof chat_log;
@@ -215,7 +220,7 @@ function App() {
     tauri_host.game_synchronizer()
     return () => {
       (async () => {
-        const unlisten_all = await Promise.all([unlisten_chat_log, unlisten_energy_exchange, unlisten_game_board, unlisten_material_prices, unlisten_user_inventory, unlisten_energy_exchange]);
+        const unlisten_all = await Promise.all([unlisten_chat_log, unlisten_energy_exchange, unlisten_game_board, unlisten_material_prices, unlisten_user_inventory, unlisten_power_plants]);
         for (const u of unlisten_all) {
           u()
         }
@@ -229,6 +234,10 @@ function App() {
     listen("globe-location", (ev: { payload: any }) => {
       console.log(["globe-location"], JSON.parse(ev.payload));
       setLocation(JSON.parse(ev.payload));
+    });
+
+    listen("plant-selected", (ev) => {
+      set_selected_plant(ev.payload as PlantLabel)
     });
   });
 
@@ -273,7 +282,12 @@ function App() {
               <GameBoard g={game_board}></GameBoard>
             </Panel>
             <Panel index={8} current_index={current_tab}>
-              <ManagePlant/>
+              <ManagePlant
+              asic_token_id={game_board?.asic_token_id ?? null}
+              selected_plant={selected_plant}
+              power_plants={powerPlants}
+              user_inventory={userInventory}
+              />
             </Panel>
           </Box>
         </div>
