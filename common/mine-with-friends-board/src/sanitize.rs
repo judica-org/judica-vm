@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    entity::EntityID,
     game::{
         game_move::{
             Chat, GameMove, Heartbeat, ListNFTForSale, MintPowerPlant, PurchaseNFT, RemoveTokens,
@@ -18,6 +19,13 @@ use crate::{
     tokens::TokenPointer,
 };
 
+#[derive(Serialize, Clone, Debug)]
+pub enum SanitizationError {
+    InvalidTokenPointer(TokenPointer),
+    InvalidNFTPtr(NftPtr),
+    InvalidUser(EntityID),
+    MintScaleIsZero,
+}
 pub trait Sanitizable {
     type Output;
     type Context;
@@ -43,24 +51,24 @@ where
 impl Sanitizable for TokenPointer {
     type Output = TokenPointer;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
         if context.tokens.tokens.contains_key(&self.as_id()) {
             Ok(self)
         } else {
-            Err(())
+            Err(SanitizationError::InvalidTokenPointer(self))
         }
     }
 }
 impl Sanitizable for NftPtr {
     type Output = NftPtr;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
         if context.nfts.nfts.contains_key(&self) {
             Ok(self)
         } else {
-            Err(())
+            Err(SanitizationError::InvalidNFTPtr(self))
         }
     }
 }
@@ -83,7 +91,7 @@ impl Sanitizable for TradingPairID {
 impl Sanitizable for GameMove {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, context: &GameBoard) -> Result<Self, Self::Error> {
         Ok(match self {
             GameMove::RemoveTokens(x) => x.sanitize(context)?.into(),
@@ -102,7 +110,7 @@ impl Sanitizable for GameMove {
 impl Sanitizable for Heartbeat {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, _context: &Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
     }
@@ -111,7 +119,7 @@ impl Sanitizable for Heartbeat {
 impl Sanitizable for Trade {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
         let Self {
             pair,
@@ -132,7 +140,7 @@ impl Sanitizable for Trade {
 impl Sanitizable for Chat {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
 
     fn sanitize(self, _context: &Self::Context) -> Result<Self::Output, Self::Error> {
         Ok(self)
@@ -143,10 +151,10 @@ impl Sanitizable for Chat {
 impl Sanitizable for MintPowerPlant {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, _context: &Self::Context) -> Result<Self::Output, Self::Error> {
         if self.scale == 0 {
-            return Err(());
+            return Err(SanitizationError::MintScaleIsZero);
         }
         // TODO: CHeck that location is a valid coordinate
         Ok(self)
@@ -156,7 +164,7 @@ impl Sanitizable for MintPowerPlant {
 impl Sanitizable for PurchaseNFT {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
         let Self {
             nft_id,
@@ -173,7 +181,7 @@ impl Sanitizable for PurchaseNFT {
 impl Sanitizable for ListNFTForSale {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
         let Self {
             nft_id,
@@ -191,7 +199,7 @@ impl Sanitizable for ListNFTForSale {
 impl Sanitizable for SendTokens {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
         let SendTokens {
             to,
@@ -205,7 +213,7 @@ impl Sanitizable for SendTokens {
                 currency: currency.sanitize(context)?,
             })
         } else {
-            Err(())
+            Err(SanitizationError::InvalidUser(to))
         }
     }
 }
@@ -213,7 +221,7 @@ impl Sanitizable for SendTokens {
 impl Sanitizable for RemoveTokens {
     type Output = Self;
     type Context = GameBoard;
-    type Error = ();
+    type Error = SanitizationError;
     fn sanitize(self, context: &Self::Context) -> Result<Self::Output, Self::Error> {
         let Self {
             nft_id,

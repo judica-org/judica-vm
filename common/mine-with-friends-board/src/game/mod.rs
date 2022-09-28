@@ -46,7 +46,6 @@ use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::ops::Index;
 use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
@@ -88,6 +87,7 @@ pub struct GameBoard {
     pub(crate) root_user: EntityID,
     pub(crate) callbacks: CallbackRegistry,
     pub(crate) current_time: u64,
+    pub(crate) finish_time: u64,
     pub(crate) mining_subsidy: u128,
     pub ticks: BTreeMap<EntityID, u64>,
     pub chat: VecDeque<(u64, EntityID, String)>,
@@ -104,9 +104,11 @@ pub struct GameSetup {
     // TODO: Make Set to guarantee Unique...
     pub players: Vec<String>,
     pub start_amount: u64,
+    pub finish_time: u64,
 }
 impl GameSetup {
     fn setup_game(&self, g: &mut GameBoard) {
+        g.finish_time = self.finish_time;
         let mut p = self.players.clone();
         p.sort();
         p.dedup();
@@ -122,6 +124,38 @@ impl GameSetup {
             g.tokens[g.real_sats_token_id].mint(&id, self.start_amount as u128);
             g.tokens[g.bitcoin_token_id].mint(&id, self.start_amount as u128);
         }
+    }
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub enum FinishReason {
+    TimeExpired,
+    DominatingPlayer(EntityID),
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub enum MoveRejectReason {
+    NoSuchUser,
+    GameIsFinished(FinishReason),
+    MoveSanitizationError(<GameMove as Sanitizable>::Error),
+    TradeRejected(TradeError),
+}
+
+impl From<TradeError> for MoveRejectReason {
+    fn from(v: TradeError) -> Self {
+        Self::TradeRejected(v)
+    }
+}
+
+impl From<FinishReason> for MoveRejectReason {
+    fn from(v: FinishReason) -> Self {
+        Self::GameIsFinished(v)
+    }
+}
+
+impl From<<GameMove as Sanitizable>::Error> for MoveRejectReason {
+    fn from(v: <GameMove as Sanitizable>::Error) -> Self {
+        Self::MoveSanitizationError(v)
     }
 }
 
@@ -209,6 +243,7 @@ impl GameBoard {
             player_move_sequence: Default::default(),
             callbacks: Default::default(),
             current_time: 0,
+            finish_time: 0,
             mining_subsidy: 100_000_000_000 * 50,
             ticks: Default::default(),
             chat: VecDeque::with_capacity(1000),
@@ -309,8 +344,14 @@ impl GameBoard {
         &mut self,
         MoveEnvelope { d, sequence, time }: MoveEnvelope,
         signed_by: String,
-    ) -> Result<(), ()> {
-        let from = *self.users_by_key.get(&signed_by).ok_or(())?;
+    ) -> Result<(), MoveRejectReason> {
+        if let Some(finish_reason) = self.game_is_finished() {
+            return Err(MoveRejectReason::GameIsFinished(finish_reason));
+        }
+        let from = *self
+            .users_by_key
+            .get(&signed_by)
+            .ok_or(MoveRejectReason::NoSuchUser)?;
         info!(key = signed_by, ?from, "Got Move {} From Player", sequence);
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from).or_default();
@@ -344,8 +385,18 @@ impl GameBoard {
         self.current_time = median_time;
     }
 
+    pub fn game_is_finished(&self) -> Option<FinishReason> {
+        if self.current_time >= self.finish_time {
+            Some(FinishReason::TimeExpired)
+        } else {
+            self.get_user_hashrate_share()
+                .iter()
+                .find_map(|(k, v)| if v.0 * 2 >= v.1 { Some(*k) } else { None })
+                .map(FinishReason::DominatingPlayer)
+        }
+    }
     /// Processes a GameMove without any sanitization
-    pub fn play_inner(&mut self, d: GameMove, from: EntityID) -> Result<(), ()> {
+    pub fn play_inner(&mut self, d: GameMove, from: EntityID) -> Result<(), MoveRejectReason> {
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         let context = CallContext { sender: from };
         match d {
@@ -359,11 +410,11 @@ impl GameBoard {
                 if sell {
                     ConstantFunctionMarketMaker::do_sell_trade(
                         self, pair, amount_a, amount_b, false, &context,
-                    );
+                    )?;
                 } else {
                     ConstantFunctionMarketMaker::do_buy_trade(
                         self, pair, amount_a, amount_b, false, &context,
-                    );
+                    )?;
                 }
             }
             GameMove::MintPowerPlant(MintPowerPlant {
@@ -377,14 +428,14 @@ impl GameBoard {
                     location,
                     plant_type,
                     context.sender,
-                );
+                )?;
             }
             GameMove::SuperMintPowerPlant(MintPowerPlant {
                 scale,
                 location,
                 plant_type,
             }) => {
-                PowerPlantProducer::super_mint(self, scale, location, plant_type, context.sender);
+                PowerPlantProducer::super_mint(self, scale, location, plant_type, context.sender)?;
             }
             GameMove::PurchaseNFT(PurchaseNFT {
                 nft_id,
@@ -573,7 +624,7 @@ impl GameBoard {
         // accumulation step
         for (ptr, plant) in reg.power_plants.iter() {
             let rate = plant.compute_hashrate(self) as u64;
-            let player = reg.nfts.get(ptr).unwrap().owner();
+            let player = reg.nfts[ptr].owner();
             match res.get_mut(&player) {
                 None => {
                     res.insert(player, (rate * denominator, denominator));
