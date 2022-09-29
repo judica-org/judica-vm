@@ -2,6 +2,14 @@ import { invoke } from '@tauri-apps/api';
 import { PlantType } from './App';
 import { GameMove } from './Types/GameMove';
 
+export type SuccessfulTradeOutcome = {
+  trading_pair: string,
+  asset_player_purchased: string,
+  amount_player_purchased: number,
+  asset_player_sold: string,
+  amount_player_sold: number,
+}
+export type TradeSimulation = { Ok: SuccessfulTradeOutcome, Err: undefined } | { Err: any, Ok:undefined };
 let game_synchronizer_invoked = false;
 export const tauri_host = {
   get_move_schema: async () => {
@@ -34,10 +42,14 @@ export const tauri_host = {
   make_new_chain: async (nickname: string) => {
     return invoke("make_new_chain", { nickname });
   },
-  mint_power_plant_cost: async(scale: number, location: [number, number], plantType: PlantType) => {
-    return invoke("mint_power_plant_cost", {scale, location, plantType});
+  mint_power_plant_cost: async (scale: number, location: [number, number], plantType: PlantType) => {
+    return invoke("mint_power_plant_cost", { scale, location, plantType });
   },
-  super_mint: async(scale: number, location: [number, number], plantType: PlantType) => {
-    return invoke("super_mint", {scale, location, plantType});
+  super_mint: async (scale: number, location: [number, number], plantType: PlantType) => {
+    return invoke("super_mint", { scale, location, plantType });
+  },
+
+  simulate_trade: async (pair: string, amounts: [number, number], trade: "buy" | "sell"): Promise<TradeSimulation> => {
+    return invoke("simulate_trade", { pair, amounts, trade });
   }
 };

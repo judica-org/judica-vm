@@ -498,14 +498,15 @@ impl GameBoard {
                 amount_a,
                 amount_b,
                 sell,
+                cap,
             }) => {
                 if sell {
                     ConstantFunctionMarketMaker::do_sell_trade(
-                        self, pair, amount_a, amount_b, false, &context,
+                        self, pair, amount_a, amount_b, cap, false, &context,
                     )?;
                 } else {
                     ConstantFunctionMarketMaker::do_buy_trade(
-                        self, pair, amount_a, amount_b, false, &context,
+                        self, pair, amount_a, amount_b, cap, false, &context,
                     )?;
                 }
             }
@@ -723,6 +724,26 @@ impl GameBoard {
         res
     }
 
+    pub fn simulate_buy_trade(
+        &mut self,
+        pair: TradingPairID,
+        amount_a: u128,
+        amount_b: u128,
+        sender: EntityID,
+    ) -> Result<TradeOutcome, TradeError> {
+        match ConstantFunctionMarketMaker::do_buy_trade(
+            self,
+            pair,
+            amount_a,
+            amount_b,
+            None,
+            true,
+            &CallContext { sender },
+        ) {
+            Ok(outcome) => Ok(outcome),
+            Err(e) => Err(e),
+        }
+    }
     pub fn simulate_sell_trade(
         &mut self,
         pair: TradingPairID,
@@ -735,12 +756,17 @@ impl GameBoard {
             pair,
             amount_a,
             amount_b,
+            None,
             true,
             &CallContext { sender },
         ) {
             Ok(outcome) => Ok(outcome),
             Err(e) => Err(e),
         }
+    }
+
+    pub fn get_user_id(&self, signing_key: &str) -> Option<EntityID> {
+        self.users_by_key.get(signing_key).cloned()
     }
 
     pub fn get_power_plant_cost(

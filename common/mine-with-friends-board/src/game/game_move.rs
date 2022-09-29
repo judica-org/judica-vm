@@ -61,6 +61,8 @@ pub struct Trade {
     pub amount_a: u128,
     pub amount_b: u128,
     pub sell: bool,
+    #[serde(default)]
+    pub cap: Option<u128>,
 }
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Clone)]

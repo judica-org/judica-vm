@@ -152,6 +152,7 @@ pub(crate) struct ConstantFunctionMarketMaker {
 pub enum TradeError {
     InvalidTrade(String),
     InsufficientTokens(String),
+    MarketSlipped,
 }
 
 impl Display for TradeError {
@@ -161,6 +162,7 @@ impl Display for TradeError {
             TradeError::InsufficientTokens(msg) => {
                 write!(f, "Error: Insufficient tokens to complete trade.{:?}", msg)
             }
+            TradeError::MarketSlipped => write!(f, "Error: Market Slipped"),
         }
     }
 }
@@ -239,6 +241,7 @@ impl ConstantFunctionMarketMaker {
         mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
+        buy_min: Option<u128>,
         simulate: bool,
         ctx: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
@@ -254,7 +257,7 @@ impl ConstantFunctionMarketMaker {
             ));
         }
         ConstantFunctionMarketMaker::internal_do_trade_sell_fixed_amount(
-            game, id, amount_a, amount_b, simulate, ctx,
+            game, id, amount_a, amount_b, buy_min, simulate, ctx,
         )
     }
 
@@ -263,6 +266,7 @@ impl ConstantFunctionMarketMaker {
         mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
+        sell_max: Option<u128>,
         simulate: bool,
         ctx: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
@@ -278,7 +282,7 @@ impl ConstantFunctionMarketMaker {
             ));
         }
         ConstantFunctionMarketMaker::internal_do_trade_buy_fixed_amount(
-            game, id, amount_a, amount_b, simulate, ctx,
+            game, id, amount_a, amount_b, sell_max, simulate, ctx,
         )
     }
 
@@ -287,6 +291,8 @@ impl ConstantFunctionMarketMaker {
         mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
+        // upper bound on amount to sell
+        sell_max: Option<u128>,
         simulate: bool,
         CallContext { ref sender }: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
@@ -327,8 +333,14 @@ impl ConstantFunctionMarketMaker {
             let k = mkt_qty_selling * mkt_qty_buying;
             let sell_amt = (k / (mkt_qty_buying - buy_amt)) - mkt_qty_selling;
 
+            if let Some(max) = sell_max {
+                if max > sell_amt {
+                    return Err(TradeError::MarketSlipped);
+                }
+            }
+
             if !simulate {
-                // Only check this condition when not similating... as we're
+                // Only check this condition when not simulating... as we're
                 // looking to find out how much we would need!
                 if sell_amt > tokens[selling].balance_check(sender) {
                     return Err(TradeError::InsufficientTokens(
@@ -358,6 +370,7 @@ impl ConstantFunctionMarketMaker {
         mut id: TradingPairID,
         mut amount_a: u128,
         mut amount_b: u128,
+        buy_min: Option<u128>,
         simulate: bool,
         CallContext { ref sender }: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
@@ -367,8 +380,6 @@ impl ConstantFunctionMarketMaker {
         let id = ConstantFunctionMarketMakerPair::ensure(game, id);
         let mkt = &game.swap.markets[&id];
         let tokens: &mut TokenRegistry = &mut game.tokens;
-        tokens[id.asset_a].transaction();
-        tokens[id.asset_b].transaction();
         if !(tokens[id.asset_a].balance_check(sender) >= amount_a
             && tokens[id.asset_b].balance_check(sender) >= amount_b)
         {
@@ -383,36 +394,58 @@ impl ConstantFunctionMarketMaker {
             ));
         }
 
+        let (buying, selling, sell_amt) = match (amount_a, amount_b) {
+            (0, b) => (id.asset_a, id.asset_b, b),
+            (a, 0) => (id.asset_b, id.asset_a, a),
+            _ => panic!("Expected one to be 0"),
+        };
+
         let (
             asset_player_purchased,
             amount_player_purchased,
             asset_player_sold,
             amount_player_sold,
         ) = {
-            let asset_a_name = tokens[id.asset_a].nickname().unwrap();
-            let asset_b_name = tokens[id.asset_b].nickname().unwrap();
-            tokens[id.asset_b].transaction();
+            let asset_buying_name = tokens[buying].nickname().unwrap();
+            let asset_selling_name = tokens[selling].nickname().unwrap();
             // if a is zero, a is token being "purchased"
-            if amount_a == 0 {
-                // the amount player receives of a
-                let new_amount_a = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
-                if !simulate {
-                    let _ = tokens[id.asset_b].transfer(sender, &mkt.id, amount_b);
-                    let _ = tokens[id.asset_a].transfer(&mkt.id, sender, new_amount_a);
+            // the amount player receives of a
+
+            let mkt_qty_selling = tokens[selling].balance_check(&mkt.id);
+            let mkt_qty_buying = tokens[buying].balance_check(&mkt.id);
+
+            if let Some(min) = buy_min {
+                if mkt_qty_buying < min {
+                    return Err(TradeError::InsufficientTokens(
+                        "Not Enough Liquidity to Buy Min".into(),
+                    ));
                 }
-                (asset_a_name, new_amount_a, asset_b_name, amount_b)
-            } else {
-                // otherwise b is token being "purchased"
-                let new_amount_b = (mkt.amt_b(tokens) * amount_a) / mkt.amt_a(tokens);
-                if !simulate {
-                    let _ = tokens[id.asset_a].transfer(sender, &mkt.id, amount_a);
-                    let _ = tokens[id.asset_b].transfer(&mkt.id, sender, new_amount_b);
-                }
-                (asset_b_name, new_amount_b, asset_a_name, amount_a)
             }
+            let k = mkt_qty_buying * mkt_qty_selling;
+
+            // mkt_qty_selling * mkt_qty_buying = k
+            // mkt_qty_selling + sell_amt * mkt_qty_buying - buy_amt = k
+            // mkt_qty_selling + sell_amt * mkt_qty_buying - buy_amt = mkt_qty_selling * mkt_qty_buying
+            // mkt_qty_buying - buy_amt = (mkt_qty_selling * mkt_qty_buying) / (mkt_qty_selling + sell_amt)
+            // - buy_amt = (mkt_qty_selling * mkt_qty_buying) / (mkt_qty_selling + sell_amt) - mkt_qty_buying
+            // buy_amt = mkt_qty_buying - (mkt_qty_selling * mkt_qty_buying) / (mkt_qty_selling + sell_amt)
+            let bought_amount = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
+            let buy_amt = mkt_qty_buying - (k / (mkt_qty_selling + sell_amt));
+            if let Some(min) = buy_min {
+                if bought_amount < min {
+                    return Err(TradeError::MarketSlipped);
+                }
+            }
+            if !simulate {
+                tokens[buying].transaction();
+                tokens[selling].transaction();
+                let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
+                let _ = tokens[buying].transfer(&mkt.id, sender, buy_amt);
+                tokens[buying].transaction();
+                tokens[selling].transaction();
+            }
+            (asset_buying_name, buy_amt, asset_selling_name, sell_amt)
         };
-        tokens[id.asset_a].end_transaction();
-        tokens[id.asset_b].end_transaction();
 
         Ok(TradeOutcome {
             trading_pair: id,
