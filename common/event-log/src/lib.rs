@@ -1,9 +1,8 @@
-use std::{error::Error, fs::Permissions, path::PathBuf, sync::Arc};
+use std::{error::Error, path::PathBuf, sync::Arc};
 
-use attest_util::ensure_dir;
+use attest_util::{ensure_dir, CrossPlatformPermissions};
 use connection::EventLog;
 use rusqlite::Connection;
-use std::os::unix::fs::PermissionsExt;
 
 pub mod connection;
 pub mod db_handle;
@@ -19,7 +18,8 @@ pub async fn setup_db_at(dir: PathBuf, name: &str) -> Result<EventLog, Box<dyn E
         dir.display(),
         name
     );
-    let dir: PathBuf = ensure_dir(dir, Some(Permissions::from_mode(0o700))).await?;
+    let dir: PathBuf =
+        ensure_dir(dir, CrossPlatformPermissions::unix_only_permissions(0o700)).await?;
     let mut db_file = dir.clone();
     db_file.push(name);
     db_file.set_extension("sqlite3");

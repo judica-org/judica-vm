@@ -14,6 +14,7 @@ use crate::{
 };
 use attest_messages::{CanonicalEnvelopeHash, Envelope};
 use attest_util::bitcoin::BitcoinConfig;
+use attest_util::CrossPlatformPermissions;
 use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use reqwest::Client;
@@ -99,7 +100,9 @@ async fn create_test_config(quits: &mut Vec<AppShutdown>, test_id: u8) -> (AppSh
     use sapio_bitcoin::hashes::hex::ToHex;
     dir.push(format!("test-rust-{}", bytes.to_hex()));
     tracing::debug!("Using tmpdir: {}", dir.display());
-    let dir = attest_util::ensure_dir(dir, None).await.unwrap();
+    let dir = attest_util::ensure_dir(dir, CrossPlatformPermissions::whatever())
+        .await
+        .unwrap();
     let timer_override = PeerServicesTimers::scaled_default(0.001);
     let config = Config {
         bitcoin: btc_config.clone(),

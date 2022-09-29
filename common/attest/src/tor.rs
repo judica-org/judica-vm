@@ -1,10 +1,7 @@
 use crate::{configuration::TorConfig, globals::Globals};
-use attest_util::{ensure_dir, get_hidden_service_hostname, INFER_UNIT};
+use attest_util::{ensure_dir, get_hidden_service_hostname, CrossPlatformPermissions, INFER_UNIT};
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
-use std::{
-    error::Error, fmt::Display, fs::Permissions, os::unix::prelude::PermissionsExt, path::PathBuf,
-    sync::Arc,
-};
+use std::{error::Error, fmt::Display, fs::Permissions, path::PathBuf, sync::Arc};
 use tokio::{spawn, sync::Notify, task::JoinHandle};
 
 #[derive(Debug)]
@@ -24,16 +21,20 @@ impl TorConfig {
     async fn root_dir(&self) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
         let mut buf = self.directory.clone();
         buf.push("onion");
-        Ok(ensure_dir(buf, Some(Permissions::from_mode(0o700)))
-            .await
-            .map_err(|e| format!("{}", e))?)
+        Ok(
+            ensure_dir(buf, CrossPlatformPermissions::unix_only_permissions(0o700))
+                .await
+                .map_err(|e| format!("{}", e))?,
+        )
     }
     async fn hidden_service_dir(&self) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
         let mut p = self.root_dir().await?;
         p.push("chatserver");
-        Ok(ensure_dir(p, Some(Permissions::from_mode(0o700)))
-            .await
-            .map_err(|e| format!("{}", e))?)
+        Ok(
+            ensure_dir(p, CrossPlatformPermissions::unix_only_permissions(0o700))
+                .await
+                .map_err(|e| format!("{}", e))?,
+        )
     }
     pub async fn get_hostname(&self) -> Result<(String, u16), Box<dyn Error + Send + Sync>> {
         let hidden_service_dir = self.hidden_service_dir().await?;
