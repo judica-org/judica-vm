@@ -145,8 +145,8 @@ function NewGame() {
   return <div>
     {view_flash && <h4>{view_flash}</h4>}
     {elts}
-    <input type="number" min={0} onChange={(ev) => set_amount(ev.target.valueAsNumber)}></input>
-    <input type="number" min={0} onChange={(ev) => set_finish_time(ev.target.valueAsNumber)}></input>
+    <input placeholder={"start amount"} type="number" min={0} onChange={(ev) => set_amount(ev.target.valueAsNumber)}></input>
+    <input placeholder={"finish time (ms)"} type="number" min={0} onChange={(ev) => set_finish_time(ev.target.valueAsNumber)}></input>
     <button onClick={(ev) => set_ct(ct + 1)}>+</button>
     <button onClick={(ev) => set_ct(Math.max(ct - 1, 1))}>-</button>
     <button onClick={handle_click}>New Game</button>
