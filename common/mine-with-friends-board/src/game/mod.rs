@@ -42,7 +42,6 @@ use crate::MoveEnvelope;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use tracing::trace;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -52,6 +51,7 @@ use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
 use tracing::info;
+use tracing::trace;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct UXUserInventory {
