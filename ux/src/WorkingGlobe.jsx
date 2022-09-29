@@ -6,7 +6,6 @@ import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent, Icon } from '@mui/material';
 import { emit } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
-import { Key } from '@mui/icons-material';
 const { useState, useEffect } = React;
 
 const stub_plant_data = [{
@@ -41,6 +40,15 @@ const stub_plant_data = [{
     watts: 23795,
 }];
 
+const memo_colors = {};
+function memoized_color(name) {
+    const color = memo_colors[name];
+    if (color)
+        return color;
+    else
+        memo_colors[name] = `#${Math.round(Math.random() * Math.pow(2, 24)).toString(16).padStart(6, '0')}`;
+    return memo_colors[name];
+}
 export default () => {
     const [power_plants, set_power_plants] = useState([]); // use empty list for now so it will render
     const [countries, setCountries] = useState([]);
@@ -103,9 +111,7 @@ export default () => {
                         hexPolygonsData={countries.features}
                         hexPolygonResolution={3}
                         hexPolygonMargin={0.3}
-                        hexPolygonColor={
-                            () => `#${Math.round(Math.random() * Math.pow(2, 24)).toString(16).padStart(6, '0')}`
-                        }
+                        hexPolygonColor={(accessor) => memoized_color(accessor.properties.NAME)}
                         onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
                             setLocation({ lat, lng })
                             console.log(['globe-click'], { lat, lng });
