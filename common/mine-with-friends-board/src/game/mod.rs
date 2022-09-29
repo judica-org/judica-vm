@@ -42,6 +42,7 @@ use crate::MoveEnvelope;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
+use tracing::trace;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -441,6 +442,7 @@ impl GameBoard {
         self.process_ticks();
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
+        trace!(?mv, "Attempting Inner Move");
         self.play_inner(mv, from)?;
         info!("Move Successfully Made");
         Ok(())

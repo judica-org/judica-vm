@@ -77,8 +77,8 @@ pub struct RawSequencer<M>
 where
     M: AttestEnvelopable,
 {
-    sequencer_envelopes: Vec<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>>,
-    msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
+    pub sequencer_envelopes: Vec<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>>,
+    pub msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
 }
 
 #[derive(Debug)]
@@ -144,8 +144,8 @@ impl<M: AttestEnvelopable> TryFrom<RawSequencer<M>> for OfflineSequencer<M> {
 #[schemars(with = "RawSequencer<M>")]
 #[serde(bound = "M: AttestEnvelopable")]
 pub struct OfflineSequencer<M: AttestEnvelopable> {
-    batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
-    msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
+    pub batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
+    pub msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
 }
 #[derive(Debug)]
 pub enum SequenceingError<T> {
