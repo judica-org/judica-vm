@@ -1,0 +1,16 @@
+name: Every night, tag a nightly branch
+
+on:
+  schedule:
+  - cron: '00 7 * * *'
+jobs:
+  nightly-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          custom_tag: "v0.0+${{ github.event.repository.updated_at}}-master-nightly"
