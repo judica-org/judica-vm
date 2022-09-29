@@ -7,6 +7,7 @@
     flex-direction: row;
     justify-content: space-evenly;
     padding: 1em;
+    flex-basis: 25%;
     /* display: grid;
     grid-template-columns: 1fr 1fr 1fr 1fr; */
 }

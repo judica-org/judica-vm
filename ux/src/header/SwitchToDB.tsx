@@ -3,14 +3,13 @@ import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
 
-export function SwitchToDB() {
+export function SwitchToDB(props: { db_name_loaded: [string, string | null] | null, set_db_name_loaded: ((arg: [string, string | null] | null) => void) }) {
   const [db_prefix, set_db_prefix] = React.useState<string | null>(null);
   const [db_appname, set_db_appname] = React.useState<string | null>(null);
-  const [db_name_loaded, set_db_name_loaded] = React.useState<[string, string | null]>(["", null]);
   React.useEffect(() => {
     const unlisten = appWindow.listen("db-connection", (ev) => {
       console.log(ev);
-      set_db_name_loaded(ev.payload as [string, string | null]);
+      props.set_db_name_loaded(ev.payload as ([string, string | null] | null));
     })
     return () => {
       (async () => {
@@ -26,7 +25,7 @@ export function SwitchToDB() {
     db_appname && tauri_host.switch_to_db(db_appname, db_prefix);
   };
   return <div>
-    <h6>Loaded DB:{db_name_loaded[0]} {db_name_loaded[1]}</h6>
+    <h6>Loaded DB:{props.db_name_loaded && `${props.db_name_loaded[0]} ${props.db_name_loaded[1]}`}</h6>
     <FormControl>
       <TextField label="FS Prefix" required={false} onChange={(ev) => set_db_prefix(ev.target.value)}></TextField>
       <TextField label="Name" required={true} onChange={(ev) => set_db_appname(ev.target.value)}></TextField>

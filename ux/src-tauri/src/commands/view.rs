@@ -8,7 +8,7 @@ use mine_with_friends_board::{
 };
 use sapio_bitcoin::XOnlyPublicKey;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::sync::futures::Notified;
 use tracing::info;
@@ -75,7 +75,7 @@ async fn game_synchronizer_inner_loop(
     d: &Database,
     window: &Window,
 ) -> Result<(), SyncError> {
-    let (appName, prefix, list_of_chains, user_keys) = {
+    let (db_connection, list_of_chains, user_keys) = {
         let l = d.state.lock().await;
         if let Some(g) = l.as_ref() {
             let handle = g.db.get_handle().await;
@@ -87,16 +87,17 @@ async fn game_synchronizer_inner_loop(
                 .map_err(|_| SyncError::DatabaseError)?
                 .into_keys()
                 .collect();
-            (g.name.clone(), g.prefix.clone(), v, keys)
+            (Some((g.name.clone(), g.prefix.clone())), v, keys)
         } else {
-            ("".into(), None, vec![], vec![])
+            (None, vec![], vec![])
         }
     };
     let signing_key = *signing_key.lock().await;
     let signing_key = signing_key.as_ref().ok_or(SyncError::NoSigningKey);
 
+    info!("Emitting Basic Info Updates");
     Ok(())
-        .and_then(|()| window.emit("db-connection", (appName, prefix)))
+        .and_then(|()| emit(window, "db-connection", db_connection))
         .and_then({
             let signing_key = signing_key.clone();
             |()| {
@@ -106,8 +107,8 @@ async fn game_synchronizer_inner_loop(
                 Ok(())
             }
         })
-        .and_then(|()| window.emit("available-sequencers", list_of_chains))
-        .and_then(|()| window.emit("user-keys", user_keys))
+        .and_then(|()| emit(window, "available-sequencers", list_of_chains))
+        .and_then(|()| emit(window, "user-keys", user_keys))
         .expect("All window emits should succeed");
 
     // No Idea why the borrow checker likes this, but it seems to be the case

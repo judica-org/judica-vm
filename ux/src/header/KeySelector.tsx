@@ -1,4 +1,5 @@
-import { Button, FormControl, MenuItem, Select } from '@mui/material';
+import { ContentCopy } from '@mui/icons-material';
+import { Button, FormControl, IconButton, MenuItem, Select } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import { FormEvent, useEffect, useState } from "react";
 import { tauri_host } from '../tauri_host';
@@ -51,13 +52,14 @@ export const KeySelector = () => {
   })
 
   return <div>
-    <h6>Signing With: {signing_key}</h6>
+    <h6>Select Player</h6>
     <FormControl >
-      <Select label="Public Key" onChange={(ev) => set_selected_key(ev.target.value as string)} value={selected_key}>
+      <Select label="Public Key" onChange={(ev) => set_selected_key(ev.target.value as string)} value={selected_key} renderValue={(v) => `${v.substring(0, 16)}...`}>
         <MenuItem value={""} selected={selected_key === ""}>No Key</MenuItem>
         {key_options}
       </Select>
       <Button variant="contained" type="submit" onClick={handle_submit}>Select This Key</Button>
+      {selected_key && <IconButton onClick={() => window.navigator.clipboard.writeText(selected_key)}><ContentCopy></ContentCopy></IconButton>}
     </FormControl>
   </div>
 }
