@@ -126,6 +126,7 @@ impl Sanitizable for Trade {
             amount_a,
             amount_b,
             sell,
+            cap,
         } = self;
         // TODO: Sanitize amounts?
         Ok(Self {
@@ -133,6 +134,7 @@ impl Sanitizable for Trade {
             amount_a,
             amount_b,
             sell,
+            cap,
         })
     }
 }

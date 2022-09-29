@@ -195,7 +195,7 @@ impl PowerPlantProducer {
                 asset_b: btc_token_ptr, // paying
             };
             // purchse material from mkt
-            ConstantFunctionMarketMaker::do_buy_trade(game, id, qty, 0, false, &ctx)
+            ConstantFunctionMarketMaker::do_buy_trade(game, id, qty, 0, None, false, &ctx)
                 .expect("buy trade may not fail here given earlier estimate");
         }
         // mint the power plant
@@ -228,7 +228,7 @@ impl PowerPlantProducer {
                 };
                 // simulate trade
                 let cost_in_btc =
-                    ConstantFunctionMarketMaker::do_buy_trade(game, id, *qty, 0, true, &ctx)?
+                    ConstantFunctionMarketMaker::do_buy_trade(game, id, *qty, 0, None, true, &ctx)?
                         .amount_player_sold;
                 Ok((human_name, *qty, cost_in_btc))
             })

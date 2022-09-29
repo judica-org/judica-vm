@@ -498,14 +498,15 @@ impl GameBoard {
                 amount_a,
                 amount_b,
                 sell,
+                cap,
             }) => {
                 if sell {
                     ConstantFunctionMarketMaker::do_sell_trade(
-                        self, pair, amount_a, amount_b, false, &context,
+                        self, pair, amount_a, amount_b, cap, false, &context,
                     )?;
                 } else {
                     ConstantFunctionMarketMaker::do_buy_trade(
-                        self, pair, amount_a, amount_b, false, &context,
+                        self, pair, amount_a, amount_b, cap, false, &context,
                     )?;
                 }
             }
@@ -735,6 +736,7 @@ impl GameBoard {
             pair,
             amount_a,
             amount_b,
+            None,
             true,
             &CallContext { sender },
         ) {
@@ -754,6 +756,7 @@ impl GameBoard {
             pair,
             amount_a,
             amount_b,
+            None,
             true,
             &CallContext { sender },
         ) {
