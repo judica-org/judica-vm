@@ -28,13 +28,30 @@ pub fn now() -> i64 {
 pub const INFER_UNIT: Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> = Ok(());
 pub type AbstractResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
+pub struct CrossPlatformPermissions(Option<Permissions>);
+impl CrossPlatformPermissions {
+    // Only sets permissions if on Unix
+    pub fn unix_only_permissions(mode: u32) -> CrossPlatformPermissions {
+        let mut perm = None;
+        #[cfg(unix)]
+        {
+            use std::os::unix::prelude::PermissionsExt;
+            perm = Some(Permissions::from_mode(mode));
+        }
+        CrossPlatformPermissions(perm)
+    }
+    pub fn whatever() -> Self {
+        CrossPlatformPermissions(None)
+    }
+}
+
 use std::fs::Permissions;
 #[cfg(feature = "tokio")]
 use std::{error::Error, path::PathBuf};
 #[cfg(feature = "tokio")]
 pub async fn ensure_dir(
     data_dir: PathBuf,
-    perms: Option<Permissions>,
+    CrossPlatformPermissions(perms): CrossPlatformPermissions,
 ) -> Result<PathBuf, Box<dyn Error>> {
     let dir = tokio::fs::create_dir_all(&data_dir).await;
     match dir.as_ref().map_err(std::io::Error::kind) {
