@@ -6,9 +6,11 @@ import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent, Icon } from '@mui/material';
 import { emit } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
+import { PowerPlant, UserPowerPlant } from './App';
 const { useState, useEffect } = React;
 
-const stub_plant_data = [{
+type Plant = (UserPowerPlant & { text: string });
+const stub_plant_data: Plant[] = [{
     coordinates: [46.818188, 8.227512],
     for_sale: false,
     hashrate: 90,
@@ -40,8 +42,8 @@ const stub_plant_data = [{
     watts: 23795,
 }];
 
-const memo_colors = {};
-function memoized_color(name) {
+const memo_colors: Record<string, string> = {};
+function memoized_color(name: string) {
     const color = memo_colors[name];
     if (color)
         return color;
@@ -50,16 +52,14 @@ function memoized_color(name) {
     return memo_colors[name];
 }
 export default () => {
-    const [power_plants, set_power_plants] = useState([]); // use empty list for now so it will render
-    const [countries, setCountries] = useState([]);
-    const [location, setLocation] = useState(null);
-    const [selected_plant, setSelectedPlant] = useState(null);
+    const [power_plants, set_power_plants] = useState<(UserPowerPlant & { text: string })[]>([]); // use empty list for now so it will render
+    const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
+    const [selected_plant, setSelectedPlant] = useState<Plant | null>(null);
 
     useEffect(() => {
-        setCountries(countries_data);
         const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
             console.log(['game-board-event'], ev);
-            set_power_plants(ev.payload)
+            set_power_plants(ev.payload as any)
         });
 
         return () => {
@@ -81,10 +81,11 @@ export default () => {
                         width={600}
                         height={600}
                         htmlElementsData={power_plants}
-                        htmlLat={d => d.coordinates[0]}
-                        htmlLng={d => d.coordinates[1]}
+                        htmlLat={(d: object) => (d as Plant).coordinates[0]}
+                        htmlLng={(d: object) => (d as Plant).coordinates[1]}
                         htmlAltitude={0.02}
-                        htmlElement={d => {
+                        htmlElement={(m: object) => {
+                            const d: Plant = m as Plant;
                             const svg = d.plant_type === 'Hydro' ? hydroSvg : (d.plant_type === 'Flare' ? fireSvg : solarSvg);
                             const el = document.createElement('div');
                             el.innerHTML = svg;
@@ -92,7 +93,7 @@ export default () => {
                             // can change size based on watts or hashrate
                             el.style.width = '50px';
                             // need this?
-                            el.style['pointer-events'] = 'auto';
+                            el.style.pointerEvents = 'auto';
                             el.style.cursor = 'pointer';
                             // set to 
                             el.onclick = () => setSelectedPlant(d);
@@ -108,10 +109,15 @@ export default () => {
                             return el;
                         }}
 
-                        hexPolygonsData={countries.features}
+                        hexPolygonsData={countries_data.features}
                         hexPolygonResolution={3}
                         hexPolygonMargin={0.3}
-                        hexPolygonColor={(accessor) => memoized_color(accessor.properties.NAME)}
+                        hexPolygonColor={(d: object) => {
+                            type R = typeof countries_data.features[number];
+                            let accessor: R = d as R;
+                            return memoized_color(accessor.properties.NAME);
+                        }
+                        }
                         onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
                             setLocation({ lat, lng })
                             console.log(['globe-click'], { lat, lng });
