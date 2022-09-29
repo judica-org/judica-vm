@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
+use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use tauri::{generate_handler, Invoke};
 
+use super::view::TradeType;
 use super::{view::SyncError, *};
 pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     game_synchronizer,
@@ -20,7 +22,18 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     list_my_users,
     mint_power_plant_cost,
     super_mint,
+    simulate_trade
 ];
+#[tauri::command]
+pub async fn simulate_trade(
+    pair: TradingPairID,
+    amounts: (u128, u128),
+    trade: TradeType,
+    signing_key: State<'_, SigningKeyInner>,
+    s: GameState<'_>,
+) -> Result<Result<TradeOutcome, TradeError>, SyncError> {
+    view::simulate_trade(pair, amounts, trade, signing_key, s).await
+}
 #[tauri::command]
 pub async fn game_synchronizer(
     window: Window,

@@ -8,7 +8,7 @@ use mine_with_friends_board::{
 };
 use sapio_bitcoin::XOnlyPublicKey;
 
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::sync::futures::Notified;
 use tracing::info;
@@ -253,7 +253,7 @@ pub(crate) async fn mint_power_plant_cost(
     Ok(current_prices)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub enum TradeType {
     #[serde(rename = "buy")]
     Buy,
