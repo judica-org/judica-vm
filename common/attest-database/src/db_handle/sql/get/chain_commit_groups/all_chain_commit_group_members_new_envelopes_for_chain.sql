@@ -21,5 +21,3 @@ FROM
     )
 WHERE
     Msg.message_id > :after
-GROUP BY
-    Msg.user_id

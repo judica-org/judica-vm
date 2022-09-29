@@ -1,9 +1,17 @@
 import React from 'react';
 import { DataGrid, GridActionsCellItem, GridRowParams, GridRowsProp } from '@mui/x-data-grid';
-import { Report } from '@mui/icons-material';
+import { Report, SelectAll } from '@mui/icons-material';
 import { Envelope } from './App';
 
-export function Tips(props: { tips: Array<{ envelope: Envelope; hash: string; }>; }) {
+type TipProps = {
+  tips: Array<{
+    envelope: Envelope;
+    hash: string;
+  }>;
+  set_genesis: (arg: null | string) => void;
+};
+
+export function Tips(props: TipProps) {
   const [view_flash, flash] = React.useState<null | string>(null);
   React.useEffect(() => {
     const t = setTimeout(() => view_flash && flash(null), 1000);
@@ -32,7 +40,8 @@ export function Tips(props: { tips: Array<{ envelope: Envelope; hash: string; }>
       field: 'actions',
       type: 'actions',
       getActions: (params: GridRowParams) => [
-        <GridActionsCellItem icon={<Report></Report>} onClick={() => console.log(["message"], JSON.parse(rows[params.id as number].msg))} label="Log Message" />
+        <GridActionsCellItem icon={<Report></Report>} onClick={() => console.log(["message"], JSON.parse(rows[params.id as number].msg))} label="Log Message" />,
+        <GridActionsCellItem icon={<SelectAll></SelectAll>} onClick={() => props.set_genesis(rows[params.id as number].genesis)} label="Set Genesis" />
       ]
     }
   ];

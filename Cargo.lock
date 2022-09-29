@@ -972,6 +972,8 @@ dependencies = [
  "axum",
  "directories",
  "game-host-messages",
+ "game-player-messages",
+ "game-sequencer",
  "libtor",
  "mine-with-friends-board",
  "openssl-sys",

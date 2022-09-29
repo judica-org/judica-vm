@@ -16,6 +16,7 @@ use std::time::Duration;
 use tokio::spawn;
 use tokio::sync::MutexGuard;
 use tokio::task::JoinHandle;
+use tracing::debug;
 use tracing::info;
 
 /// Game Server Handle
@@ -122,10 +123,13 @@ pub(crate) fn start_game(
             let mut game = g.lock().await;
 
             if let Some(game) = game.as_mut() {
-                game.board.play(game_move, s.to_hex());
-                // TODO: Maybe notify less often?
-                game.should_notify.notify_waiters();
-                info!("NOTIFYING Waiters of New State");
+                if let Err(err) = game.board.play(game_move, s.to_hex()) {
+                    debug!(reason=?err, "Rejected Move");
+                } else {
+                    // TODO: Maybe notify less often?
+                    game.should_notify.notify_waiters();
+                    info!("NOTIFYING Waiters of New State");
+                }
             }
         }
     })

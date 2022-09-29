@@ -241,6 +241,18 @@ where
             .collect();
         r
     }
+    pub fn messages_by_ids<'i, I, E, M>(&self, ids: I) -> Result<Vec<E>, rusqlite::Error>
+    where
+        I: Iterator<Item = &'i MessageID>,
+        E: AsRef<GenericEnvelope<M>> + FromSql,
+        M: AttestEnvelopable,
+    {
+        let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_BY_ID)?;
+        let r: Result<Vec<_>, _> = ids
+            .map(|id| stmt.query_row([id], |r| r.get::<_, E>(0)))
+            .collect();
+        r
+    }
 
     pub fn messages_by_id<E, M>(&self, id: MessageID) -> Result<E, rusqlite::Error>
     where

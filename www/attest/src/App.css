@@ -6,6 +6,14 @@
     height: 100%;
 }
 
+.TableGridChainCommit {
+    display: grid;
+    grid-template-areas: " commit-groups ";
+    grid-template-rows: 100%;
+    grid-gap: 10px;
+    height: 100vh;
+}
+
 .Main {
     height: 100%;
 }

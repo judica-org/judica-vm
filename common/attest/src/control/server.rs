@@ -64,6 +64,46 @@ async fn get_expensive_db_snapshot(
         Json(map),
     ))
 }
+
+#[derive(Serialize)]
+struct ChainCommitGroupInfo {
+    genesis: CanonicalEnvelopeHash,
+    members: Vec<Envelope>,
+    all_msgs: HashMap<CanonicalEnvelopeHash, Envelope>,
+}
+async fn chain_commit_groups(
+    Json(key): Json<CanonicalEnvelopeHash>,
+    db: Extension<MsgDB>,
+) -> Result<(Response<()>, Json<ChainCommitGroupInfo>), (StatusCode, String)> {
+    let (resp) = async {
+        let handle = db.0.get_handle().await;
+        let genesis = &handle.messages_by_hash::<_, Envelope, _>(std::iter::once(&key))?[0];
+        let groups = handle.get_all_chain_commit_groups_for_chain(key)?;
+        let group_members = handle.get_all_chain_commit_group_members_for_chain(key)?;
+        let group_tips = handle.messages_by_ids::<_, Envelope, _>(group_members.iter())?;
+        let mut map = Default::default();
+        let mut newer = 0;
+        handle
+        .get_all_chain_commit_group_members_new_envelopes_for_chain_into_inconsistent::<Envelope, WrappedJson>(
+            genesis.header().key(),
+            &mut newer,
+            &mut map)?;
+        Ok::<_, rusqlite::Error>(ChainCommitGroupInfo{
+            genesis: key,
+            members: group_tips,
+            all_msgs: map
+        })
+    }.await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok((
+        Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(())
+            .expect("Response<()> should always be valid"),
+        Json(resp),
+    ))
+}
 async fn get_status(
     g: Extension<Arc<Globals>>,
     db: Extension<MsgDB>,
@@ -280,6 +320,18 @@ pub async fn run(
                 get(get_status).layer(
                     CorsLayer::new()
                         .allow_methods([Method::GET, Method::OPTIONS])
+                        .allow_headers([
+                            reqwest::header::ACCESS_CONTROL_ALLOW_HEADERS,
+                            reqwest::header::CONTENT_TYPE,
+                        ])
+                        .allow_origin(Any),
+                ),
+            )
+            .route(
+                "/chain_commit_groups",
+                post(chain_commit_groups).layer(
+                    CorsLayer::new()
+                        .allow_methods([Method::POST, Method::OPTIONS])
                         .allow_headers([
                             reqwest::header::ACCESS_CONTROL_ALLOW_HEADERS,
                             reqwest::header::CONTENT_TYPE,

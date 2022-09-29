@@ -51,6 +51,7 @@ use tokens::TokenBase;
 use tokens::TokenPointer;
 use tokens::TokenRegistry;
 use tracing::info;
+use tracing::trace;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct UXUserInventory {
@@ -441,6 +442,7 @@ impl GameBoard {
         self.process_ticks();
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
+        trace!(?mv, "Attempting Inner Move");
         self.play_inner(mv, from)?;
         info!("Move Successfully Made");
         Ok(())
