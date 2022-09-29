@@ -21,14 +21,14 @@
     margin: 6px;
 }
 
-.MuiTabs-root{
+.MuiTabs-root {
     display: flex;
 }
 
-.DataDisplay{
-display: flex;
-flex-direction: column;
-flex-wrap: wrap;
+.DataDisplay {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
 }
 
 .MoveForm {
@@ -37,4 +37,9 @@ flex-wrap: wrap;
 
 .MoveForm>form {
     min-height: 20vh;
+}
+
+.PlantTypes {
+    display: flex;
+    flex-direction: row;
 }
