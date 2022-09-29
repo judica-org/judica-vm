@@ -3,10 +3,11 @@ import React from "react";
 import countries_data from "./countries.json";
 import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
-import { Card, CardHeader, CardContent, Icon } from '@mui/material';
+import { Card, CardHeader, CardContent, Icon, Divider } from '@mui/material';
 import { emit } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
 import { PowerPlant, UserPowerPlant } from './App';
+import { PlantTypeSelect } from './GlobeHelpers';
 const { useState, useEffect } = React;
 
 type Plant = (UserPowerPlant & { text: string });
@@ -55,6 +56,19 @@ export default () => {
     const [power_plants, set_power_plants] = useState<(UserPowerPlant & { text: string })[]>([]); // use empty list for now so it will render
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [selected_plant, setSelectedPlant] = useState<Plant | null>(null);
+    const [plantTypes, setPlantTypes] = React.useState({
+        'Hydro': true,
+        'Solar': true,
+        'Flare': true
+    });
+
+    const handlePlantTypeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        console.log(['plant-selection-change'], event)
+        setPlantTypes({
+            ...plantTypes,
+            [event.target.name]: event.target.checked,
+        })
+    }
 
     useEffect(() => {
         const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
@@ -69,6 +83,9 @@ export default () => {
         }
     }, [power_plants, location]);
 
+    const selectedPlantTypes = Object.entries(plantTypes).filter(([_type, selected]) => selected === true).map(([type, _selected]) => type);
+    const plants_by_type = power_plants.filter(({ plant_type }) => selectedPlantTypes.includes(plant_type));
+
     return <div className='globe-container'>
         <Card>
             <CardHeader title={'World Energy Grid'}
@@ -80,7 +97,7 @@ export default () => {
                         globeImageUrl={earth}
                         width={600}
                         height={600}
-                        htmlElementsData={power_plants}
+                        htmlElementsData={plants_by_type}
                         htmlLat={(d: object) => (d as Plant).coordinates[0]}
                         htmlLng={(d: object) => (d as Plant).coordinates[1]}
                         htmlAltitude={0.02}
@@ -125,6 +142,8 @@ export default () => {
                         }}
                     />
                 </div>
+                <Divider />
+                <PlantTypeSelect handleChange={handlePlantTypeChange} plantTypes={plantTypes} />
             </CardContent>
         </Card>
     </div>;
