@@ -12,6 +12,7 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
   const [action, set_action] = React.useState<RawMaterialsActions>(action_in);
   const [market, set_market] = React.useState<MaterialPriceDisplay>(market_in);
   const [trade_amt, set_trade_amt] = React.useState(0);
+  const [limit_pct, set_limit_pct] = React.useState(0);
   const [formula_result, set_formula_result] = React.useState("");
   const formula = async (a: number) => {
     if (typeof market.price_a_b !== "number")
@@ -92,10 +93,18 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
     if (trade_amt) {
 
       let outcome = await tauri_host.simulate_trade(market.trading_pair, [trade_amt, 0], action === "SELL" ? "sell" : "buy");
-      if (outcome.Ok) {
-      // TODO: Add a flexible Cap for Limit Orders, fixed to +/- 10%.
-        let cap = action === "SELL" ? outcome.Ok.amount_player_purchased * 0.9 : outcome.Ok.amount_player_sold * 1.1;
-        tauri_host.make_move_inner({ trade: { amount_a: trade_amt, amount_b: 0, pair: market.trading_pair, sell: action === "SELL", cap } }, "0");
+      let ok = outcome.Ok;
+      if (ok) {
+        // TODO: Add a flexible Cap for Limit Orders, fixed to +/- 10%.
+        let cap = action === "SELL" ? ok.amount_player_purchased * (1 - limit_pct) : ok.amount_player_sold * (1 + limit_pct);
+        if (confirm((action === "SELL" ?
+          `Sell Will trade ${ok.amount_player_sold} ${ok.asset_player_sold} for at least ${cap} ${ok.asset_player_purchased}` :
+          `Buy Will get ${ok.amount_player_purchased} ${ok.asset_player_purchased} for at most ${cap} ${ok.asset_player_sold}`)
+          + `\n${limit_pct * 100}% Protection from expected`
+        ))
+          tauri_host.make_move_inner({ trade: { amount_a: trade_amt, amount_b: 0, pair: market.trading_pair, sell: action === "SELL", cap } }, "0");
+      } else {
+        alert("Trade will not succeed, " + JSON.stringify(outcome.Err!))
       }
     }
   };
@@ -115,6 +124,7 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
           <Button type="submit" onClick={handle_click}>{action}</Button>
           <Button onClick={() => flip_market()}>Flip Market</Button>
           <Button onClick={() => set_action(opposite_action())}>Switch To {opposite_action()} </Button>
+          <TextField label={"Limit (e.g. 10 => 10%)"} type="number" value={limit_pct} onChange={(ev) => { set_limit_pct(parseFloat(ev.target.value)) }}></TextField>
         </FormControl>
       </div>
     </CardContent>
