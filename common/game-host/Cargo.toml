@@ -32,6 +32,10 @@ features=['use-serde', 'rand']
 
 [dependencies.game-host-messages]
 path = "../game-host-messages"
+[dependencies.game-player-messages]
+path = "../game-player-messages"
+[dependencies.game-sequencer]
+path = "../game-sequencer"
 
 [dependencies.libtor]
 version = "47.7.0+0.4.7.x"
