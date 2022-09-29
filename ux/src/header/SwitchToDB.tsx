@@ -3,20 +3,9 @@ import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
 
-export function SwitchToDB(props: { db_name_loaded: [string, string | null] | null, set_db_name_loaded: ((arg: [string, string | null] | null) => void) }) {
+export function SwitchToDB(props: { db_name_loaded: [string, string | null] | null}) {
   const [db_prefix, set_db_prefix] = React.useState<string | null>(null);
   const [db_appname, set_db_appname] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    const unlisten = appWindow.listen("db-connection", (ev) => {
-      console.log(ev);
-      props.set_db_name_loaded(ev.payload as ([string, string | null] | null));
-    })
-    return () => {
-      (async () => {
-        (await unlisten)()
-      })();
-    }
-  });
 
 
   const handle_submit = (ev: React.FormEvent<HTMLButtonElement>): void => {

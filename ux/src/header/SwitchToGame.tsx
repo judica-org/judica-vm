@@ -4,36 +4,17 @@ import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
 
-export function SwitchToGame() {
-  const [which_game, set_which_game] = React.useState<string>("");
+export interface SwitchToGameProps {
+  available_sequencers: [string, string][];
+  which_game_loaded: null | string;
+};
 
-  const [which_game_loaded, set_which_game_loaded] = React.useState<string | null>(null);
-  const [available_sequencers, set_available_sequencers] = React.useState<Array<[string, string]>>([]);
-  React.useEffect(() => {
-    const unlisten = appWindow.listen("available-sequencers", (ev) => {
-      console.log(ev.payload);
-      set_available_sequencers(ev.payload as typeof available_sequencers);
-    })
-    return () => {
-      (async () => {
-        (await unlisten)()
-      })();
-    }
-  });
-  React.useEffect(() => {
-    const unlisten = appWindow.listen("host-key", (ev) => {
-      console.log(ev.payload);
-      set_which_game_loaded(ev.payload as string);
-    })
-    return () => {
-      (async () => {
-        (await unlisten)()
-      })();
-    }
-  });
+export function SwitchToGame({ available_sequencers, which_game_loaded }: SwitchToGameProps) {
+  const [which_game, set_which_game] = React.useState<string>(which_game_loaded??"");
+
   let options = available_sequencers.map(([pkey, name]) => {
     return <MenuItem value={pkey} key={pkey}>
-      {name}
+      {name} -- {pkey.substring(0, 16)}...
     </MenuItem>;
   });
   const handle_submit = (ev: React.FormEvent<HTMLButtonElement>): void => {

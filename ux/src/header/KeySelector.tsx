@@ -4,40 +4,12 @@ import { appWindow } from '@tauri-apps/api/window';
 import { FormEvent, useEffect, useState } from "react";
 import { tauri_host } from '../tauri_host';
 
-export const KeySelector = () => {
-  const [selected_key, set_selected_key] = useState<string>("");
-  const [signing_key, set_signing_key] = useState<string | null>(null);
-  const [available_keys, set_available_keys] = useState<string[]>([]);
-
-  useEffect(() => {
-    const unlisten = appWindow.listen("user-keys", (ev) => {
-      console.log(["available keys"], ev.payload);
-      const new_keys = ev.payload as typeof available_keys;
-      // reset selected key
-      if (selected_key && new_keys.indexOf(selected_key) == -1) {
-        tauri_host.set_signing_key(null);
-        set_selected_key("");
-      }
-      set_available_keys(new_keys);
-    })
-    return () => {
-      (async () => {
-        (await unlisten)()
-      })();
-    }
-  }, []);
-
-  useEffect(() => {
-    const unlisten = appWindow.listen("signing-key", (ev) => {
-      console.log(["signing-key"], ev.payload);
-      set_signing_key(ev.payload as string)
-    })
-    return () => {
-      (async () => {
-        (await unlisten)()
-      })();
-    }
-  }, []);
+export interface KeySelectorProps {
+  signing_key: string | null,
+  available_keys: string[]
+};
+export function KeySelector({ signing_key, available_keys }: KeySelectorProps) {
+  const [selected_key, set_selected_key] = useState<string>(signing_key??"");
 
   const handle_submit = (ev: FormEvent<HTMLButtonElement>): void => {
     ev.preventDefault();
@@ -47,6 +19,12 @@ export const KeySelector = () => {
     else tauri_host.set_signing_key(null);
   };
 
+  // reset selected key
+  // reset selected key
+  // if (selected_key && new_keys.indexOf(selected_key) == -1) {
+  //   tauri_host.set_signing_key(null);
+  //   set_selected_key("");
+  // }
   let key_options = available_keys.map((key) => {
     return <MenuItem value={key} selected={key === selected_key} key={key}>{key}</MenuItem>;
   })
@@ -59,7 +37,7 @@ export const KeySelector = () => {
         {key_options}
       </Select>
       <Button variant="contained" type="submit" onClick={handle_submit}>Select This Key</Button>
-      {selected_key && <IconButton onClick={() => window.navigator.clipboard.writeText(selected_key)}><ContentCopy></ContentCopy></IconButton>}
+      {signing_key && <IconButton onClick={() => window.navigator.clipboard.writeText(signing_key)}><ContentCopy></ContentCopy></IconButton>}
     </FormControl>
   </div>
 }
