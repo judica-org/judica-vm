@@ -86,11 +86,18 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
   if (typeof market.price_a_b !== "number")
     return null;
 
-  const handle_click = (ev: React.MouseEvent<HTMLButtonElement, MouseEvent>): void => {
+  const handle_click = async (ev: React.MouseEvent<HTMLButtonElement, MouseEvent>): Promise<void> => {
 
     ev.preventDefault();
-    if (trade_amt)
-      tauri_host.make_move_inner({ trade: { amount_a: trade_amt, amount_b: 0, pair: market.trading_pair, sell: action === "SELL" } }, "0");
+    if (trade_amt) {
+
+      let outcome = await tauri_host.simulate_trade(market.trading_pair, [trade_amt, 0], action === "SELL" ? "sell" : "buy");
+      if (outcome.Ok) {
+      // TODO: Add a flexible Cap for Limit Orders, fixed to +/- 10%.
+        let cap = action === "SELL" ? outcome.Ok.amount_player_purchased * 0.9 : outcome.Ok.amount_player_sold * 1.1;
+        tauri_host.make_move_inner({ trade: { amount_a: trade_amt, amount_b: 0, pair: market.trading_pair, sell: action === "SELL", cap } }, "0");
+      }
+    }
   };
   // for creater should be extracted out into a form util
   return <Card>

@@ -29,6 +29,7 @@ export interface Trade {
   amount_b: number
   pair: string
   sell: boolean
+  cap?: number
   [k: string]: unknown
 }
 /**
