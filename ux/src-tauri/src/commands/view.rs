@@ -4,7 +4,7 @@ use crate::{Database, Game, GameState, PrintOnDrop, SigningKeyInner};
 
 use mine_with_friends_board::{
     nfts::{instances::powerplant::PlantType, sale::UXForSaleList, NftPtr, UXPlantData},
-    tokens::token_swap::TradeError,
+    tokens::token_swap::{TradeError, TradeOutcome, TradingPairID},
 };
 use sapio_bitcoin::XOnlyPublicKey;
 
@@ -251,4 +251,38 @@ pub(crate) async fn mint_power_plant_cost(
             .get_power_plant_cost(scale, location, plant_type, signing_key.to_string())?;
 
     Ok(current_prices)
+}
+
+#[derive(Serialize)]
+pub enum TradeType {
+    #[serde(rename = "buy")]
+    Buy,
+    #[serde(rename = "sell")]
+    Sell,
+}
+/// returns qty of each material necessary to mint plant of given type and size
+pub(crate) async fn simulate_trade(
+    pair: TradingPairID,
+    amounts: (u128, u128),
+    trade: TradeType,
+    signing_key: State<'_, SigningKeyInner>,
+    s: GameState<'_>,
+) -> Result<Result<TradeOutcome, TradeError>, SyncError> {
+    let sk = signing_key.lock().await;
+    let sk = &sk.ok_or(SyncError::NoSigningKey)?;
+    let sk = sk.to_string();
+    let mut game = s.inner().lock().await;
+    let game = game.as_mut().ok_or(SyncError::NoGame)?;
+    let sender = game
+        .board
+        .get_user_id(&sk)
+        .ok_or(SyncError::KeyUnknownByGame)?;
+    Ok(match trade {
+        TradeType::Buy => game
+            .board
+            .simulate_buy_trade(pair, amounts.0, amounts.1, sender),
+        TradeType::Sell => game
+            .board
+            .simulate_sell_trade(pair, amounts.0, amounts.1, sender),
+    })
 }
