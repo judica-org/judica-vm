@@ -2,8 +2,8 @@ import React from 'react';
 import logo from './logo.svg';
 import './App.css';
 import { GridColDef, GridColumns, GridToolbarContainer } from '@mui/x-data-grid';
-import { Menu, Newspaper } from '@mui/icons-material';
-import { AppBar, Box, Container, IconButton, Toolbar, Typography } from '@mui/material';
+import { CopyAll, Menu, Newspaper } from '@mui/icons-material';
+import { AppBar, Box, Button, Container, IconButton, Tab, Tabs, Toolbar, Typography } from '@mui/material';
 import { AddPeer } from './AddPeer';
 import { TaskSet } from './TaskSet';
 import { Peers } from './Peers';
@@ -12,13 +12,21 @@ import { Tips } from './Tips';
 import { Users } from './Users';
 import { MakeGenesis } from './MakeGenesis';
 import { ChangeService } from './ChangeService';
+import { ChainCommitGroups } from './ChainCommitGroups';
 
+function Panel({ my_id, current_tab, children }: React.PropsWithChildren<{ my_id: string, current_tab: string }>) {
+  return <div hidden={my_id !== current_tab}>
+    {my_id === current_tab && children}
+  </div>
+}
 
 function App() {
   const start = new URL(global.location.toString());
   const init = start.searchParams.get("service_url");
   const [url, set_url] = React.useState<null | string>(init);
   const [status, set_status] = React.useState<null | any>(null);
+  const [genesis, set_genesis] = React.useState<null | string>(null);
+  const [current_tab, set_current_tab] = React.useState<"main" | "commit_groups">("main");
   const peer = React.useMemo(() =>
     <AddPeer root={url}></AddPeer>
     , [url]);
@@ -46,6 +54,7 @@ function App() {
       }
     }
     , [url])
+  const status_url = status && status.hidden_service_url ? `${status.hidden_service_url[0]}:${status.hidden_service_url[1]}` : null;
   return (
     <Box className="App">
       {peer}
@@ -59,32 +68,61 @@ function App() {
           </Typography>
           <ChangeService set_url={set_url} ></ChangeService>
           <Typography variant="body2" color="inherit" component="div" style={{ paddingLeft: "10px" }}>
-            Tor: {status && status.hidden_service_url && status.hidden_service_url[0]}:{status && status.hidden_service_url[1]}
+            {status_url === null ? "Tor Disabled" :
+              <>
+                Tor: <code>{status_url}</code>
+                <IconButton onClick={() => { window.navigator.clipboard.writeText(status_url) }}><CopyAll></CopyAll></IconButton>
+              </>
+            }
           </Typography>
         </Toolbar>
       </AppBar>
       <Container maxWidth={"lg"} className="Main">
 
-        <div className="TableGrid">
 
-          <div style={{ gridArea: "peers" }}>
-            <Peers peers={status?.peers ?? []} root={url} toolbar_component={peer}></Peers>
-          </div>
-          <div style={{ gridArea: "tasks" }}>
-            {status && <TaskSet tasks={status.peer_connections}></TaskSet>}
-          </div>
-          <div style={{ gridArea: "tips" }}>
-            {status && <Tips tips={status.tips}></Tips>}
-          </div>
-          <div style={{ gridArea: "keys" }}>
-            {status && url && <Users users={status.all_users} url={url}></Users>}
-          </div>
-          <div style={{ gridArea: "all-msgs" }}>
-            {url ? <ExpensiveMsgDB url={url}></ExpensiveMsgDB> : <div></div>}
-          </div>
-        </div>
-      </Container>
-    </Box>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+
+          <Tabs onChange={(ev, t) => set_current_tab(t)} value={current_tab}>
+            <Tab value="main" label="Main"></Tab>
+            <Tab value="commit_groups" label="Commit Groups"></Tab>
+          </Tabs>
+        </Box>
+        <Box>
+
+          <Panel current_tab={current_tab} my_id={"main"}>
+
+            <div className="TableGrid">
+
+              <div style={{ gridArea: "peers" }}>
+                <Peers peers={status?.peers ?? []} root={url} toolbar_component={peer}></Peers>
+              </div>
+              <div style={{ gridArea: "tasks" }}>
+                {status && <TaskSet tasks={status.peer_connections}></TaskSet>}
+              </div>
+              <div style={{ gridArea: "tips" }}>
+                {status && <Tips tips={status.tips} set_genesis={(a) => { set_genesis(a); set_current_tab("commit_groups") }}></Tips>}
+              </div>
+              <div style={{ gridArea: "keys" }}>
+                {status && url && <Users users={status.all_users} url={url}></Users>}
+              </div>
+              <div style={{ gridArea: "all-msgs" }}>
+                {url ? <ExpensiveMsgDB url={url}></ExpensiveMsgDB> : <div></div>}
+              </div>
+
+            </div>
+          </Panel>
+
+          <Panel current_tab={current_tab} my_id={"commit_groups"}>
+            <div className="TableGridChainCommit">
+
+              <div style={{ gridArea: "commit-groups" }}>
+                {url && genesis ? <ChainCommitGroups url={url} genesis={genesis}></ChainCommitGroups> : <div></div>}
+              </div>
+            </div>
+          </Panel>
+        </Box>
+      </Container >
+    </Box >
   );
 }
 

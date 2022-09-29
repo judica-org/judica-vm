@@ -1,0 +1,6 @@
+.CCGGrid {
+    display: grid;
+    grid-template-areas: " header " "members" " all_msgs ";
+    grid-template-rows: 80px 0.25fr 1fr;
+    height: 100%;
+}
