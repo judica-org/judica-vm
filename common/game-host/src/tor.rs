@@ -1,4 +1,5 @@
 use attest_util::{ensure_dir, get_hidden_service_hostname, CrossPlatformPermissions};
+
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc};

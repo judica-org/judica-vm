@@ -245,173 +245,173 @@ async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Err
         &serde_json::from_value(config.contract_args)?,
     )?;
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    let accessor = evlog.get_accessor().await;
-    let key = &config.event_log.group;
-    let evlog_group_id = accessor.get_occurrence_group_by_key(key);
-    let evlog_group_id = evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?;
-    // This should be in notify_one mode, which means that only the db reader
-    // should be calling notified and wakers should call notify_one.
-    let new_synthetic_event = Arc::new(Notify::new());
-    let elp_evlog = evlog.clone();
-    let elp_new_synthetic_event = new_synthetic_event.clone();
-    tokio::spawn(async move {
-        universe::linearized::event_log_processor(
-            elp_evlog,
-            evlog_group_id.clone(),
-            tx,
-            elp_new_synthetic_event,
-        )
-        .await?;
-        OK_T
-    });
-    let tee_evlog = evlog.clone();
-    let tee_new_synthetic_event = new_synthetic_event.clone();
-    tokio::spawn(async move {
-        universe::observers::time::time_event_extractor(
-            tee_evlog,
-            evlog_group_id.clone(),
-            tee_new_synthetic_event,
-        )
-        .await?;
-        OK_T
-    });
-    let se_evlog = evlog.clone();
-    let se_new_synthetic_event = new_synthetic_event.clone();
-    tokio::spawn(async move {
-        universe::observers::sequencer::sequencer_extractor(
-            config.oracle_key,
-            msg_db,
-            se_evlog,
-            evlog_group_id,
-            se_new_synthetic_event,
-        )
-    });
+    // let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    // let accessor = evlog.get_accessor().await;
+    // let key = &config.event_log.group;
+    // let evlog_group_id = accessor.get_occurrence_group_by_key(key);
+    // let evlog_group_id = evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?;
+    // // This should be in notify_one mode, which means that only the db reader
+    // // should be calling notified and wakers should call notify_one.
+    // let new_synthetic_event = Arc::new(Notify::new());
+    // let elp_evlog = evlog.clone();
+    // let elp_new_synthetic_event = new_synthetic_event.clone();
+    // tokio::spawn(async move {
+    //     universe::linearized::event_log_processor(
+    //         elp_evlog,
+    //         evlog_group_id.clone(),
+    //         tx,
+    //         elp_new_synthetic_event,
+    //     )
+    //     .await?;
+    //     OK_T
+    // });
+    // let tee_evlog = evlog.clone();
+    // let tee_new_synthetic_event = new_synthetic_event.clone();
+    // tokio::spawn(async move {
+    //     universe::observers::time::time_event_extractor(
+    //         tee_evlog,
+    //         evlog_group_id.clone(),
+    //         tee_new_synthetic_event,
+    //     )
+    //     .await?;
+    //     OK_T
+    // });
+    // let se_evlog = evlog.clone();
+    // let se_new_synthetic_event = new_synthetic_event.clone();
+    // tokio::spawn(async move {
+    //     universe::observers::sequencer::sequencer_extractor(
+    //         config.oracle_key,
+    //         msg_db,
+    //         se_evlog,
+    //         evlog_group_id,
+    //         se_new_synthetic_event,
+    //     )
+    // });
 
-    let mut state = AppState::Uninitialized;
-    loop {
-        match rx.recv().await {
-            Some(Event::TransactionFinalized(_s, _tx)) => {}
-            Some(Event::SyntheticPeriodicActions(_t)) => {
-                if let Some(out) = bound_to {
-                    if let Ok(program) = obj.bind_psbt(
-                        *out,
-                        Default::default(),
-                        Rc::new(TxIndexLogger::new()),
-                        emulator.as_ref(),
-                    ) {
-                        for obj in program.program.values() {
-                            for tx in obj.txs.iter() {
-                                let SapioStudioFormat::LinkedPSBT {
-                                    psbt: _,
-                                    hex: _,
-                                    metadata,
-                                    output_metadata: _,
-                                    added_output_metadata: _,
-                                } = tx;
-                                if let Some(_data) =
-                                    metadata.simp.get(&AutoBroadcast::get_protocol_number())
-                                {
-                                    // TODO:
-                                    // - Send PSBT out for signatures?
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Some(Event::Initialization(x)) => {
-                if state.is_uninitialized() {
-                    let init: Result<Compiled, CompilationError> =
-                        module.call(&PathFragment::Root.into(), &x.1);
-                    if let Ok(c) = init {
-                        state = AppState::Initialized {
-                            args: x.1,
-                            contract: c,
-                            bound_to: None,
-                            psbt_db: Arc::new(PSBTDatabase::new()),
-                        }
-                    }
-                }
-            }
-            Some(Event::Rebind(o)) => match &mut state {
-                AppState::Uninitialized => todo!(),
-                AppState::Initialized {
-                    ref mut bound_to, ..
-                } => {
-                    bound_to.insert(o);
-                }
-            },
-            Some(Event::ProtocolMessage(e)) => match &state {
-                AppState::Initialized {
-                    ref args,
-                    ref contract,
-                    ref bound_to,
-                    psbt_db,
-                } => {
-                    // work on a clone so as to not have an effect if failed
-                    let mut new_args = args.clone();
-                    let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
-                    for api in contract
-                        .continuation_points()
-                        .filter(|api| {
-                            if let Some(recompiler) =
-                                api.simp.get(&simps::EventRecompiler::get_protocol_number())
-                            {
-                                if let Ok(recompiler) =
-                                    serde_json::from_value::<simps::EventRecompiler>(
-                                        recompiler.clone(),
-                                    )
-                                {
-                                    // Only pay attention to events that we are filtering for
-                                    if recompiler.filter == e.key {
-                                        return true;
-                                    }
-                                }
-                            }
-                            false
-                        })
-                        .filter(|api| {
-                            if let Some(schema) = &api.schema {
-                                let json_schema = serde_json::to_value(schema.clone())
-                                    .expect("RootSchema must always be valid JSON");
-                                jsonschema_valid::Config::from_schema(
-                                    // since schema is a RootSchema, cannot throw here
-                                    &json_schema,
-                                    Some(jsonschema_valid::schemas::Draft::Draft6),
-                                )
-                                .map(|validator| validator.validate(&e.data).is_ok())
-                                .unwrap_or(false)
-                            } else {
-                                false
-                            }
-                        })
-                    {
-                        // ensure that if specified, that we skip invalid messages
-                        save.effects
-                            .entry(SArc(api.path.clone()))
-                            .or_default()
-                            .insert(SArc(e.key.0.clone().into()), e.data.clone());
-                    }
+    // let mut state = AppState::Uninitialized;
+    // loop {
+    //     match rx.recv().await {
+    //         Some(Event::TransactionFinalized(_s, _tx)) => {}
+    //         Some(Event::SyntheticPeriodicActions(_t)) => {
+    //             if let Some(out) = bound_to {
+    //                 if let Ok(program) = obj.bind_psbt(
+    //                     *out,
+    //                     Default::default(),
+    //                     Rc::new(TxIndexLogger::new()),
+    //                     emulator.as_ref(),
+    //                 ) {
+    //                     for obj in program.program.values() {
+    //                         for tx in obj.txs.iter() {
+    //                             let SapioStudioFormat::LinkedPSBT {
+    //                                 psbt: _,
+    //                                 hex: _,
+    //                                 metadata,
+    //                                 output_metadata: _,
+    //                                 added_output_metadata: _,
+    //                             } = tx;
+    //                             if let Some(_data) =
+    //                                 metadata.simp.get(&AutoBroadcast::get_protocol_number())
+    //                             {
+    //                                 // TODO:
+    //                                 // - Send PSBT out for signatures?
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         Some(Event::Initialization(x)) => {
+    //             if state.is_uninitialized() {
+    //                 let init: Result<Compiled, CompilationError> =
+    //                     module.call(&PathFragment::Root.into(), &x.1);
+    //                 if let Ok(c) = init {
+    //                     state = AppState::Initialized {
+    //                         args: x.1,
+    //                         contract: c,
+    //                         bound_to: None,
+    //                         psbt_db: Arc::new(PSBTDatabase::new()),
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         Some(Event::Rebind(o)) => match &mut state {
+    //             AppState::Uninitialized => todo!(),
+    //             AppState::Initialized {
+    //                 ref mut bound_to, ..
+    //             } => {
+    //                 bound_to.insert(o);
+    //             }
+    //         },
+    //         Some(Event::ProtocolMessage(e)) => match &state {
+    //             AppState::Initialized {
+    //                 ref args,
+    //                 ref contract,
+    //                 ref bound_to,
+    //                 psbt_db,
+    //             } => {
+    //                 // work on a clone so as to not have an effect if failed
+    //                 let mut new_args = args.clone();
+    //                 let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
+    //                 for api in contract
+    //                     .continuation_points()
+    //                     .filter(|api| {
+    //                         if let Some(recompiler) =
+    //                             api.simp.get(&simps::EventRecompiler::get_protocol_number())
+    //                         {
+    //                             if let Ok(recompiler) =
+    //                                 serde_json::from_value::<simps::EventRecompiler>(
+    //                                     recompiler.clone(),
+    //                                 )
+    //                             {
+    //                                 // Only pay attention to events that we are filtering for
+    //                                 if recompiler.filter == e.key {
+    //                                     return true;
+    //                                 }
+    //                             }
+    //                         }
+    //                         false
+    //                     })
+    //                     .filter(|api| {
+    //                         if let Some(schema) = &api.schema {
+    //                             let json_schema = serde_json::to_value(schema.clone())
+    //                                 .expect("RootSchema must always be valid JSON");
+    //                             jsonschema_valid::Config::from_schema(
+    //                                 // since schema is a RootSchema, cannot throw here
+    //                                 &json_schema,
+    //                                 Some(jsonschema_valid::schemas::Draft::Draft6),
+    //                             )
+    //                             .map(|validator| validator.validate(&e.data).is_ok())
+    //                             .unwrap_or(false)
+    //                         } else {
+    //                             false
+    //                         }
+    //                     })
+    //                 {
+    //                     // ensure that if specified, that we skip invalid messages
+    //                     save.effects
+    //                         .entry(SArc(api.path.clone()))
+    //                         .or_default()
+    //                         .insert(SArc(e.key.0.clone().into()), e.data.clone());
+    //                 }
 
-                    new_args.context.effects = save.into();
-                    let new_state: Result<Compiled, CompilationError> =
-                        module.call(&PathFragment::Root.into(), &new_args);
-                    // TODO: Check that old_state is augmented by new_state
-                    if let Ok(c) = new_state {
-                        state = AppState::Initialized {
-                            args: new_args,
-                            contract: c,
-                            bound_to: *bound_to,
-                            psbt_db: psbt_db.clone(),
-                        }
-                    }
-                    // TODO: Make it so that faulty effects are ignored.
-                }
-            },
-            None => (),
-        }
-    }
+    //                 new_args.context.effects = save.into();
+    //                 let new_state: Result<Compiled, CompilationError> =
+    //                     module.call(&PathFragment::Root.into(), &new_args);
+    //                 // TODO: Check that old_state is augmented by new_state
+    //                 if let Ok(c) = new_state {
+    //                     state = AppState::Initialized {
+    //                         args: new_args,
+    //                         contract: c,
+    //                         bound_to: *bound_to,
+    //                         psbt_db: psbt_db.clone(),
+    //                     }
+    //                 }
+    //                 // TODO: Make it so that faulty effects are ignored.
+    //             }
+    //         },
+    //         None => (),
+    //     }
+    // }
 
     Ok(())
 }
