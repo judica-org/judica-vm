@@ -4,10 +4,10 @@ import countries_data from "./countries.json";
 import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent, Icon, Divider } from '@mui/material';
-import { emit } from '@tauri-apps/api/event';
+import { emit, Event } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
 import { PowerPlant, UserPowerPlant } from './App';
-import { PlantTypeSelect } from './GlobeHelpers';
+import { PlantOwnerSelect, PlantTypeSelect } from './GlobeHelpers';
 const { useState, useEffect } = React;
 
 type Plant = (UserPowerPlant & { text: string });
@@ -27,7 +27,7 @@ const stub_plant_data: Plant[] = [{
     hashrate: 327,
     id: 13436,
     miners: 206,
-    owner: 12345566,
+    owner: 9494384,
     plant_type: "Hydro",
     text: "Hydroelectric Plant",
     watts: 67897,
@@ -54,6 +54,8 @@ function memoized_color(name: string) {
 }
 export default () => {
     const [power_plants, set_power_plants] = useState<(UserPowerPlant & { text: string })[]>([]); // use empty list for now so it will render
+    const [owners, setOwners] = useState<number[]>([]);
+    const [selectedPlantOwners, setSelectedPlantOwners] = useState<number[]>([]); // default to all owners
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [selected_plant, setSelectedPlant] = useState<Plant | null>(null);
     const [plantTypes, setPlantTypes] = React.useState({
@@ -63,17 +65,35 @@ export default () => {
     });
 
     const handlePlantTypeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        console.log(['plant-selection-change'], event)
         setPlantTypes({
             ...plantTypes,
             [event.target.name]: event.target.checked,
         })
     }
 
+    const handleOwnersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        console.log(['owners-change-event'], event)
+        const number = parseInt(event.target.name);
+        if (selectedPlantOwners.includes(number)) {
+            setSelectedPlantOwners(selectedPlantOwners.filter((owner) => owner !== number));
+        } else {
+
+            setSelectedPlantOwners([...selectedPlantOwners, number]);
+        }
+    }
+
     useEffect(() => {
-        const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
-            console.log(['game-board-event'], ev);
-            set_power_plants(ev.payload as any)
+        const unlisten_power_plants = appWindow.listen("power-plants", (ev: Event<(UserPowerPlant & { text: string })[]>) => {
+            console.log(['power-plants-received'], ev);
+            let plant_owners: number[] = [];
+            ev.payload.forEach((plant) => {
+                if (!plant_owners.includes(plant.owner)) {
+                    plant_owners.push(plant.owner)
+                }
+            })
+            setOwners(plant_owners);
+            setSelectedPlantOwners(plant_owners)
+            set_power_plants(ev.payload);
         });
 
         return () => {
@@ -84,7 +104,7 @@ export default () => {
     }, [power_plants, location]);
 
     const selectedPlantTypes = Object.entries(plantTypes).filter(([_type, selected]) => selected === true).map(([type, _selected]) => type);
-    const plants_by_type = power_plants.filter(({ plant_type }) => selectedPlantTypes.includes(plant_type));
+    const plants_by_type = power_plants.filter(({ plant_type, owner }) => selectedPlantTypes.includes(plant_type) && selectedPlantOwners.includes(owner));
 
     return <div className='globe-container'>
         <Card>
@@ -144,6 +164,7 @@ export default () => {
                 </div>
                 <Divider />
                 <PlantTypeSelect handleChange={handlePlantTypeChange} plantTypes={plantTypes} />
+                <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={owners} selectedPlantOwners={selectedPlantOwners} />
             </CardContent>
         </Card>
     </div>;

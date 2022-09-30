@@ -2,7 +2,7 @@ import * as React from 'react';
 import FormGroup from '@mui/material/FormGroup';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
-import { orange, yellow } from '@mui/material/colors';
+import { lightGreen, orange, yellow } from '@mui/material/colors';
 import { Typography } from '@mui/material';
 
 export function PlantTypeSelect({ handleChange, plantTypes }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantTypes: { 'Hydro': boolean, 'Solar': boolean, 'Flare': boolean } }) {
@@ -28,4 +28,28 @@ export function PlantTypeSelect({ handleChange, plantTypes }: { handleChange: (e
       </FormGroup>
     </div>
   );
+}
+
+export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwners }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantOwners: number[], selectedPlantOwners: number[] }) {
+  // for each owner, add a checkbox.
+  return (
+    <div>
+      <Typography variant='h6'>Owners</Typography>
+      <FormGroup sx={{
+        flexDirection: 'row',
+        flexWrap: 'wrap'
+      }}>
+        {
+          plantOwners.map((owner) => {
+            return <FormControlLabel control={<Checkbox checked={selectedPlantOwners.includes(owner)} onChange={handleChange} name={`${owner}`} sx={{
+              color: lightGreen[800],
+              '&.Mui-checked': {
+                color: lightGreen[600],
+              },
+            }} />} label={owner} />
+          })
+        }
+      </FormGroup>
+    </div>
+  )
 }
