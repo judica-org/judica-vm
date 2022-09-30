@@ -79,7 +79,7 @@ impl Callback for SteelSmelter {
             &CallContext { sender: self.id },
         );
 
-        self.elapsed_time += self.adjusts_every;
+        self.elapsed_time = game.elapsed_time + self.adjusts_every;
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);
         if balance > 0 {
             game.callbacks.schedule(Box::new(self.clone()))

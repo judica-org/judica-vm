@@ -146,7 +146,7 @@ export type MaterialPriceDisplay = {
   asset_a: string;
   asset_b: string;
   display_asset: string,
-  price_a_b: number | 'No Market';
+  price_a_b_b_a: [number, number],
 }
 
 export type UserPowerPlant = PowerPlant & {
@@ -216,7 +216,7 @@ function App() {
       const transformed: MaterialPriceDisplay[] = materials_data.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b, display_asset }) => {
         return {
           trading_pair,
-          price_a_b: Math.round(mkt_qty_a / mkt_qty_b) || "No Market",
+          price_a_b_b_a: [mkt_qty_b / mkt_qty_a, mkt_qty_a / mkt_qty_b],
           asset_a: asset_a,
           asset_b: asset_b,
           display_asset

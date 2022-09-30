@@ -2,6 +2,7 @@
 use crate::game::GameBoard;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use tracing::trace;
 
 /// The registry of events. Events are processed in linear time order, then
 /// secondarily the order they are recieved
@@ -53,6 +54,7 @@ impl CallbackRegistry {
         std::mem::swap(&mut s.callbacks, &mut to_do);
         for (_k, v) in to_do {
             for mut x in v.into_iter() {
+                trace!(purpose = x.purpose(), "Game Board Running Action");
                 x.action(game);
             }
         }

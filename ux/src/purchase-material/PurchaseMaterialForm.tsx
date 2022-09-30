@@ -15,8 +15,6 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
   const [limit_pct, set_limit_pct] = React.useState(0);
   const [formula_result, set_formula_result] = React.useState("");
   const formula = async (a: number) => {
-    if (typeof market.price_a_b !== "number")
-      return null;
     switch (action) {
       // TODO: Approximate via an invoke, which is much better
       case "SELL": {
@@ -64,10 +62,7 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
       asset_a: market.asset_b,
       asset_b: market.asset_a,
       trading_pair: trading_pair_to_string(pair),
-      price_a_b:
-        typeof market.price_a_b === "number" ?
-          1 / market.price_a_b :
-          market.price_a_b,
+      price_a_b_b_a: [market.price_a_b_b_a[1], market.price_a_b_b_a[0]],
       display_asset: market.display_asset,
     };
     set_market(new_obj);
@@ -84,8 +79,6 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
     };
   }
 
-  if (typeof market.price_a_b !== "number")
-    return null;
 
   const handle_click = async (ev: React.MouseEvent<HTMLButtonElement, MouseEvent>): Promise<void> => {
 

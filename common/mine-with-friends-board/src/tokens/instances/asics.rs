@@ -2,6 +2,7 @@
 use std::cmp::min;
 
 use serde::Serialize;
+use tracing::{debug, trace};
 
 use crate::callbacks::Callback;
 use crate::entity::EntityID;
@@ -50,14 +51,20 @@ impl Callback for ASICProducer {
         };
 
         if self.first {
+            let start = self.total_units / 10;
+            let base = self.base_price * start;
+            trace!(
+                total_units = self.total_units,
+                start,
+                base,
+                "Initializing ASIC Market"
+            );
             {
                 let coin = &mut game.tokens[self.hash_asset];
                 coin.transaction();
                 coin.mint(&self.id, self.total_units);
                 coin.end_transaction();
             }
-            let start = self.total_units / 10;
-            let base = self.base_price * start;
             {
                 let coin = &mut game.tokens[self.price_asset];
                 coin.transaction();
@@ -76,7 +83,7 @@ impl Callback for ASICProducer {
         // the current price is above the current price, then sell enough to get
         // the price back to base_price.
         // Maybe worth implementing logic inside the swap contract directly for these.
-        ConstantFunctionMarketMaker::do_sell_trade(
+        match ConstantFunctionMarketMaker::do_sell_trade(
             game,
             pair,
             min(balance / 100, balance),
@@ -84,9 +91,14 @@ impl Callback for ASICProducer {
             None,
             false,
             &CallContext { sender: self.id },
-        );
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                debug!(error=?e, "Market Maker for ASIC Failed");
+            }
+        }
 
-        self.elapsed_time += self.adjusts_every;
+        self.elapsed_time = game.elapsed_time + self.adjusts_every;
         let balance = game.tokens[self.hash_asset].balance_check(&self.id);
         if balance > 0 {
             game.callbacks.schedule(Box::new(self.clone()))

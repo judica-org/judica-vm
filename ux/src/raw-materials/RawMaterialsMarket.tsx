@@ -22,7 +22,7 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
               <TableHead>
                 <TableRow>
                   <TableCell>Material</TableCell>
-                  <TableCell align="right">Price Per Kg</TableCell>
+                  <TableCell align="right">Price Per Unit</TableCell>
                   <TableCell align="right">Currency (token)</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
@@ -34,7 +34,7 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
                       <ConstructionIcon className='sale-factory-icon' fontSize={'medium'} />
                       <Typography>{material.display_asset}</Typography>
                     </TableCell>
-                    <TableCell align="right">{material.price_a_b}</TableCell>
+                    <TableCell align="right">1 to {material.price_a_b_b_a[0]}</TableCell>
                     <TableCell align="right">{material.asset_a} / {material.asset_b}</TableCell>
                     <TableCell align="right">
                       <FormModal title={"Buy Tokens"} action={"BUY"} market={material} />
