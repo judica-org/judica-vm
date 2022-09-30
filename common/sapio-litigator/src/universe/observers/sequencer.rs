@@ -1,10 +1,12 @@
 use attest_database::connection::MsgDB;
+use attest_messages::WrappedJson;
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
 use bitcoincore_rpc_async::bitcoin::hashes::hex::ToHex;
 use event_log::{
     connection::EventLog,
     db_handle::accessors::{occurrence::ToOccurrence, occurrence_group::OccurrenceGroupID},
 };
+use futures::stream::BoxStream;
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_sequencer::OnlineDBFetcher;
 use mine_with_friends_board::{game::GameBoard, MoveEnvelope};
@@ -22,6 +24,21 @@ use tokio::{
 use tracing::info;
 
 use crate::Event;
+
+pub fn attest_stream(
+    oracle_key: XOnlyPublicKey,
+    msg_db: MsgDB,
+) -> BoxStream<'static, (WrappedJson, XOnlyPublicKey)> {
+    let shutdown: Arc<AtomicBool> = Default::default();
+    let db_fetcher: Arc<OnlineDBFetcher<WrappedJson>> = OnlineDBFetcher::new(
+        shutdown.clone(),
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        oracle_key,
+        msg_db,
+    );
+    todo!()
+}
 
 pub async fn sequencer_extractor(
     oracle_key: XOnlyPublicKey,
@@ -67,6 +84,8 @@ pub async fn sequencer_extractor(
     let _game_task = {
         start_game(
             shutdown.clone(),
+            evlog.clone(),
+            evlog_group_id.clone(),
             new_game,
             game_sequencer.recieve_move.lock_owned().await,
         )
@@ -128,14 +147,27 @@ pub fn handle_psbts(
 // Play the moves one by one
 pub fn start_game(
     _shutdown: Arc<AtomicBool>,
+    evlog: EventLog,
+    evlog_group_id: OccurrenceGroupID,
     mut game: GameBoard,
     mut moves: OwnedMutexGuard<UnboundedReceiver<(MoveEnvelope, XOnlyPublicKey)>>,
-) -> JoinHandle<()> {
+) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
     spawn(async move {
         // TODO: Check which game the move is for?
         while let Some((game_move, s)) = moves.recv().await {
             info!(move_ = ?game_move, "New Move Recieved");
-            game.play(game_move, s.to_hex());
+            match game.play(game_move, s.to_hex()) {
+                Ok(()) => {
+                    let accessor = evlog.get_accessor().await;
+                    let o: &dyn ToOccurrence =
+                        &Event::ProtocolMessage((ruma_serde::to_canonical_value(game_move)?, s));
+                    accessor.insert_new_occurrence_now_from(evlog_group_id, o)?;
+                }
+                Err(()) => {
+                    todo!("Handle Invalid Moves in Attest Sequence Extractor")
+                }
+            }
         }
+        Ok(())
     })
 }

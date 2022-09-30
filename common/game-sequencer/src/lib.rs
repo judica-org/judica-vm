@@ -85,7 +85,7 @@ where
 pub enum SequencerError {
     BadMessageType,
     MessageFromWrongEntity,
-    MisingTip,
+    MissingTip,
     Gap,
     AuthenticationError,
 }
@@ -106,7 +106,7 @@ impl<M: AttestEnvelopable> TryFrom<RawSequencer<M>> for OfflineSequencer<M> {
             .first()
             .map(|v| v.header().height() == 0)
         {
-            return Err(SequencerError::MisingTip);
+            return Err(SequencerError::MissingTip);
         }
         if value
             .sequencer_envelopes
