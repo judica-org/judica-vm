@@ -268,18 +268,37 @@ impl GameBoard {
             chat_counter: 0,
             plant_prices,
         };
-        g.post_init();
         setup.setup_game(&mut g);
+        g.post_init();
         g
     }
 
     fn post_init(&mut self) {
-        // DEMO CODE:
-        // REMOVE BEFORE FLIGHT
+        {
+            let make = |id, g: &mut GameBoard| {
+                let btc = g.bitcoin_token_id;
+                ConstantFunctionMarketMakerPair::ensure(
+                    g,
+                    TradingPairID {
+                        asset_a: btc,
+                        asset_b: id,
+                    },
+                )
+            };
+            make(self.steel_token_id, self);
+            make(self.silicon_token_id, self);
+            make(self.concrete_token_id, self);
+            make(self.asic_token_id, self);
+        }
         self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10000000);
         self.tokens[self.real_sats_token_id].mint(&self.root_user, 30000);
         //
         let id = self.alloc();
+        self.callbacks.schedule(Box::new(PowerPlantEvent {
+            // Next Move
+            time: 0,
+            period: 11_003, // 11 seconds,
+        }));
         self.callbacks.schedule(Box::new(ASICProducer {
             id,
             total_units: 100_000,
@@ -323,6 +342,8 @@ impl GameBoard {
             elapsed_time: 0,
             first: true,
         }));
+        // DEMO CODE:
+        // REMOVE BEFORE FLIGHT
         // TODO: Initialize Power Plants?
         let nft_id = self.alloc();
         let demo_nft = self.nfts.add(Box::new(BaseNFT {
@@ -339,11 +360,6 @@ impl GameBoard {
             self.bitcoin_token_id,
             &self.nfts,
         );
-        self.callbacks.schedule(Box::new(PowerPlantEvent {
-            // Next Move
-            time: self.elapsed_time + 1,
-            period: 11_003, // 11 seconds,
-        }));
     }
     /// Creates a new EntityID
     pub fn alloc(&mut self) -> EntityID {
@@ -596,7 +612,7 @@ impl GameBoard {
 
     pub fn get_ux_materials_prices(&mut self) -> Vec<UXMaterialsPriceData> {
         let mut res = vec![];
-        for (id) in self.tokens.tokens.keys().cloned().collect::<Vec<_>>() {
+        for id in self.tokens.tokens.keys().cloned().collect::<Vec<_>>() {
             let ptr = self.tokens.tokens[&id].ptr();
             let nick = self.tokens.tokens[&id]
                 .nickname()
@@ -649,8 +665,8 @@ impl GameBoard {
                 id: *pointer,
                 coordinates: power_plant.coordinates,
                 for_sale,
-                miners: miners,
-                owner: owner,
+                miners,
+                owner,
                 plant_type: power_plant.plant_type.clone(),
                 watts: power_plant.watts,
                 hashrate: power_plant.compute_hashrate(self),

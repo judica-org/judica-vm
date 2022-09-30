@@ -32,7 +32,7 @@ impl ConstantFunctionMarketMakerPair {
         game.swap.markets.contains_key(&pair)
     }
     /// ensure makes sure that a given trading pair exists in the GameBoard
-    fn ensure(game: &mut GameBoard, mut pair: TradingPairID) -> TradingPairID {
+    pub fn ensure(game: &mut GameBoard, mut pair: TradingPairID) -> TradingPairID {
         pair.normalize();
         match game.swap.markets.entry(pair) {
             std::collections::btree_map::Entry::Vacant(_a) => {

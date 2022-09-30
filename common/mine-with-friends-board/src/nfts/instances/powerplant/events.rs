@@ -36,7 +36,7 @@ impl Callback for PowerPlantEvent {
         btc.end_transaction();
 
         // Reschedule
-        self.time += self.period;
+        self.time = game.elapsed_time + self.period;
         game.callbacks.schedule(Box::new(self.clone()));
     }
 
