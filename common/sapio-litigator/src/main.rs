@@ -36,7 +36,7 @@ mod universe;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Event {
     Initialization((Vec<u8>, CreateArgs<Value>)),
-    ExternalEvent(simps::Event),
+    ProtocolMessage((CanonicalJsonValue, XOnlyPublicKey)),
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
@@ -175,11 +175,11 @@ async fn init_contract_event_log(config: Config) -> Result<(), Box<dyn std::erro
     let accessor = evlog.get_accessor().await;
     let group = config.event_log.group;
     match accessor.get_occurrence_group_by_key(&group) {
-        Ok(a) => {
+        Ok(_) => {
             println!("Instance {} has already been initialized", group);
             return Ok(());
         }
-        Err(e) => {
+        Err(_) => {
             let location = config.contract_location.to_str().unwrap();
             println!("Initializing contract at {}", location);
             println!("Using arguments {}", config.contract_args);
@@ -195,7 +195,6 @@ async fn init_contract_event_log(config: Config) -> Result<(), Box<dyn std::erro
     }
 }
 
-// TODO: MAKE SURE WE ARE GRABBING CONTRACT PARAMETERS FROM BEGINNING OF EVENT LOG
 async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     // initialize db connection to the event log
     let evlog = config.get_event_log().await?;
@@ -245,7 +244,6 @@ async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Err
         &PathFragment::Root.into(),
         &serde_json::from_value(config.contract_args)?,
     )?;
-    for cont_point in obj.continuation_points() {}
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let accessor = evlog.get_accessor().await;
@@ -270,7 +268,7 @@ async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Err
     let tee_evlog = evlog.clone();
     let tee_new_synthetic_event = new_synthetic_event.clone();
     tokio::spawn(async move {
-        universe::extractors::time::time_event_extractor(
+        universe::observers::time::time_event_extractor(
             tee_evlog,
             evlog_group_id.clone(),
             tee_new_synthetic_event,
@@ -281,7 +279,7 @@ async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Err
     let se_evlog = evlog.clone();
     let se_new_synthetic_event = new_synthetic_event.clone();
     tokio::spawn(async move {
-        universe::extractors::sequencer::sequencer_extractor(
+        universe::observers::sequencer::sequencer_extractor(
             config.oracle_key,
             msg_db,
             se_evlog,
@@ -295,37 +293,27 @@ async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Err
         match rx.recv().await {
             Some(Event::TransactionFinalized(_s, _tx)) => {}
             Some(Event::SyntheticPeriodicActions(_t)) => {
-                match &mut state {
-                    AppState::Uninitialized => (),
-                    AppState::Initialized {
-                        args: _,
-                        contract,
-                        bound_to,
-                        psbt_db: _,
-                    } => {
-                        if let Some(out) = bound_to {
-                            if let Ok(program) = contract.bind_psbt(
-                                *out,
-                                Default::default(),
-                                Rc::new(TxIndexLogger::new()),
-                                emulator.as_ref(),
-                            ) {
-                                for obj in program.program.values() {
-                                    for tx in obj.txs.iter() {
-                                        let SapioStudioFormat::LinkedPSBT {
-                                            psbt: _,
-                                            hex: _,
-                                            metadata,
-                                            output_metadata: _,
-                                            added_output_metadata: _,
-                                        } = tx;
-                                        if let Some(_data) =
-                                            metadata.simp.get(&AutoBroadcast::get_protocol_number())
-                                        {
-                                            // TODO:
-                                            // - Send PSBT out for signatures?
-                                        }
-                                    }
+                if let Some(out) = bound_to {
+                    if let Ok(program) = obj.bind_psbt(
+                        *out,
+                        Default::default(),
+                        Rc::new(TxIndexLogger::new()),
+                        emulator.as_ref(),
+                    ) {
+                        for obj in program.program.values() {
+                            for tx in obj.txs.iter() {
+                                let SapioStudioFormat::LinkedPSBT {
+                                    psbt: _,
+                                    hex: _,
+                                    metadata,
+                                    output_metadata: _,
+                                    added_output_metadata: _,
+                                } = tx;
+                                if let Some(_data) =
+                                    metadata.simp.get(&AutoBroadcast::get_protocol_number())
+                                {
+                                    // TODO:
+                                    // - Send PSBT out for signatures?
                                 }
                             }
                         }
@@ -354,8 +342,7 @@ async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Err
                     bound_to.insert(o);
                 }
             },
-            Some(Event::ExternalEvent(e)) => match &state {
-                AppState::Uninitialized => (),
+            Some(Event::ProtocolMessage(e)) => match &state {
                 AppState::Initialized {
                     ref args,
                     ref contract,
