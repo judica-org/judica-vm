@@ -167,20 +167,48 @@ export function trading_pair_to_string(s: TradingPairID): string {
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
   const [location, setLocation] = useState<[number, number]>([0, 0]);
-  const [selected_plant, set_selected_plant]= useState<PlantLabel | null>(null);
+  const [selected_plant, set_selected_plant] = useState<PlantLabel | null>(null);
   const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
   const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
   const [powerPlants, setPowerPlants] = useState<UserPowerPlant[] | null>(null);
   const [chat_log, set_chat_log] = React.useState<[number, number, string][]>([]);
   const [listings, setListings] = useState<NFTSale[]>([]);
-
+  const [db_name_loaded, set_db_name_loaded] = React.useState<[string, string | null] | null>(null);
+  const [which_game_loaded, set_which_game_loaded] = React.useState<string | null>(null);
+  const [available_sequencers, set_available_sequencers] = React.useState<Array<[string, string]>>([]);
+  const [signing_key, set_signing_key] = useState<string | null>(null);
+  const [available_keys, set_available_keys] = useState<string[]>([]);
   useEffect(() => {
+
+
+    const unlisten_user_keys = appWindow.listen("user-keys", (ev) => {
+      console.log(["available keys"], ev.payload);
+      const new_keys = ev.payload as typeof available_keys;
+      set_available_keys(new_keys);
+    })
+    const unlisten_signing_key = appWindow.listen("signing-key", (ev) => {
+      console.log(["signing-key"], ev.payload);
+      set_signing_key(ev.payload as string)
+    });
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
       set_game_board(ev.payload as game_board)
     });
 
+    const unlisten_db_name_loaded = appWindow.listen("db-connection", (ev) => {
+      console.log(ev);
+      set_db_name_loaded(ev.payload as ([string, string | null] | null));
+    })
+
+    const unlisten_available_sequencers = appWindow.listen("available-sequencers", (ev) => {
+      console.log(ev.payload);
+      set_available_sequencers(ev.payload as typeof available_sequencers);
+    })
+    const unlisten_host_key = appWindow.listen("host-key", (ev) => {
+      console.log(ev.payload);
+      set_which_game_loaded(ev.payload as string);
+    })
 
     const unlisten_material_prices = appWindow.listen("materials-price-data", (ev) => {
       console.log(ev);
@@ -220,7 +248,17 @@ function App() {
     tauri_host.game_synchronizer()
     return () => {
       (async () => {
-        const unlisten_all = await Promise.all([unlisten_chat_log, unlisten_energy_exchange, unlisten_game_board, unlisten_material_prices, unlisten_user_inventory, unlisten_power_plants]);
+        const unlisten_all = await Promise.all([
+          unlisten_chat_log,
+          unlisten_energy_exchange,
+          unlisten_game_board,
+          unlisten_material_prices,
+          unlisten_user_inventory,
+          unlisten_power_plants,
+          unlisten_db_name_loaded,
+          unlisten_available_sequencers,
+          unlisten_host_key
+        ]);
         for (const u of unlisten_all) {
           u()
         }
@@ -244,7 +282,7 @@ function App() {
   return (
     <div>
       <div className="App">
-        <DrawerAppBar></DrawerAppBar>
+        <DrawerAppBar {...{ db_name_loaded, available_sequencers, which_game_loaded, signing_key, available_keys }}></DrawerAppBar>
         <div className="Content">
           <WorkingGlobe></WorkingGlobe>
           <Box className="DataDisplay">
@@ -261,7 +299,7 @@ function App() {
               </Tabs>
             </Box>
             <Panel index={1} current_index={current_tab}>
-              <Minting/>
+              <Minting />
             </Panel>
             <Panel index={2} current_index={current_tab}>
               {<EnergyExchange listings={listings}></EnergyExchange>}
@@ -283,10 +321,10 @@ function App() {
             </Panel>
             <Panel index={8} current_index={current_tab}>
               <ManagePlant
-              asic_token_id={game_board?.asic_token_id ?? null}
-              selected_plant={selected_plant}
-              power_plants={powerPlants}
-              user_inventory={userInventory}
+                asic_token_id={game_board?.asic_token_id ?? null}
+                selected_plant={selected_plant}
+                power_plants={powerPlants}
+                user_inventory={userInventory}
               />
             </Panel>
           </Box>

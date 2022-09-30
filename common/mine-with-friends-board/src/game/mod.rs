@@ -461,9 +461,11 @@ impl GameBoard {
             tick.elapsed,
             time.checked_sub(tick.first_time).unwrap_or_default(),
         );
+        trace!(elapsed = ?Duration::from_millis(tick.elapsed), player=?from);
         let mut elapsed: Vec<u64> = self.ticks.values().map(|t| t.elapsed).collect();
         elapsed.sort_unstable();
-        let median_elapsed = if elapsed.len() % 2 == 0 {
+        // todo: maybe ensure monotonic?
+        self.elapsed_time = self.elapsed_time.max(if elapsed.len() % 2 == 0 {
             (elapsed.get(elapsed.len() / 2).cloned().unwrap_or_default()
                 + elapsed
                     .get((elapsed.len() / 2) - 1)
@@ -472,12 +474,13 @@ impl GameBoard {
                 / 2
         } else {
             elapsed.get(elapsed.len() / 2).cloned().unwrap_or_default()
-        };
-        self.elapsed_time = median_elapsed;
+        });
+        trace!(elapsed = ?Duration::from_millis(self.elapsed_time), player=?from, "New Median");
     }
 
     pub fn game_is_finished(&self) -> Option<FinishReason> {
         if self.elapsed_time >= self.finish_time {
+            trace!(self.elapsed_time, self.finish_time, "Game Time Expired");
             Some(FinishReason::TimeExpired)
         } else if self.elapsed_time >= (self.finish_time / 4) {
             // After 25 % of the game is finished...

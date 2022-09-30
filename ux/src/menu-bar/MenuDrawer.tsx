@@ -12,17 +12,18 @@ import { AppHeader } from '../header/AppHeader';
 import Close from '@mui/icons-material/Close';
 import { List, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
 import { Bolt, Handyman, Sell, Send, ShoppingCart } from '@mui/icons-material';
+import { SwitchToGameProps } from '../header/SwitchToGame';
+import { KeySelectorProps } from '../header/KeySelector';
 
-interface Props {
-  window?: () => Window;
-}
+interface Props extends SwitchToGameProps, KeySelectorProps {
+  db_name_loaded: [string, string | null] | null;
+};
 
 const settingsDrawerWidth = '100vw';
 
 
-export default function DrawerAppBar(props: Props) {
+export default function DrawerAppBar({ db_name_loaded, which_game_loaded, available_sequencers, signing_key, available_keys }: Props) {
   const gameMoves = false;
-  const { window } = props;
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [moveMenuOpen, setMoveMenuOpen] = React.useState(false);
 
@@ -58,7 +59,7 @@ export default function DrawerAppBar(props: Props) {
         Settings
       </Typography>
       <Divider />
-      <AppHeader></AppHeader>
+      <AppHeader {...{ available_sequencers, which_game_loaded, db_name_loaded, signing_key, available_keys }}></AppHeader>
     </Box>
   );
 
@@ -83,7 +84,7 @@ export default function DrawerAppBar(props: Props) {
       </List>
       <Divider />
       <List>
-      <ListItem>
+        <ListItem>
           <ListItemButton>
             <ListItemIcon>
               <Send />
@@ -125,7 +126,7 @@ export default function DrawerAppBar(props: Props) {
     </Box>
   )
 
-  const container = window !== undefined ? () => window().document.body : undefined;
+  const container = undefined;
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -147,7 +148,7 @@ export default function DrawerAppBar(props: Props) {
           >
             MINE WITH FRIENDS!
           </Typography>
-         {gameMoves && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+          {gameMoves && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
             <Button key={"moves"} sx={{ color: '#fff' }} onClick={toggleMoveDrawer(true)}>
               {'GAME MOVES'}
             </Button>
