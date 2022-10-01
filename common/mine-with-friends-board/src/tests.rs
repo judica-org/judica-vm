@@ -1,4 +1,4 @@
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 use crate::{
     game::{
@@ -16,8 +16,9 @@ type PostCondition = &'static dyn Fn(&GameBoard, Result<(), MoveRejectReason>);
 
 const NO_POST: PostCondition =
     (&|g: &GameBoard, r: Result<(), MoveRejectReason>| assert!(r.is_ok())) as PostCondition;
-#[test_log::test]
+#[test]
 fn test_game_termination_time() {
+    let _ = tracing_subscriber::fmt::try_init();
     let mut game = setup_game();
     let moves = [
         (
@@ -66,8 +67,10 @@ fn test_game_termination_time() {
     run_game(moves, game);
 }
 
-#[test_log::test]
+#[test]
 fn test_game_swaps() {
+
+    let _ = tracing_subscriber::fmt::try_init();
     let mut game = setup_game();
     let moves = [
         (
@@ -76,6 +79,16 @@ fn test_game_swaps() {
                 d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
                 sequence: 0,
                 time_millis: 123,
+            },
+            NO_POST,
+        ),
+
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: 0,
+                time_millis: 1232,
             },
             NO_POST,
         ),
@@ -96,6 +109,8 @@ fn test_game_swaps() {
                 time_millis: 1000,
             },
             &|game, r| {
+                trace!(?r);
+                println!("{:?}",r);
                 assert!(r.is_ok());
                 let id = game.get_user_id(ALICE.into()).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 1);

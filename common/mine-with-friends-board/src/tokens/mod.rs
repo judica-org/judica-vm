@@ -8,6 +8,7 @@ use std::{
     collections::BTreeMap,
     ops::{Index, IndexMut},
 };
+use tracing::trace;
 
 pub mod instances;
 pub mod token_swap;
@@ -161,6 +162,7 @@ impl Token for TokenBase {
         if self.balance_check(sender) < amount {
             return false;
         }
+        trace!(?sender, ?receiver, nickname=?self.nickname(), amount, "Transferring Tokens");
         self.burn(sender, amount);
         self.mint(receiver, amount);
         true
