@@ -290,7 +290,7 @@ function App() {
         <div className="Content">
           <WorkingGlobe></WorkingGlobe>
           <Box className="DataDisplay">
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }} className="DisplayContents">
               <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
                 <Tab value={1} label="Minting"></Tab>
                 <Tab value={2} label="Energy Exchange"></Tab>
@@ -302,7 +302,7 @@ function App() {
                 <Tab value={8} label="Manage Plant"></Tab>
               </Tabs>
             </Box>
-            <Panel index={1} current_index={current_tab}>
+            <Panel index={1} current_index={current_tab} >
               <Minting />
             </Panel>
             <Panel index={2} current_index={current_tab}>
