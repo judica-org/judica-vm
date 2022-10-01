@@ -7,9 +7,9 @@ function Minting() {
   const [location, setLocation] = useState<[number, number] | null>(null);
 
   useEffect(() => {
-    listen("globe-click", (ev: Event<[number, number]>) => {
-      console.log(["globe-click-received"], ev.payload)
-      setLocation(ev.payload)
+    listen("globe-location", (ev: Event<[number, number]>) => {
+      console.log(["globe-location-received"], ev.payload)
+      setLocation(JSON.parse(ev.payload as unknown as string))
     })
   })
 
