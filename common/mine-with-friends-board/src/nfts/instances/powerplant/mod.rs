@@ -152,7 +152,7 @@ impl PowerPlantProducer {
         // create PowerPlant nft
         let new_plant = PowerPlant::new(game, plant_ptr, plant_type, location, scale);
         // add to plant register, need to return Plant?
-        let _ = game.nfts.power_plants.insert(plant_ptr, new_plant).unwrap();
+        let _ = game.nfts.power_plants.insert(plant_ptr, new_plant);
 
         // exchange (or burn?) tokens
         for (currency, price) in resources {
@@ -174,6 +174,7 @@ impl PowerPlantProducer {
     ) -> Result<(), TradeError> {
         let cost_estimates =
             PowerPlantProducer::estimate_materials_cost(game, scale, location, plant_type, owner)?;
+        tracing::trace!(?cost_estimates, "Plant Cost Estimate");
         let total_cost = cost_estimates.iter().map(|i| i.2).sum::<u128>();
         // get btc token ptr
         let btc_token_ptr = game.bitcoin_token_id;

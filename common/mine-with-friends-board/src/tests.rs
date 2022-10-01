@@ -2,9 +2,10 @@ use tracing::{debug, info, trace};
 
 use crate::{
     game::{
-        game_move::{GameMove, Heartbeat, Trade},
+        game_move::{GameMove, Heartbeat, MintPowerPlant, Trade},
         FinishReason, GameBoard, GameSetup, MoveRejectReason,
     },
+    nfts::instances::powerplant::PlantType::Flare,
     sanitize::Unsanitized,
     tokens::token_swap::TradingPairID,
     MoveEnvelope,
@@ -228,6 +229,65 @@ fn test_game_swaps() {
     run_game(moves, game);
 }
 
+#[test]
+fn test_super_mint() {
+    let _ = tracing_subscriber::fmt::try_init();
+    let game = setup_game();
+    let moves = [
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: 0,
+                time_millis: 123,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: 0,
+                time_millis: 1232,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: 1,
+                time_millis: 30000,
+            },
+            NO_POST,
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::SuperMintPowerPlant(MintPowerPlant {
+                    scale: 1,
+                    plant_type: crate::nfts::instances::powerplant::PlantType::Solar,
+                    location: (15, 15),
+                })),
+                sequence: 1,
+                time_millis: 1000,
+            },
+            &|game, r| {
+                trace!(?r);
+                println!("{:?}", r);
+                assert!(r.is_ok());
+                let id = game.get_user_id(ALICE).unwrap();
+                let plants = game.get_user_power_plants(id).unwrap();
+                let plant = plants.power_plant_data.iter().next().unwrap().1;
+                assert_eq!(
+                    plant.plant_type,
+                    crate::nfts::instances::powerplant::PlantType::Solar
+                );
+            },
+        ),
+    ];
+    run_game(moves, game);
+}
 fn run_game<I>(moves: I, mut game: GameBoard)
 where
     I: IntoIterator<
