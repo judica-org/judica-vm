@@ -8,7 +8,7 @@ use crate::game::GameBoard;
 use crate::tokens::token_swap::ConstantFunctionMarketMaker;
 use crate::tokens::token_swap::TradeError;
 use crate::tokens::token_swap::TradingPairID;
-use crate::tokens::TokenRegistry;
+
 use crate::util::Currency;
 use crate::util::Price;
 use crate::{nfts::BaseNFT, nfts::NftPtr, tokens::TokenPointer};
@@ -206,7 +206,7 @@ impl PowerPlantProducer {
     pub fn estimate_materials_cost(
         game: &mut GameBoard,
         scale: u64,
-        location: (i64, i64),
+        _location: (i64, i64),
         plant_type: PlantType,
         owner: EntityID,
     ) -> Result<Vec<(String, u128, u128)>, TradeError> {

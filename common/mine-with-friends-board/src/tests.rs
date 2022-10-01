@@ -15,11 +15,11 @@ const BOB: &str = "bob";
 type PostCondition = &'static dyn Fn(&GameBoard, Result<(), MoveRejectReason>);
 
 const NO_POST: PostCondition =
-    (&|g: &GameBoard, r: Result<(), MoveRejectReason>| assert!(r.is_ok())) as PostCondition;
+    (&|_g: &GameBoard, r: Result<(), MoveRejectReason>| assert!(r.is_ok())) as PostCondition;
 #[test]
 fn test_game_termination_time() {
     let _ = tracing_subscriber::fmt::try_init();
-    let mut game = setup_game();
+    let game = setup_game();
     let moves = [
         (
             ALICE,
@@ -55,7 +55,7 @@ fn test_game_termination_time() {
                 sequence: 1,
                 time_millis: 700,
             },
-            &|game, r| {
+            &|game, _r| {
                 info!("Time: {}", game.elapsed_time);
                 assert!(matches!(
                     game.game_is_finished(),
@@ -70,7 +70,7 @@ fn test_game_termination_time() {
 #[test]
 fn test_game_swaps() {
     let _ = tracing_subscriber::fmt::try_init();
-    let mut game = setup_game();
+    let game = setup_game();
     let moves = [
         (
             ALICE,
@@ -110,7 +110,7 @@ fn test_game_swaps() {
                 trace!(?r);
                 println!("{:?}", r);
                 assert!(r.is_ok());
-                let id = game.get_user_id(ALICE.into()).unwrap();
+                let id = game.get_user_id(ALICE).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 1);
             },
         ),
@@ -132,7 +132,7 @@ fn test_game_swaps() {
             },
             &|game, r| {
                 assert!(r.is_ok());
-                let id = game.get_user_id(ALICE.into()).unwrap();
+                let id = game.get_user_id(ALICE).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 0);
             },
         ),
@@ -154,7 +154,7 @@ fn test_game_swaps() {
             },
             &|game, r| {
                 assert!(r.is_ok());
-                let id = game.get_user_id(ALICE.into()).unwrap();
+                let id = game.get_user_id(ALICE).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 25);
             },
         ),
@@ -176,7 +176,7 @@ fn test_game_swaps() {
             },
             &|game, r| {
                 assert!(r.is_ok());
-                let id = game.get_user_id(ALICE.into()).unwrap();
+                let id = game.get_user_id(ALICE).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 15);
             },
         ),
@@ -198,7 +198,7 @@ fn test_game_swaps() {
             },
             &|game, r| {
                 assert!(matches!(r, Err(MoveRejectReason::TradeRejected(_))));
-                let id = game.get_user_id(ALICE.into()).unwrap();
+                let id = game.get_user_id(ALICE).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 15);
             },
         ),
@@ -220,7 +220,7 @@ fn test_game_swaps() {
             },
             &|game, r| {
                 assert!(matches!(r, Err(MoveRejectReason::TradeRejected(_))));
-                let id = game.get_user_id(ALICE.into()).unwrap();
+                let id = game.get_user_id(ALICE).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 15);
             },
         ),
@@ -241,7 +241,7 @@ where
     for (by, mv, f) in moves {
         let r = game.play(mv.clone(), by.into());
         match &r {
-            Ok(s) => {
+            Ok(_s) => {
                 info!(move_=?mv, by, "Success");
             }
             Err(e) => {
@@ -258,6 +258,6 @@ fn setup_game() -> GameBoard {
         start_amount: 1_000_000,
         finish_time: 1_000_000,
     };
-    let mut game = GameBoard::new(&setup);
-    game
+
+    GameBoard::new(&setup)
 }

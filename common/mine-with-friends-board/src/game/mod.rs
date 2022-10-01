@@ -679,7 +679,7 @@ impl GameBoard {
                 for_sale,
                 miners,
                 owner,
-                plant_type: power_plant.plant_type.clone(),
+                plant_type: power_plant.plant_type,
                 watts: power_plant.watts,
                 hashrate: power_plant.compute_hashrate(self),
             });

@@ -247,9 +247,9 @@ impl ConstantFunctionMarketMaker {
     /// Parameters: One of amount_a or amount_b should be 0, which implies the trade direction
     pub(crate) fn do_sell_trade(
         game: &mut GameBoard,
-        mut id: TradingPairID,
-        mut amount_a: u128,
-        mut amount_b: u128,
+        id: TradingPairID,
+        amount_a: u128,
+        amount_b: u128,
         buy_min: Option<u128>,
         simulate: bool,
         ctx: &CallContext,
@@ -261,9 +261,9 @@ impl ConstantFunctionMarketMaker {
 
     pub(crate) fn do_buy_trade(
         game: &mut GameBoard,
-        mut id: TradingPairID,
-        mut amount_a: u128,
-        mut amount_b: u128,
+        id: TradingPairID,
+        amount_a: u128,
+        amount_b: u128,
         sell_max: Option<u128>,
         simulate: bool,
         ctx: &CallContext,
