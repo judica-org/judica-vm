@@ -3,7 +3,7 @@ use tracing::{debug, info};
 use crate::{
     game::{
         game_move::{GameMove, Heartbeat, Trade},
-        FinishReason, GameBoard, GameSetup,
+        FinishReason, GameBoard, GameSetup, MoveRejectReason,
     },
     sanitize::Unsanitized,
     tokens::token_swap::TradingPairID,
@@ -12,9 +12,10 @@ use crate::{
 
 const ALICE: &str = "alice";
 const BOB: &str = "bob";
-type PostCondition = &'static dyn Fn(&GameBoard);
+type PostCondition = &'static dyn Fn(&GameBoard, Result<(), MoveRejectReason>);
 
-const NO_POST: PostCondition = (&|g: &GameBoard| {}) as PostCondition;
+const NO_POST: PostCondition =
+    (&|g: &GameBoard, r: Result<(), MoveRejectReason>| assert!(r.is_ok())) as PostCondition;
 #[test_log::test]
 fn test_game_termination_time() {
     let mut game = setup_game();
@@ -51,27 +52,9 @@ fn test_game_termination_time() {
             MoveEnvelope {
                 d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
                 sequence: 1,
-                time_millis: 650,
-            },
-            NO_POST,
-        ),
-        (
-            ALICE,
-            MoveEnvelope {
-                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
-                sequence: 2,
-                time_millis: 3000000250,
-            },
-            NO_POST,
-        ),
-        (
-            BOB,
-            MoveEnvelope {
-                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
-                sequence: 2,
                 time_millis: 700,
             },
-            &|game: &GameBoard| {
+            &|game, r| {
                 info!("Time: {}", game.elapsed_time);
                 assert!(matches!(
                     game.game_is_finished(),
@@ -112,7 +95,8 @@ fn test_game_swaps() {
                 sequence: 1,
                 time_millis: 1000,
             },
-            &|game| {
+            &|game, r| {
+                assert!(r.is_ok());
                 let id = game.get_user_id(ALICE.into()).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 1);
             },
@@ -133,9 +117,98 @@ fn test_game_swaps() {
                 sequence: 2,
                 time_millis: 2000,
             },
-            &|game| {
+            &|game, r| {
+                assert!(r.is_ok());
                 let id = game.get_user_id(ALICE.into()).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 0);
+            },
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Trade(Trade {
+                    pair: TradingPairID {
+                        asset_a: game.bitcoin_token_id,
+                        asset_b: game.asic_token_id,
+                    },
+                    amount_a: 0,
+                    amount_b: 25,
+                    sell: false,
+                    cap: None,
+                })),
+                sequence: 3,
+                time_millis: 3000,
+            },
+            &|game, r| {
+                assert!(r.is_ok());
+                let id = game.get_user_id(ALICE.into()).unwrap();
+                assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 25);
+            },
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Trade(Trade {
+                    pair: TradingPairID {
+                        asset_a: game.bitcoin_token_id,
+                        asset_b: game.asic_token_id,
+                    },
+                    amount_a: 0,
+                    amount_b: 10,
+                    sell: true,
+                    cap: None,
+                })),
+                sequence: 4,
+                time_millis: 4000,
+            },
+            &|game, r| {
+                assert!(r.is_ok());
+                let id = game.get_user_id(ALICE.into()).unwrap();
+                assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 15);
+            },
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Trade(Trade {
+                    pair: TradingPairID {
+                        asset_a: game.bitcoin_token_id,
+                        asset_b: game.asic_token_id,
+                    },
+                    amount_a: 0,
+                    amount_b: 2000,
+                    sell: true,
+                    cap: None,
+                })),
+                sequence: 5,
+                time_millis: 5000,
+            },
+            &|game, r| {
+                assert!(matches!(r, Err(MoveRejectReason::TradeRejected(_))));
+                let id = game.get_user_id(ALICE.into()).unwrap();
+                assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 15);
+            },
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Trade(Trade {
+                    pair: TradingPairID {
+                        asset_a: game.bitcoin_token_id,
+                        asset_b: game.asic_token_id,
+                    },
+                    amount_a: 0,
+                    amount_b: 200000000000000,
+                    sell: false,
+                    cap: None,
+                })),
+                sequence: 6,
+                time_millis: 6000,
+            },
+            &|game, r| {
+                assert!(matches!(r, Err(MoveRejectReason::TradeRejected(_))));
+                let id = game.get_user_id(ALICE.into()).unwrap();
+                assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 15);
             },
         ),
     ];
@@ -144,10 +217,17 @@ fn test_game_swaps() {
 
 fn run_game<I>(moves: I, mut game: GameBoard)
 where
-    I: IntoIterator<Item = (&'static str, MoveEnvelope, &'static dyn Fn(&GameBoard))>,
+    I: IntoIterator<
+        Item = (
+            &'static str,
+            MoveEnvelope,
+            &'static dyn Fn(&GameBoard, Result<(), MoveRejectReason>),
+        ),
+    >,
 {
     for (by, mv, f) in moves {
-        match game.play(mv.clone(), by.into()) {
+        let r = game.play(mv.clone(), by.into());
+        match &r {
             Ok(s) => {
                 info!(move_=?mv, by, "Success");
             }
@@ -155,7 +235,7 @@ where
                 debug!(error=?e, "Failed (Non Catastrophic)")
             }
         }
-        f(&game);
+        f(&game, r);
     }
 }
 
