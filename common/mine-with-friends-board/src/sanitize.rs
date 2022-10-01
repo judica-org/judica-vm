@@ -98,7 +98,7 @@ impl Sanitizable for GameMove {
             GameMove::Heartbeat(x) => x.sanitize(context)?.into(),
             GameMove::Trade(x) => x.sanitize(context)?.into(),
             GameMove::MintPowerPlant(x) => x.sanitize(context)?.into(),
-            GameMove::SuperMintPowerPlant(x) => x.sanitize(context)?.into(),
+            GameMove::SuperMintPowerPlant(x) => GameMove::SuperMintPowerPlant(x.sanitize(context)?),
             GameMove::PurchaseNFT(x) => x.sanitize(context)?.into(),
             GameMove::ListNFTForSale(x) => x.sanitize(context)?.into(),
             GameMove::SendTokens(x) => x.sanitize(context)?.into(),
