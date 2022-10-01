@@ -5,10 +5,14 @@
     height: 500px;
     overflow-y: scroll;
     word-wrap: break-word;
+    padding: 1em;
 }
 
 .ChatMessage {
     display: flex;
     flex-direction: row;
     justify-content: start;
+    text-align: left;
+    padding-bottom: 1em;
+    align-items: flex-end;
 }
