@@ -339,6 +339,7 @@ impl ConstantFunctionMarketMaker {
             }
             let k = mkt_qty_selling * mkt_qty_buying;
             let sell_amt = (k.roundup_div(mkt_qty_buying - buy_amt)) - mkt_qty_selling;
+            let buy_amt = mkt_qty_buying - k.roundup_div(mkt_qty_selling + sell_amt);
 
             if let Some(max) = sell_max {
                 if max > sell_amt {
@@ -509,6 +510,7 @@ impl ConstantFunctionMarketMaker {
             // - buy_amt = (mkt_qty_selling * mkt_qty_buying) / (mkt_qty_selling + sell_amt) - mkt_qty_buying
             // buy_amt = mkt_qty_buying - (mkt_qty_selling * mkt_qty_buying) / (mkt_qty_selling + sell_amt)
             let buy_amt = mkt_qty_buying - k.roundup_div(mkt_qty_selling + sell_amt);
+            let sell_amt = (k.roundup_div(mkt_qty_buying - buy_amt)) - mkt_qty_selling;
             if let Some(min) = buy_min {
                 if buy_amt < min {
                     return Err(TradeError::MarketSlipped);
