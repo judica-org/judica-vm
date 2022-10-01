@@ -3,24 +3,24 @@ import { alpha, Button, FormControl, FormGroup, TextField, useTheme } from '@mui
 
 export function ChangeService({ set_url }: { set_url: (arg0: string) => void; }) {
   const theme = useTheme();
-  const service = React.useRef<HTMLInputElement | null>(null);
-  const handle_click = (ev: FormEvent) => {
+  const [service, set_service] = React.useState<string>("");
+  const handle_click = (ev: React.MouseEvent<HTMLButtonElement, MouseEvent>): void => {
     ev.preventDefault();
-    if (service.current !== null) {
-      const url = new URL(global.location.toString());
-      url.searchParams.set("service_url", service.current.value);
-      global.location.href = url.toString();
-      set_url(service.current.value);
-    }
+    console.log(service);
+    const url = new URL(global.location.toString());
+    url.searchParams.set("service_url", service);
+    console.log(url.toString());
+    global.location.href = url.toString();
+    set_url(service);
   };
-  return <FormControl onSubmit={handle_click} size="small">
+  return <FormControl size="small">
     <FormGroup row={true}>
-      <TextField variant="filled" color="success" size="small" ref={service} name="service" type="text"
+      <TextField variant="filled" color="success" size="small" onChange={(ev) => set_service(ev.target.value)} name="service" type="text"
         style={{
           backgroundColor: alpha(theme.palette.common.white, 0.65),
         }}
       ></TextField>
-      <Button variant="contained" color="success" type="submit">Set Server</Button>
+      <Button variant="contained" color="success" type="submit" onClick={handle_click}>Set Server</Button>
     </FormGroup>
   </FormControl>;
 }
