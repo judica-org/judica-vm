@@ -1,41 +1,47 @@
-import { Card, CardHeader, CardContent, FormControl, TextField, Button, Typography } from "@mui/material";
+import { Card, CardHeader, CardContent, FormControl, TextField, Button, Typography, ToggleButtonGroup, ToggleButton } from "@mui/material";
 import Form, { FormSubmit } from "@rjsf/core";
 import React from "react";
-import { MaterialPriceDisplay, parse_trading_pair, trading_pair_to_string } from "../App";
-import { SuccessfulTradeOutcome, tauri_host } from "../tauri_host";
+import { flip_trading_pair, MaterialPriceDisplay, parse_trading_pair, trading_pair_to_string } from "../App";
+import { SuccessfulTradeOutcome, tauri_host, UnsuccessfulTradeOutcome } from "../tauri_host";
 import { RawMaterialsActions } from "../util";
 
-const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
+const PurchaseMaterialForm = ({ action: action_in, market }: {
   readonly action: RawMaterialsActions;
   market: MaterialPriceDisplay;
 }) => {
   const [action, set_action] = React.useState<RawMaterialsActions>(action_in);
-  const [market, set_market] = React.useState<MaterialPriceDisplay>(market_in);
+  const [market_flipped, set_market_flipped] = React.useState<boolean>(false);
   const [trade_amt, set_trade_amt] = React.useState(0);
   const [limit_pct, set_limit_pct] = React.useState(0);
   const [formula_result, set_formula_result] = React.useState("");
+  const handle_error = (e: UnsuccessfulTradeOutcome) => {
+    switch (typeof e) {
+      case 'string':
+        return "Market Slipped"
+      case "object":
+        if (e.InvalidTrade) return `Invalid Trade: ${e.InvalidTrade}`
+        if (e.InsufficientTokens) return `Insufficient Tokens: ${e.InsufficientTokens}`
+    }
+  }
   const formula = async (a: number) => {
+    let trade: [number, number] = [trade_amt, 0];
+    if (market_flipped) trade.reverse();
     switch (action) {
       // TODO: Approximate via an invoke, which is much better
       case "SELL": {
-        let outcome = await tauri_host.simulate_trade(market.trading_pair, [trade_amt, 0], "sell");
+        let outcome = await tauri_host.simulate_trade(market.trading_pair, trade, "sell");
         let ok: SuccessfulTradeOutcome | undefined = outcome.Ok;
         if (ok) {
-          return `Estimated to get ${ok.amount_player_purchased} ${ok.asset_player_purchased}`
-        } else {
-          return `${JSON.stringify(outcome.Err!)}`
-        }
+          return `Estimated to sell ${ok.amount_player_sold} ${ok.asset_player_sold} to purchase ${ok.amount_player_purchased} ${ok.asset_player_purchased}`
+        } else return handle_error(outcome.Err!);
       }
       case "BUY": {
 
-        let outcome = await tauri_host.simulate_trade(market.trading_pair, [trade_amt, 0], "buy");
+        let outcome = await tauri_host.simulate_trade(market.trading_pair, trade, "buy");
         let ok: SuccessfulTradeOutcome | undefined = outcome.Ok;
         if (ok) {
-          return `Estimated to cost ${ok.amount_player_sold} ${ok.asset_player_sold}`
-        } else {
-          return `${JSON.stringify(outcome.Err!)}`
-        }
-
+          return `Estimated to purchase ${ok.amount_player_purchased} ${ok.asset_player_purchased} by selling ${ok.amount_player_sold} ${ok.asset_player_sold}`
+        } else return handle_error(outcome.Err!);
       }
 
     };
@@ -53,19 +59,10 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
     return () => {
       cancel = true;
     };
-  }, [trade_amt, market, action])
+  }, [trade_amt, market_flipped, action])
 
   const flip_market = () => {
-    let pair = parse_trading_pair(market.trading_pair);
-    let new_obj: MaterialPriceDisplay = {
-
-      asset_a: market.asset_b,
-      asset_b: market.asset_a,
-      trading_pair: trading_pair_to_string(pair),
-      price_a_b_b_a: [market.price_a_b_b_a[1], market.price_a_b_b_a[0]],
-      display_asset: market.display_asset,
-    };
-    set_market(new_obj);
+    set_market_flipped(!market_flipped);
   };
 
   const opposite_action = () => {
@@ -85,7 +82,9 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
     ev.preventDefault();
     if (trade_amt) {
 
-      let outcome = await tauri_host.simulate_trade(market.trading_pair, [trade_amt, 0], action === "SELL" ? "sell" : "buy");
+      const trade: [number, number] = [trade_amt, 0];
+      if (market_flipped) trade.reverse();
+      let outcome = await tauri_host.simulate_trade(market.trading_pair, trade, action === "SELL" ? "sell" : "buy");
       let ok = outcome.Ok;
       if (ok) {
         // TODO: Add a flexible Cap for Limit Orders, fixed to +/- 10%.
@@ -93,9 +92,9 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
         if (confirm((action === "SELL" ?
           `Sell Will trade ${ok.amount_player_sold} ${ok.asset_player_sold} for at least ${cap} ${ok.asset_player_purchased}` :
           `Buy Will get ${ok.amount_player_purchased} ${ok.asset_player_purchased} for at most ${cap} ${ok.asset_player_sold}`)
-          + `\n${limit_pct * 100}% Protection from expected`
+          + `\n Slip tolerance ${limit_pct * 100}% from expected`
         ))
-          tauri_host.make_move_inner({ trade: { amount_a: trade_amt, amount_b: 0, pair: market.trading_pair, sell: action === "SELL", cap } }, "0");
+          tauri_host.make_move_inner({ trade: { amount_a: trade[0], amount_b: trade[1], pair: market.trading_pair, sell: action === "SELL", cap } }, "0");
       } else {
         alert("Trade will not succeed, " + JSON.stringify(outcome.Err!))
       }
@@ -109,15 +108,46 @@ const PurchaseMaterialForm = ({ action: action_in, market: market_in }: {
     </CardHeader>
     <CardContent>
       <Typography variant="h6">
-        Trading {market.asset_a} for {market.asset_b}
+        {action} {market_flipped ? market.asset_b : market.asset_a} for {market_flipped ? market.asset_a : market.asset_b}
       </Typography>
       <div className='MoveForm' >
         <FormControl >
-          <TextField label={<div>Estimate: {formula_result}</div>} type="number" value={trade_amt} onChange={(ev) => { set_trade_amt(parseInt(ev.target.value)) }}></TextField>
-          <Button type="submit" onClick={handle_click}>{action}</Button>
-          <Button onClick={() => flip_market()}>Flip Market</Button>
-          <Button onClick={() => set_action(opposite_action())}>Switch To {opposite_action()} </Button>
-          <TextField label={"Limit (e.g. 10 => 10%)"} type="number" value={limit_pct} onChange={(ev) => { set_limit_pct(parseFloat(ev.target.value)) }}></TextField>
+          <ToggleButtonGroup
+            color="warning"
+            value={action}
+            exclusive
+            onChange={(ev, v) => v && set_action(v)}
+            aria-label="buy or sell"
+          >
+            <ToggleButton value="BUY" aria-label="buy">
+              Buy
+            </ToggleButton>
+            <ToggleButton value="SELL" aria-label="sell">
+              Sell
+            </ToggleButton>
+          </ToggleButtonGroup>
+
+          <ToggleButtonGroup
+            color="success"
+            value={`${market_flipped}`}
+            exclusive
+            onChange={(ev, v) => v && set_market_flipped(v === "true")}
+            aria-label="main asset"
+          >
+            <ToggleButton value="false" aria-label={market.asset_a}>
+              {market.asset_a}
+            </ToggleButton>
+            <ToggleButton value="true" aria-label={market.asset_b}>
+              {market.asset_b}
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <TextField type="number" value={trade_amt} onChange={(ev) => { set_trade_amt(parseInt(ev.target.value)) }}></TextField>
+          <Typography>
+            {formula_result}
+          </Typography>
+          <TextField label={"Slip Tolerance (e.g. 0.1 => 10%)"} type="number"
+            value={limit_pct} onChange={(ev) => { set_limit_pct(parseFloat(ev.target.value)) }}></TextField>
+          <Button type="submit" onClick={handle_click}>Execute {action}</Button>
         </FormControl>
       </div>
     </CardContent>
