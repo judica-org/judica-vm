@@ -75,7 +75,7 @@ pub struct GameBoard {
     pub(crate) swap: token_swap::ConstantFunctionMarketMaker,
     /// Make this a vote over the map of users to current vote and let the turn count be dynamic
     pub(crate) turn_count: u64,
-    alloc: EntityIDAllocator,
+    pub(crate) alloc: EntityIDAllocator,
     pub(crate) users: BTreeMap<EntityID, UserData>,
     pub(crate) users_by_key: BTreeMap<String, EntityID>,
     pub(crate) nfts: NFTRegistry,

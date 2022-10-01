@@ -10,13 +10,15 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fmt::Display;
-use tracing::Instrument;
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Sub;
 
 /// Data for a single trading pair (e.g. Apples to Oranges tokens)
 ///
 /// Pairs have a balance in Apples and Oranges, as well as a token that represents
 /// a fractional interest (unit / total) redemptive right of Apples : Oranges
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Copy)]
 pub(crate) struct ConstantFunctionMarketMakerPair {
     /// The trading pair, should be normalized here
     pub(crate) pair: TradingPairID,
@@ -24,6 +26,8 @@ pub(crate) struct ConstantFunctionMarketMakerPair {
     pub(crate) id: EntityID,
     /// The ID of the LP Tokens for this pair
     pub(crate) lp: TokenPointer,
+    pub(crate) reserve_a: u128,
+    pub(crate) reserve_b: u128,
 }
 
 impl ConstantFunctionMarketMakerPair {
@@ -32,36 +36,38 @@ impl ConstantFunctionMarketMakerPair {
         game.swap.markets.contains_key(&pair)
     }
     /// ensure makes sure that a given trading pair exists in the GameBoard
-    pub fn ensure(game: &mut GameBoard, mut pair: TradingPairID) -> TradingPairID {
+    pub fn ensure(
+        game: &mut GameBoard,
+        mut pair: TradingPairID,
+    ) -> ConstantFunctionMarketMakerPair {
         pair.normalize();
         match game.swap.markets.entry(pair) {
-            std::collections::btree_map::Entry::Vacant(_a) => {
+            std::collections::btree_map::Entry::Vacant(v) => {
                 let name_a = game.tokens[pair.asset_a]
                     .nickname()
                     .unwrap_or(format!("{}", pair.asset_a.inner()));
                 let name_b = game.tokens[pair.asset_b]
                     .nickname()
                     .unwrap_or(format!("{}", pair.asset_b.inner()));
-                let base_id = game.alloc();
-                let id = game.alloc();
-                game.swap.markets.insert(
+                // must take .alloc.make() to convince the borrow checker...
+                let base_id = game.alloc.make();
+                let id = game.alloc.make();
+                *v.insert(ConstantFunctionMarketMakerPair {
                     pair,
-                    ConstantFunctionMarketMakerPair {
-                        pair,
-                        id,
-                        lp: game.tokens.new_token(Box::new(TokenBase {
-                            balances: Default::default(),
-                            total: Default::default(),
-                            this: base_id,
-                            #[cfg(test)]
-                            in_transaction: None,
-                            nickname: Some(format!("swap({},{})::shares", name_a, name_b)),
-                        })),
-                    },
-                );
-                pair
+                    id,
+                    lp: game.tokens.new_token(Box::new(TokenBase {
+                        balances: Default::default(),
+                        total: Default::default(),
+                        this: base_id,
+                        #[cfg(test)]
+                        in_transaction: None,
+                        nickname: Some(format!("swap({},{})::shares", name_a, name_b)),
+                    })),
+                    reserve_a: 0,
+                    reserve_b: 0,
+                })
             }
-            std::collections::btree_map::Entry::Occupied(_a) => pair,
+            std::collections::btree_map::Entry::Occupied(a) => *a.get(),
         }
     }
     fn amt_a(&self, tokens: &mut TokenRegistry) -> u128 {
@@ -183,16 +189,14 @@ impl ConstantFunctionMarketMaker {
         mut amount_b: u128,
         from: EntityID,
     ) {
-        let unnormalized_id = id;
-        id.normalize();
-        if id != unnormalized_id {
+        if !id.is_normal() {
             std::mem::swap(&mut amount_a, &mut amount_b);
+            id.normalize();
         }
         if amount_a == 0 || amount_b == 0 {
             return;
         }
-        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
-        let mkt = &game.swap.markets[&id];
+        let mkt = ConstantFunctionMarketMakerPair::ensure(game, id);
 
         let tokens: &mut TokenRegistry = &mut game.tokens;
         tokens[id.asset_a].transaction();
@@ -225,6 +229,10 @@ impl ConstantFunctionMarketMaker {
         lp_tokens.end_transaction();
         tokens[id.asset_a].end_transaction();
         tokens[id.asset_b].end_transaction();
+
+        let pair = game.swap.markets.get_mut(&mkt.pair).expect("Must exist...");
+        pair.reserve_a += amount_a;
+        pair.reserve_b += amount_b;
     }
 
     /// TODO: Implement me please!
@@ -245,11 +253,11 @@ impl ConstantFunctionMarketMaker {
         simulate: bool,
         ctx: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
-        let unnormalized_id = id;
-        id.normalize();
-        if id != unnormalized_id {
+        if !id.is_normal() {
             std::mem::swap(&mut amount_a, &mut amount_b);
+            id.normalize();
         }
+
         // the zero is the one to be computed
         if !(amount_a == 0 || amount_b == 0) {
             return Err(TradeError::InvalidTrade(
@@ -270,10 +278,9 @@ impl ConstantFunctionMarketMaker {
         simulate: bool,
         ctx: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
-        let unnormalized_id = id;
-        id.normalize();
-        if id != unnormalized_id {
+        if !id.is_normal() {
             std::mem::swap(&mut amount_a, &mut amount_b);
+            id.normalize();
         }
         // the zero is the one to be computed
         if !(amount_a == 0 || amount_b == 0) {
@@ -297,10 +304,10 @@ impl ConstantFunctionMarketMaker {
         CallContext { ref sender }: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
         if !id.is_normal() {
-            panic!("Expects normalized IDs")
+            std::mem::swap(&mut amount_a, &mut amount_b);
+            id.normalize();
         }
-        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
-        let mkt = &game.swap.markets[&id];
+        let mkt = ConstantFunctionMarketMakerPair::ensure(game, id);
         let tokens: &mut TokenRegistry = &mut game.tokens;
         let (buying, selling, buy_amt) = match (amount_a, amount_b) {
             (0, b) => (id.asset_b, id.asset_a, b),
@@ -331,7 +338,8 @@ impl ConstantFunctionMarketMaker {
                 ));
             }
             let k = mkt_qty_selling * mkt_qty_buying;
-            let sell_amt = (k / (mkt_qty_buying - buy_amt)) - mkt_qty_selling;
+            let sell_amt = (k.roundup_div(mkt_qty_buying - buy_amt)) - mkt_qty_selling;
+            let buy_amt = mkt_qty_buying - k.roundup_div(mkt_qty_selling + sell_amt);
 
             if let Some(max) = sell_max {
                 if max > sell_amt {
@@ -345,12 +353,16 @@ impl ConstantFunctionMarketMaker {
                 ));
             }
             if !simulate {
-                tokens[buying].transaction();
                 tokens[selling].transaction();
                 let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
-                let _ = tokens[buying].transfer(&mkt.id, sender, buy_amt);
                 tokens[buying].end_transaction();
-                tokens[selling].end_transaction();
+                if let Err(e) = Self::swap_helper(selling, buying, game, 0, buy_amt, sender) {
+                    let tokens = &mut game.tokens;
+                    tokens[selling].transaction();
+                    let _ = tokens[selling].transfer(&mkt.id, sender, sell_amt);
+                    tokens[selling].end_transaction();
+                    return Err(e);
+                }
             }
             (buying_asset_name, buy_amt, selling_asset_name, sell_amt)
         };
@@ -363,6 +375,76 @@ impl ConstantFunctionMarketMaker {
             amount_player_sold,
         })
     }
+
+    pub(crate) fn raw_swap(
+        game: &mut GameBoard,
+        mut id: TradingPairID,
+        mut amount_a: u128,
+        mut amount_b: u128,
+        CallContext { ref sender }: &CallContext,
+    ) -> Result<(), TradeError> {
+        if !id.is_normal() {
+            std::mem::swap(&mut amount_a, &mut amount_b);
+            id.normalize();
+        }
+        let mkt = ConstantFunctionMarketMakerPair::ensure(game, id);
+
+        let tokens: &mut TokenRegistry = &mut game.tokens;
+        tokens[mkt.pair.asset_a].transaction();
+        tokens[mkt.pair.asset_b].transaction();
+
+        if tokens[mkt.pair.asset_a].transfer(&mkt.id, sender, amount_a) {
+            if !tokens[mkt.pair.asset_b].transfer(&mkt.id, sender, amount_b) {
+                // undo swap
+                if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, amount_a) {
+                    panic!("Corrupt Game");
+                }
+                tokens[mkt.pair.asset_b].end_transaction();
+                tokens[mkt.pair.asset_a].end_transaction();
+                return Err(TradeError::InsufficientTokens(
+                    "Insufficient funds asset b".to_string(),
+                ));
+            }
+        } else {
+            tokens[mkt.pair.asset_b].end_transaction();
+            tokens[mkt.pair.asset_a].end_transaction();
+            return Err(TradeError::InsufficientTokens(
+                "Insufficient funds asset a".to_string(),
+            ));
+        }
+        tokens[mkt.pair.asset_b].end_transaction();
+        tokens[mkt.pair.asset_a].end_transaction();
+
+        let a_reserves_2 = tokens[mkt.pair.asset_a].balance_check(&mkt.id);
+        let b_reserves_2 = tokens[mkt.pair.asset_b].balance_check(&mkt.id);
+
+        if a_reserves_2 * b_reserves_2 < mkt.reserve_a * mkt.reserve_b {
+            tokens[mkt.pair.asset_a].transaction();
+            tokens[mkt.pair.asset_b].transaction();
+
+            if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, amount_a) {
+                panic!("Corrupt Game");
+            }
+            if !tokens[mkt.pair.asset_b].transfer(sender, &mkt.id, amount_b) {
+                panic!("Corrupt Game");
+            }
+
+            tokens[mkt.pair.asset_b].end_transaction();
+            tokens[mkt.pair.asset_a].end_transaction();
+            return Err(TradeError::InvalidTrade(
+                "Reserves Not Preserved".to_string(),
+            ));
+        }
+
+        let pair = game
+            .swap
+            .markets
+            .get_mut(&mkt.pair)
+            .expect("Market must exist");
+        pair.reserve_a -= amount_a;
+        pair.reserve_b -= amount_b;
+        Ok(())
+    }
     pub(crate) fn internal_do_trade_sell_fixed_amount(
         game: &mut GameBoard,
         mut id: TradingPairID,
@@ -373,10 +455,10 @@ impl ConstantFunctionMarketMaker {
         CallContext { ref sender }: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
         if !id.is_normal() {
-            panic!("Expects normalized IDs")
+            std::mem::swap(&mut amount_a, &mut amount_b);
+            id.normalize();
         }
-        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
-        let mkt = &game.swap.markets[&id];
+        let mkt = ConstantFunctionMarketMakerPair::ensure(game, id);
         let tokens: &mut TokenRegistry = &mut game.tokens;
         if !(tokens[id.asset_a].balance_check(sender) >= amount_a
             && tokens[id.asset_b].balance_check(sender) >= amount_b)
@@ -427,20 +509,24 @@ impl ConstantFunctionMarketMaker {
             // mkt_qty_buying - buy_amt = (mkt_qty_selling * mkt_qty_buying) / (mkt_qty_selling + sell_amt)
             // - buy_amt = (mkt_qty_selling * mkt_qty_buying) / (mkt_qty_selling + sell_amt) - mkt_qty_buying
             // buy_amt = mkt_qty_buying - (mkt_qty_selling * mkt_qty_buying) / (mkt_qty_selling + sell_amt)
-            let bought_amount = (mkt.amt_a(tokens) * amount_b) / mkt.amt_b(tokens);
-            let buy_amt = mkt_qty_buying - (k / (mkt_qty_selling + sell_amt));
+            let buy_amt = mkt_qty_buying - k.roundup_div(mkt_qty_selling + sell_amt);
+            let sell_amt = (k.roundup_div(mkt_qty_buying - buy_amt)) - mkt_qty_selling;
             if let Some(min) = buy_min {
-                if bought_amount < min {
+                if buy_amt < min {
                     return Err(TradeError::MarketSlipped);
                 }
             }
             if !simulate {
                 tokens[buying].transaction();
-                tokens[selling].transaction();
-                let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
-                let _ = tokens[buying].transfer(&mkt.id, sender, buy_amt);
-                tokens[buying].transaction();
-                tokens[selling].transaction();
+                let _ = tokens[buying].transfer(sender, &mkt.id, buy_amt);
+                tokens[buying].end_transaction();
+                if let Err(e) = Self::swap_helper(selling, buying, game, sell_amt, 0, sender) {
+                    let tokens = &mut game.tokens;
+                    tokens[buying].transaction();
+                    let _ = tokens[buying].transfer(&mkt.id, sender, buy_amt);
+                    tokens[buying].end_transaction();
+                    return Err(e);
+                }
             }
             (asset_buying_name, buy_amt, asset_selling_name, sell_amt)
         };
@@ -456,14 +542,45 @@ impl ConstantFunctionMarketMaker {
 
     pub(crate) fn get_pair_price_data(game: &mut GameBoard, id: TradingPairID) -> (u128, u128) {
         // check that a these two tokens are a valid pairing (do we need to?)
-        let id = ConstantFunctionMarketMakerPair::ensure(game, id);
+        let mkt = ConstantFunctionMarketMakerPair::ensure(game, id);
         let tokens: &mut TokenRegistry = &mut game.tokens;
         // get the CFMM pair
-        let mkt = &game.swap.markets[&id];
         let mkt_qty_a = mkt.amt_a(tokens);
         let mkt_qty_b = mkt.amt_b(tokens);
 
         (mkt_qty_a, mkt_qty_b)
+    }
+
+    fn swap_helper(
+        selling: TokenPointer,
+        buying: TokenPointer,
+        game: &mut GameBoard,
+        sell_amt: u128,
+        buy_amt: u128,
+        sender: &EntityID,
+    ) -> Result<(), TradeError> {
+        let mut trade_pair = TradingPairID {
+            asset_a: selling,
+            asset_b: buying,
+        };
+        if trade_pair.is_normal() {
+            Self::raw_swap(
+                game,
+                trade_pair,
+                sell_amt,
+                buy_amt,
+                &CallContext { sender: *sender },
+            )
+        } else {
+            trade_pair.normalize();
+            Self::raw_swap(
+                game,
+                trade_pair,
+                buy_amt,
+                sell_amt,
+                &CallContext { sender: *sender },
+            )
+        }
     }
 }
 
@@ -485,4 +602,18 @@ pub struct TradeOutcome {
     pub amount_player_purchased: u128,
     pub asset_player_sold: String,
     pub amount_player_sold: u128,
+}
+
+trait DivExt:
+    Div<Self, Output = Self> + Sized + Sub<Self, Output = Self> + Add<Self, Output = Self> + Copy
+{
+    fn unit() -> Self;
+    fn roundup_div(self, rhs: Self) -> Self {
+        (self + rhs - Self::unit()) / rhs
+    }
+}
+impl DivExt for u128 {
+    fn unit() -> Self {
+        1
+    }
 }
