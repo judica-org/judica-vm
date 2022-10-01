@@ -355,7 +355,7 @@ impl ConstantFunctionMarketMaker {
             if !simulate {
                 tokens[selling].transaction();
                 let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
-                tokens[buying].end_transaction();
+                tokens[selling].end_transaction();
                 if let Err(e) = Self::swap_helper(selling, buying, game, 0, buy_amt, sender) {
                     let tokens = &mut game.tokens;
                     tokens[selling].transaction();

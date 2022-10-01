@@ -1,3 +1,5 @@
+use tracing::{debug, info};
+
 use crate::{
     game::{
         game_move::{GameMove, Heartbeat},
@@ -12,8 +14,8 @@ const BOB: &str = "bob";
 type PostCondition = &'static dyn Fn(&GameBoard);
 
 const NO_POST: PostCondition = (&|g: &GameBoard| {}) as PostCondition;
-#[test]
-fn basic_game_test() {
+#[test_log::test]
+fn test_game_termination_time() {
     let mut game = setup_game();
     let moves = [
         (
@@ -38,10 +40,38 @@ fn basic_game_test() {
             ALICE,
             MoveEnvelope {
                 d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
-                sequence: 0,
+                sequence: 1,
                 time_millis: 3000000000,
             },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: 1,
+                time_millis: 650,
+            },
+            NO_POST,
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: 2,
+                time_millis: 3000000250,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: 2,
+                time_millis: 700,
+            },
             &|game: &GameBoard| {
+                info!("Time: {}", game.elapsed_time);
                 assert!(matches!(
                     game.game_is_finished(),
                     Some(FinishReason::TimeExpired)
@@ -57,7 +87,14 @@ where
     I: IntoIterator<Item = (&'static str, MoveEnvelope, &'static dyn Fn(&GameBoard))>,
 {
     for (by, mv, f) in moves {
-        game.play(mv, by.into());
+        match game.play(mv.clone(), by.into()) {
+            Ok(s) => {
+                info!(move_=?mv, by, "Success");
+            }
+            Err(e) => {
+                debug!(error=?e, "Failed (Non Catastrophic)")
+            }
+        }
         f(&game);
     }
 }

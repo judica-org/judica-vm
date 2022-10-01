@@ -101,12 +101,20 @@ impl TokenBase {
 impl Token for TokenBase {
     fn mint(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
+        #[cfg(test)]
+        {
+            self.in_transaction.as_mut().map(|t| *t += amount);
+        }
         let amt = self.balances.entry(*to).or_default();
         *amt += amount;
         self.total += amount;
     }
     fn burn(&mut self, to: &EntityID, amount: u128) {
         self.check_in_transaction();
+        #[cfg(test)]
+        {
+            self.in_transaction.as_mut().map(|t| *t -= amount);
+        }
         let amt = self.balances.entry(*to).or_default();
         *amt -= amount;
         self.total -= amount;
@@ -128,6 +136,7 @@ impl Token for TokenBase {
             if self.in_transaction.is_some() {
                 panic!("Should Not Be Called, currently in transaction");
             } else {
+                tracing::trace!("In New Transaction");
                 self.in_transaction = Some(self.total);
             }
         }
@@ -139,6 +148,7 @@ impl Token for TokenBase {
             if self.in_transaction.is_none() {
                 panic!("Should Not Be Called, was not in transaction");
             } else {
+                tracing::trace!("Ending Transaction");
                 if self.in_transaction != Some(self.total) {
                     panic!("Transaction did not preserve the coins")
                 }

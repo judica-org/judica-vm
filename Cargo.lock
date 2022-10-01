@@ -1578,10 +1578,12 @@ name = "mine-with-friends-board"
 version = "0.1.0"
 dependencies = [
  "attest-messages",
+ "env_logger",
  "ruma-serde",
  "schemars",
  "serde",
  "serde_json",
+ "test-log",
  "tracing",
 ]
 
