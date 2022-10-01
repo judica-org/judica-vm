@@ -69,7 +69,6 @@ fn test_game_termination_time() {
 
 #[test]
 fn test_game_swaps() {
-
     let _ = tracing_subscriber::fmt::try_init();
     let mut game = setup_game();
     let moves = [
@@ -82,7 +81,6 @@ fn test_game_swaps() {
             },
             NO_POST,
         ),
-
         (
             BOB,
             MoveEnvelope {
@@ -110,7 +108,7 @@ fn test_game_swaps() {
             },
             &|game, r| {
                 trace!(?r);
-                println!("{:?}",r);
+                println!("{:?}", r);
                 assert!(r.is_ok());
                 let id = game.get_user_id(ALICE.into()).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 1);
