@@ -339,14 +339,12 @@ impl ConstantFunctionMarketMaker {
                 }
             }
 
+            if sell_amt > tokens[selling].balance_check(sender) {
+                return Err(TradeError::InsufficientTokens(
+                    "User has insufficient tokens".into(),
+                ));
+            }
             if !simulate {
-                // Only check this condition when not simulating... as we're
-                // looking to find out how much we would need!
-                if sell_amt > tokens[selling].balance_check(sender) {
-                    return Err(TradeError::InsufficientTokens(
-                        "User has insufficient tokens".into(),
-                    ));
-                }
                 tokens[buying].transaction();
                 tokens[selling].transaction();
                 let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
