@@ -208,7 +208,7 @@ impl Sanitizable for SendTokens {
             amount,
             currency,
         } = self;
-        if context.users.contains_key(&to) || context.nfts.nfts.contains_key(&to){
+        if context.users.contains_key(&to) || context.nfts.nfts.contains_key(&to) {
             Ok(Self {
                 to,
                 amount,
