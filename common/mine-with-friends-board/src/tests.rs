@@ -2,10 +2,11 @@ use tracing::{debug, info};
 
 use crate::{
     game::{
-        game_move::{GameMove, Heartbeat},
+        game_move::{GameMove, Heartbeat, Trade},
         FinishReason, GameBoard, GameSetup,
     },
     sanitize::Unsanitized,
+    tokens::token_swap::TradingPairID,
     MoveEnvelope,
 };
 
@@ -76,6 +77,65 @@ fn test_game_termination_time() {
                     game.game_is_finished(),
                     Some(FinishReason::TimeExpired)
                 ))
+            },
+        ),
+    ];
+    run_game(moves, game);
+}
+
+#[test_log::test]
+fn test_game_swaps() {
+    let mut game = setup_game();
+    let moves = [
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: 0,
+                time_millis: 123,
+            },
+            NO_POST,
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Trade(Trade {
+                    pair: TradingPairID {
+                        asset_a: game.bitcoin_token_id,
+                        asset_b: game.asic_token_id,
+                    },
+                    amount_a: 0,
+                    amount_b: 1,
+                    sell: false,
+                    cap: None,
+                })),
+                sequence: 1,
+                time_millis: 1000,
+            },
+            &|game| {
+                let id = game.get_user_id(ALICE.into()).unwrap();
+                assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 1);
+            },
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Trade(Trade {
+                    pair: TradingPairID {
+                        asset_a: game.bitcoin_token_id,
+                        asset_b: game.asic_token_id,
+                    },
+                    amount_a: 0,
+                    amount_b: 1,
+                    sell: true,
+                    cap: None,
+                })),
+                sequence: 2,
+                time_millis: 2000,
+            },
+            &|game| {
+                let id = game.get_user_id(ALICE.into()).unwrap();
+                assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 0);
             },
         ),
     ];
