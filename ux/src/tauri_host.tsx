@@ -9,7 +9,14 @@ export type SuccessfulTradeOutcome = {
   asset_player_sold: string,
   amount_player_sold: number,
 }
-export type TradeSimulation = { Ok: SuccessfulTradeOutcome, Err: undefined } | { Err: any, Ok:undefined };
+export type UnsuccessfulTradeOutcome =
+  { InsufficientTokens: string, InvalidTrade: undefined }
+  | { InvalidTrade: string, InsufficientTokens: undefined }
+  | "MarketSlipped";
+export type TradeSimulation = { Ok: SuccessfulTradeOutcome, Err: undefined } | {
+  Err: UnsuccessfulTradeOutcome
+  , Ok: undefined
+};
 let game_synchronizer_invoked = false;
 export const tauri_host = {
   get_move_schema: async () => {
