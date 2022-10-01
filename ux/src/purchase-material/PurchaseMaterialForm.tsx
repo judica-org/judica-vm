@@ -24,6 +24,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
     }
   }
   const formula = async (a: number) => {
+    if (trade_amt === 0) return "No Trade Entered";
     let trade: [number, number] = [trade_amt, 0];
     if (market_flipped) trade.reverse();
     switch (action) {
