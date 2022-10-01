@@ -6,6 +6,7 @@ use game_sequencer::OnlineDBFetcher;
 use game_sequencer::Sequencer;
 use mine_with_friends_board::entity::EntityID;
 use mine_with_friends_board::game::game_move::GameMove;
+use mine_with_friends_board::game::MoveRejectReason;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::secp256k1::Secp256k1;
@@ -72,9 +73,16 @@ impl GameServer {
                     let game_sequencer = game_sequencer.clone();
                     game_sequencer.0.run()
                 });
-                let _game_task = {
+                // Can be re-enabled whenever, but disable it after game is finished so we don't spam the logs...
+                let heartbeat_enable = Arc::new(AtomicBool::new(true));
+                let game_task = {
                     let g = g;
-                    start_game(shutdown.clone(), g, game_sequencer)
+                    start_game(
+                        shutdown.clone(),
+                        g,
+                        game_sequencer,
+                        heartbeat_enable.clone(),
+                    )
                 };
                 spawn({
                     let database = database.clone();
@@ -88,18 +96,20 @@ impl GameServer {
                             if shutdown.load(Ordering::Relaxed) {
                                 break;
                             }
-                            tracing::trace!("Game Heartbeat!");
-                            crate::commands::modify::make_move_inner_inner(
-                                secp.clone(),
-                                database.clone(),
-                                signing_key.clone(),
-                                GameMove::Heartbeat(
-                                    mine_with_friends_board::game::game_move::Heartbeat(),
-                                ),
-                                EntityID(0),
-                            )
-                            .await
-                            .map_err(|e| tracing::trace!(err=?e, "Game Heartbeat!"));
+                            if heartbeat_enable.load(Ordering::Relaxed) {
+                                tracing::trace!("Game Heartbeat!");
+                                crate::commands::modify::make_move_inner_inner(
+                                    secp.clone(),
+                                    database.clone(),
+                                    signing_key.clone(),
+                                    GameMove::Heartbeat(
+                                        mine_with_friends_board::game::game_move::Heartbeat(),
+                                    ),
+                                    EntityID(0),
+                                )
+                                .await
+                                .map_err(|e| tracing::trace!(err=?e, "Game Heartbeat!"));
+                            }
                         }
                     }
                 });
@@ -115,6 +125,7 @@ pub(crate) fn start_game(
     _shutdown: Arc<AtomicBool>,
     g: GameStateInner,
     sequencer: Sequencer,
+    heartbeat_enable: Arc<AtomicBool>,
 ) -> JoinHandle<()> {
     spawn(async move {
         // TODO: Check which game the move is for?
@@ -124,6 +135,14 @@ pub(crate) fn start_game(
 
             if let Some(game) = game.as_mut() {
                 if let Err(err) = game.board.play(game_move, s.to_hex()) {
+                    match err {
+                        MoveRejectReason::NoSuchUser => {}
+                        MoveRejectReason::GameIsFinished(_) => {
+                            heartbeat_enable.store(false, Ordering::Relaxed);
+                        }
+                        MoveRejectReason::MoveSanitizationError(_) => {}
+                        MoveRejectReason::TradeRejected(_) => {}
+                    }
                     debug!(reason=?err, "Rejected Move");
                 } else {
                     // TODO: Maybe notify less often?
