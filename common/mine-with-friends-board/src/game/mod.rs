@@ -135,8 +135,14 @@ impl GameSetup {
                 },
             );
             g.users_by_key.insert(player.clone(), id);
-            g.tokens[g.real_sats_token_id].mint(&id, self.start_amount as u128);
-            g.tokens[g.bitcoin_token_id].mint(&id, self.start_amount as u128);
+            g.tokens[g.bitcoin_token_id].transaction();
+            g.tokens[g.real_sats_token_id].transaction();
+            {
+                g.tokens[g.real_sats_token_id].mint(&id, self.start_amount as u128);
+                g.tokens[g.bitcoin_token_id].mint(&id, self.start_amount as u128);
+            }
+            g.tokens[g.bitcoin_token_id].end_transaction();
+            g.tokens[g.real_sats_token_id].end_transaction();
         }
     }
 }
@@ -290,8 +296,12 @@ impl GameBoard {
             make(self.concrete_token_id, self);
             make(self.asic_token_id, self);
         }
+        self.tokens[self.bitcoin_token_id].transaction();
+        self.tokens[self.real_sats_token_id].transaction();
         self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10000000);
         self.tokens[self.real_sats_token_id].mint(&self.root_user, 30000);
+        self.tokens[self.bitcoin_token_id].end_transaction();
+        self.tokens[self.real_sats_token_id].end_transaction();
         //
         let id = self.alloc();
         self.callbacks.schedule(Box::new(PowerPlantEvent {
@@ -448,7 +458,7 @@ impl GameBoard {
         info!(key = signed_by, ?from, "Got Move {} From Player", sequence);
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from).or_default();
-        if (*current_move + 1) != sequence || *current_move == 0 && sequence == 0 {
+        if (*current_move + 1) != sequence && !(*current_move == 0 && sequence == 0) {
             return Ok(());
         } else {
             *current_move = sequence;
@@ -469,6 +479,7 @@ impl GameBoard {
     }
 
     fn update_current_time(&mut self, (from, time): (EntityID, u64)) {
+        trace!(?from, time, "updating time for player");
         let tick = self.ticks.entry(from).or_insert(Tick {
             first_time: time,
             elapsed: 0,
@@ -480,6 +491,7 @@ impl GameBoard {
         trace!(elapsed = ?Duration::from_millis(tick.elapsed), player=?from);
         let mut elapsed: Vec<u64> = self.ticks.values().map(|t| t.elapsed).collect();
         elapsed.sort_unstable();
+        trace!(?elapsed, "elapsed times");
         // todo: maybe ensure monotonic?
         self.elapsed_time = self.elapsed_time.max(if elapsed.len() % 2 == 0 {
             (elapsed.get(elapsed.len() / 2).cloned().unwrap_or_default()
@@ -667,7 +679,7 @@ impl GameBoard {
                 for_sale,
                 miners,
                 owner,
-                plant_type: power_plant.plant_type.clone(),
+                plant_type: power_plant.plant_type,
                 watts: power_plant.watts,
                 hashrate: power_plant.compute_hashrate(self),
             });

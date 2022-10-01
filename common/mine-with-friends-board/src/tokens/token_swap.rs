@@ -13,6 +13,7 @@ use std::fmt::Display;
 use std::ops::Add;
 use std::ops::Div;
 use std::ops::Sub;
+use tracing::trace;
 
 /// Data for a single trading pair (e.g. Apples to Oranges tokens)
 ///
@@ -246,24 +247,13 @@ impl ConstantFunctionMarketMaker {
     /// Parameters: One of amount_a or amount_b should be 0, which implies the trade direction
     pub(crate) fn do_sell_trade(
         game: &mut GameBoard,
-        mut id: TradingPairID,
-        mut amount_a: u128,
-        mut amount_b: u128,
+        id: TradingPairID,
+        amount_a: u128,
+        amount_b: u128,
         buy_min: Option<u128>,
         simulate: bool,
         ctx: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
-        if !id.is_normal() {
-            std::mem::swap(&mut amount_a, &mut amount_b);
-            id.normalize();
-        }
-
-        // the zero is the one to be computed
-        if !(amount_a == 0 || amount_b == 0) {
-            return Err(TradeError::InvalidTrade(
-                "Both token amounts cannot be zero".into(),
-            ));
-        }
         ConstantFunctionMarketMaker::internal_do_trade_sell_fixed_amount(
             game, id, amount_a, amount_b, buy_min, simulate, ctx,
         )
@@ -271,23 +261,13 @@ impl ConstantFunctionMarketMaker {
 
     pub(crate) fn do_buy_trade(
         game: &mut GameBoard,
-        mut id: TradingPairID,
-        mut amount_a: u128,
-        mut amount_b: u128,
+        id: TradingPairID,
+        amount_a: u128,
+        amount_b: u128,
         sell_max: Option<u128>,
         simulate: bool,
         ctx: &CallContext,
     ) -> Result<TradeOutcome, TradeError> {
-        if !id.is_normal() {
-            std::mem::swap(&mut amount_a, &mut amount_b);
-            id.normalize();
-        }
-        // the zero is the one to be computed
-        if !(amount_a == 0 || amount_b == 0) {
-            return Err(TradeError::InvalidTrade(
-                "Both token amounts cannot be zero".into(),
-            ));
-        }
         ConstantFunctionMarketMaker::internal_do_trade_buy_fixed_amount(
             game, id, amount_a, amount_b, sell_max, simulate, ctx,
         )
@@ -310,9 +290,18 @@ impl ConstantFunctionMarketMaker {
         let mkt = ConstantFunctionMarketMakerPair::ensure(game, id);
         let tokens: &mut TokenRegistry = &mut game.tokens;
         let (buying, selling, buy_amt) = match (amount_a, amount_b) {
+            (0, 0) => {
+                return Err(TradeError::InvalidTrade(
+                    "Both token amounts cannot be zero".into(),
+                ))
+            }
             (0, b) => (id.asset_b, id.asset_a, b),
             (a, 0) => (id.asset_a, id.asset_b, a),
-            _ => panic!("Expected one to be 0"),
+            _ => {
+                return Err(TradeError::InvalidTrade(
+                    "One token amount must be zero".into(),
+                ))
+            }
         };
 
         let (
@@ -354,12 +343,17 @@ impl ConstantFunctionMarketMaker {
             }
             if !simulate {
                 tokens[selling].transaction();
-                let _ = tokens[selling].transfer(sender, &mkt.id, sell_amt);
-                tokens[buying].end_transaction();
+                trace!(sell_amt, "Transferring Funds to Swap");
+                if !tokens[selling].transfer(sender, &mkt.id, sell_amt) {
+                    panic!("Logic Error: Invariant (Enough Balance) Already Checked")
+                }
+                tokens[selling].end_transaction();
                 if let Err(e) = Self::swap_helper(selling, buying, game, 0, buy_amt, sender) {
                     let tokens = &mut game.tokens;
                     tokens[selling].transaction();
+                    trace!(sell_amt, "Returning Funds Outer");
                     let _ = tokens[selling].transfer(&mkt.id, sender, sell_amt);
+                    trace!("Funds Returned Outer");
                     tokens[selling].end_transaction();
                     return Err(e);
                 }
@@ -392,24 +386,32 @@ impl ConstantFunctionMarketMaker {
         let tokens: &mut TokenRegistry = &mut game.tokens;
         tokens[mkt.pair.asset_a].transaction();
         tokens[mkt.pair.asset_b].transaction();
-
-        if tokens[mkt.pair.asset_a].transfer(&mkt.id, sender, amount_a) {
-            if !tokens[mkt.pair.asset_b].transfer(&mkt.id, sender, amount_b) {
-                // undo swap
-                if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, amount_a) {
-                    panic!("Corrupt Game");
-                }
-                tokens[mkt.pair.asset_b].end_transaction();
-                tokens[mkt.pair.asset_a].end_transaction();
-                return Err(TradeError::InsufficientTokens(
-                    "Insufficient funds asset b".to_string(),
-                ));
+        let send_a_amt =
+            if amount_a > 0 && tokens[mkt.pair.asset_a].transfer(&mkt.id, sender, amount_a) {
+                amount_a
+            } else {
+                0
+            };
+        let send_b_amt =
+            if amount_b > 0 && tokens[mkt.pair.asset_b].transfer(&mkt.id, sender, amount_b) {
+                amount_b
+            } else {
+                0
+            };
+        if !(send_a_amt == amount_a && send_b_amt == amount_b) {
+            trace!("Returning funds");
+            // undo swap
+            if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, amount_a) {
+                panic!("Corrupt Game");
             }
-        } else {
+            if !tokens[mkt.pair.asset_b].transfer(sender, &mkt.id, amount_b) {
+                panic!("Corrupt Game");
+            }
+            trace!("Funds Returned");
             tokens[mkt.pair.asset_b].end_transaction();
             tokens[mkt.pair.asset_a].end_transaction();
             return Err(TradeError::InsufficientTokens(
-                "Insufficient funds asset a".to_string(),
+                "Insufficient funds asset".to_string(),
             ));
         }
         tokens[mkt.pair.asset_b].end_transaction();
@@ -417,11 +419,23 @@ impl ConstantFunctionMarketMaker {
 
         let a_reserves_2 = tokens[mkt.pair.asset_a].balance_check(&mkt.id);
         let b_reserves_2 = tokens[mkt.pair.asset_b].balance_check(&mkt.id);
+        let k_2 = a_reserves_2 * b_reserves_2;
+        let k_1 = mkt.reserve_a * mkt.reserve_b;
 
-        if a_reserves_2 * b_reserves_2 < mkt.reserve_a * mkt.reserve_b {
+        trace!(
+            "Invariant: ({} * {} = {}) >= ({} = {} * {}) ?",
+            a_reserves_2,
+            b_reserves_2,
+            k_2,
+            k_1,
+            mkt.reserve_a,
+            mkt.reserve_b
+        );
+        if k_2 < k_1 {
             tokens[mkt.pair.asset_a].transaction();
             tokens[mkt.pair.asset_b].transaction();
 
+            trace!("Returning funds");
             if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, amount_a) {
                 panic!("Corrupt Game");
             }
@@ -429,6 +443,7 @@ impl ConstantFunctionMarketMaker {
                 panic!("Corrupt Game");
             }
 
+            trace!("Funds Returned");
             tokens[mkt.pair.asset_b].end_transaction();
             tokens[mkt.pair.asset_a].end_transaction();
             return Err(TradeError::InvalidTrade(
@@ -460,25 +475,28 @@ impl ConstantFunctionMarketMaker {
         }
         let mkt = ConstantFunctionMarketMakerPair::ensure(game, id);
         let tokens: &mut TokenRegistry = &mut game.tokens;
-        if !(tokens[id.asset_a].balance_check(sender) >= amount_a
-            && tokens[id.asset_b].balance_check(sender) >= amount_b)
-        {
-            return Err(TradeError::InsufficientTokens(
-                "Sender has insufficient tokens".into(),
-            ));
-        }
-
-        if !(amount_a <= mkt.amt_a(tokens) && amount_b <= mkt.amt_b(tokens)) {
-            return Err(TradeError::InsufficientTokens(
-                "Market has insufficient tokens".into(),
-            ));
-        }
 
         let (buying, selling, sell_amt) = match (amount_a, amount_b) {
+            (0, 0) => {
+                return Err(TradeError::InvalidTrade(
+                    "Both token amounts cannot be zero".into(),
+                ))
+            }
             (0, b) => (id.asset_a, id.asset_b, b),
             (a, 0) => (id.asset_b, id.asset_a, a),
-            _ => panic!("Expected one to be 0"),
+            _ => {
+                return Err(TradeError::InvalidTrade(
+                    "One token amount must be zero".into(),
+                ))
+            }
         };
+
+        // disabled this check: shouldn't matter?
+        // if !(amount_a <= mkt.amt_a(tokens) && amount_b <= mkt.amt_b(tokens)) {
+        //     return Err(TradeError::InsufficientTokens(
+        //         "Market has insufficient tokens".into(),
+        //     ));
+        // }
 
         let (
             asset_player_purchased,
@@ -516,15 +534,24 @@ impl ConstantFunctionMarketMaker {
                     return Err(TradeError::MarketSlipped);
                 }
             }
+            if sell_amt > tokens[selling].balance_check(sender) {
+                return Err(TradeError::InsufficientTokens(
+                    "User has insufficient tokens".into(),
+                ));
+            }
             if !simulate {
-                tokens[buying].transaction();
-                let _ = tokens[buying].transfer(sender, &mkt.id, buy_amt);
-                tokens[buying].end_transaction();
-                if let Err(e) = Self::swap_helper(selling, buying, game, sell_amt, 0, sender) {
+                tokens[selling].transaction();
+                if !tokens[selling].transfer(sender, &mkt.id, sell_amt) {
+                    panic!("Logic Error: Invariant (Enough Balance) Already Checked");
+                }
+                tokens[selling].end_transaction();
+                if let Err(e) = Self::swap_helper(selling, buying, game, 0, buy_amt, sender) {
                     let tokens = &mut game.tokens;
-                    tokens[buying].transaction();
-                    let _ = tokens[buying].transfer(&mkt.id, sender, buy_amt);
-                    tokens[buying].end_transaction();
+                    trace!(sell_amt, "Returning Funds Outer");
+                    tokens[selling].transaction();
+                    let _ = tokens[selling].transfer(&mkt.id, sender, sell_amt);
+                    tokens[selling].end_transaction();
+                    trace!("Funds Returned Outer");
                     return Err(e);
                 }
             }
@@ -559,6 +586,7 @@ impl ConstantFunctionMarketMaker {
         buy_amt: u128,
         sender: &EntityID,
     ) -> Result<(), TradeError> {
+        tracing::trace!(sell_amt, buy_amt, ?selling, ?buying, "Token Swap");
         let mut trade_pair = TradingPairID {
             asset_a: selling,
             asset_b: buying,

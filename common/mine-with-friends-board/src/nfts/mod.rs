@@ -1,5 +1,5 @@
 use self::instances::powerplant::{PlantType, PowerPlant};
-use crate::util::{ForSale, HasMiners, Location, Watts};
+use crate::util::{ForSale, Location, Watts};
 
 use super::entity::EntityID;
 use schemars::JsonSchema;
