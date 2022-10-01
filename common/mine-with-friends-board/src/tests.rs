@@ -1,5 +1,3 @@
-use tracing::{debug, info, trace};
-
 use crate::{
     game::{
         game_move::{GameMove, Heartbeat, MintPowerPlant, SendTokens, Trade},
@@ -10,13 +8,14 @@ use crate::{
     tokens::token_swap::TradingPairID,
     MoveEnvelope,
 };
+use tracing::{debug, info, trace};
 
 const ALICE: &str = "alice";
 const BOB: &str = "bob";
 type PostCondition = &'static dyn Fn(&GameBoard, Result<(), MoveRejectReason>);
-
 const NO_POST: PostCondition =
     (&|_g: &GameBoard, r: Result<(), MoveRejectReason>| assert!(r.is_ok())) as PostCondition;
+
 #[test]
 fn test_game_termination_time() {
     let _ = tracing_subscriber::fmt::try_init();
@@ -404,6 +403,43 @@ fn test_send_tokens_to_plant() {
     let btc_balance_after_mining = game.tokens[game.bitcoin_token_id].balance_check(&id);
     trace!(btc_balance_after_mining, btc_balance_before_mining);
     assert!(btc_balance_after_mining > btc_balance_before_mining);
+
+    run_game(
+        [
+            (
+                ALICE,
+                MoveEnvelope {
+                    d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                    sequence: alice_seq_next(),
+                    /// median time should be averaged to >= 250k
+                    time_millis: 500_000,
+                },
+                NO_POST,
+            ),
+            (
+                ALICE,
+                MoveEnvelope {
+                    d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                    sequence: alice_seq_next(),
+                    time_millis: 500_200,
+                },
+                &|g, v| {
+                    let shares = g.get_user_hashrate_share();
+                    trace!(?shares);
+                    trace!(game_is_finished=?g.game_is_finished());
+                    let timeout = (g.elapsed_time >= (g.finish_time / 4));
+                    trace!(finish_time=?g.finish_time, elapsed_time=?g.elapsed_time, timeout);
+                    assert!(matches!(
+                        v,
+                        Err(MoveRejectReason::GameIsFinished(
+                            FinishReason::DominatingPlayer(id)
+                        )) if id == *g.users_by_key.get(ALICE).unwrap()
+                    ))
+                },
+            ),
+        ],
+        &mut game,
+    );
 }
 
 fn run_game<I>(moves: I, mut game: &mut GameBoard)
