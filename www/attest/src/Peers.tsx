@@ -2,6 +2,7 @@ import React from 'react';
 import { DataGrid, GridActionsCellItem, GridRowParams, GridRowsProp, GridToolbarContainer } from '@mui/x-data-grid';
 import { Cancel, CheckBox, CheckBoxOutlineBlank, ContentCopy, Pending, Start, ToggleOffTwoTone, ToggleOnTwoTone, WindowOutlined } from '@mui/icons-material';
 import { AddPeer } from './AddPeer';
+import { PeerInfo } from './App';
 
 function CustomToolbar(peer: any) {
   return () => {
@@ -32,14 +33,7 @@ async function change(url: string, port: number, root: string,
       })
     });
 }
-type Peer = {
-  service_url: string,
-  port: string,
-  fetch_from: boolean,
-  push_to: boolean,
-  allow_unsolicited_tips: boolean
-};
-export function Peers(props: { peers: Array<Peer>, root: string | null, toolbar_component: any }) {
+export function Peers(props: { peers: Array<PeerInfo>, root: string | null, toolbar_component: any }) {
 
   const root = props.root;
   const components = { Toolbar: CustomToolbar(props.toolbar_component) };
