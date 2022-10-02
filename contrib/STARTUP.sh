@@ -73,12 +73,12 @@ else
   tmux split-window -t MySession:1 "export PLAYER=\"host\"; $PWD/start_litigator.sh; /usr/bin/env $SHELL -i"
 
   # Player 1
-  tmux new-window -t MySession: -n "player-1" "$PWD/start_tauri.sh; /usr/bin/env $SHELL -i"
+  tmux new-window -t MySession: -n "player-1" "export PLAYER=\"p1\"; $PWD/start_tauri.sh; /usr/bin/env $SHELL -i"
   tmux split-window -t MySession:2 "export PLAYER=\"p1\" SOCKS_PORT=14458 APP_PORT=13329 CONTROL_PORT=15533; $PWD/start_attest.sh; /usr/bin/env $SHELL -i"
   tmux split-window -t MySession:2 "export PLAYER=\"p1\"; $PWD/start_litigator.sh; /usr/bin/env $SHELL -i"
 
   # Player 2
-  tmux new-window -t MySession: -n "player-2" "$PWD/start_tauri.sh; /usr/bin/env $SHELL -i"
+  tmux new-window -t MySession: -n "player-2" "export PLAYER=\"p2\"; $PWD/start_tauri.sh; /usr/bin/env $SHELL -i"
   tmux split-window -t MySession:3 "export PLAYER=\"p2\" SOCKS_PORT=14459 APP_PORT=13330 CONTROL_PORT=15534; $PWD/start_attest.sh; /usr/bin/env $SHELL -i"
   tmux split-window -t MySession:3 "export PLAYER=\"p2\"; $PWD/start_litigator.sh; /usr/bin/env $SHELL -i"
 

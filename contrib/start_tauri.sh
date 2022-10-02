@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 
 export CONF=$(cat disable_tauri_front.json)
+export MASTERMINE_CONFIG=$(cat mastermine_config.json.template | envsubst)
+echo $MASTERMINE_CONFIG | jq
 cd ../ux
 case "$USE_RELEASE_TAURI" in
 dev)
