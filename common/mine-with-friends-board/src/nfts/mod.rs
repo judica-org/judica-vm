@@ -3,8 +3,10 @@ use crate::util::{ForSale, Location, Watts};
 
 use super::entity::EntityID;
 use schemars::JsonSchema;
+use serde::ser::SerializeStruct;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::Serializer;
 
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
@@ -26,19 +28,21 @@ pub(crate) trait NFT: Send + Sync {
     fn to_json(&self) -> serde_json::Value;
 }
 
+type Nfts = BTreeMap<NftPtr, Box<dyn NFT>>;
+type PowerPlantMap = BTreeMap<NftPtr, PowerPlant>;
 /// A Registry of all NFTs and their MetaData
-#[derive(Default)]
+#[derive(Default, Serialize)]
 pub(crate) struct NFTRegistry {
-    pub nfts: BTreeMap<NftPtr, Box<dyn NFT>>,
-    pub power_plants: BTreeMap<NftPtr, PowerPlant>,
+    // DO NOT ADD FIELDS HERE WITHOUT UPDATING THE SERIALIZE METHOD
+    #[serde(serialize_with = "serialize_nfts")]
+    pub nfts: Nfts,
+    pub power_plants: PowerPlantMap,
 }
-impl Serialize for NFTRegistry {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.collect_seq(self.nfts.values().map(|n| n.to_json()))
-    }
+fn serialize_nfts<S>(n: &Nfts, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    s.collect_seq(n.values().map(|n| n.to_json()))
 }
 
 /// A special Pointer designed for safer access to the NFTRegistry (prevent
