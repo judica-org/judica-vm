@@ -4,7 +4,7 @@ export function ChatLog({ chat_log }: { chat_log: [number, number, string][] }) 
 
     const msgs = chat_log.map(([a, b, c]) => {
         return <div key={a} className="ChatMessage">
-            <Typography variant="body2"><Typography variant="h6" sx={{ textDecoration: 'underline' }} display="inline">{b}:</Typography> {c}</Typography>
+            <Typography variant="body2" sx={{wordBreak: "break-word"}}><Typography variant="h6" sx={{ textDecoration: 'underline' }} display="inline">{b}:</Typography> {c}</Typography>
         </div>
     });
 
