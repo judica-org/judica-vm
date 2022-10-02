@@ -22,8 +22,8 @@ export const tauri_host = {
   get_move_schema: async () => {
     return await invoke("get_move_schema");
   },
-  make_move_inner: async (nextMove: GameMove, from: string) => {
-    return await invoke("make_move_inner", { nextMove, from });
+  make_move_inner: async (nextMove: GameMove) => {
+    return await invoke("make_move_inner", { nextMove });
   },
   game_synchronizer: async () => {
     if (game_synchronizer_invoked)

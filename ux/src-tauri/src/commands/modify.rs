@@ -68,7 +68,6 @@ pub(crate) async fn make_move_inner_inner(
     db: Database,
     sk: SigningKeyInner,
     next_move: GameMove,
-    _from: EntityID,
 ) -> Result<(), &'static str> {
     let xpubkey = sk.lock().await.ok_or("No Key Selected")?;
     let msgdb = db.get().await.map_err(|_e| "No DB Available")?;

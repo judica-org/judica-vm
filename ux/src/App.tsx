@@ -41,7 +41,7 @@ function MoveForm() {
     // TODO: Submit from correct user
     const uid_n = uid.current?.valueAsNumber;
     if (uid_n)
-      tauri_host.make_move_inner(data.formData, "0")
+      tauri_host.make_move_inner(data.formData)
   };
   const schema_form = useMemo<JSX.Element>(() => {
     const customFormats = { "uint128": (s: string) => { return true; } };

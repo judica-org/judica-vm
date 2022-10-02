@@ -15,7 +15,7 @@ const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
   console.log("listing schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
-    tauri_host.make_move_inner(data.formData, "0")
+    tauri_host.make_move_inner(data.formData)
   };
 
   // form creater should be extracted out into a form util

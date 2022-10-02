@@ -16,7 +16,7 @@ export default function MoveForm() {
   console.log("move schema:", schema);
   const handle_submit = (data: FormSubmit) => {
     // TODO: Submit from correct user
-    tauri_host.make_move_inner(data.formData, "0")
+    tauri_host.make_move_inner(data.formData)
   };
 
   const schema_form = useMemo<JSX.Element>(() => {
