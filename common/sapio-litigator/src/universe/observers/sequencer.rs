@@ -6,13 +6,19 @@ use event_log::{
     connection::EventLog,
     db_handle::accessors::{occurrence::ToOccurrence, occurrence_group::OccurrenceGroupID},
 };
-use futures::stream::BoxStream;
+use futures::{
+    stream::{BoxStream, LocalBoxStream},
+    Stream, StreamExt,
+};
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_sequencer::{GenericSequencer, OnlineDBFetcher};
 use mine_with_friends_board::{game::GameBoard, MoveEnvelope};
+use sapio::contract::{abi::continuation::ContinuationPoint, CompilationError};
+use sapio_wasm_plugin::{host::WasmPluginHandle, plugin_handle::PluginHandle};
 use std::{
     collections::BTreeMap,
     error::Error,
+    slice::Join,
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
@@ -51,6 +57,22 @@ pub fn attest_stream(
             }
         },
     ))
+}
+
+async fn tripwire_barrier<T, H: PluginHandle + 'static>(
+    attest: impl Stream<Item = T>,
+    mut tripped: impl FnMut(T) -> bool + 'static,
+    point: &ContinuationPoint,
+    handle: H,
+) -> impl Stream<Item = Result<H::Output, CompilationError>> {
+    let path = (*point.path).clone();
+    attest.filter_map(move |t| {
+        futures::future::ready(if tripped(t) {
+            Some(handle.call(&path, todo!()))
+        } else {
+            None
+        })
+    })
 }
 
 // pub async fn sequencer_extractor(
