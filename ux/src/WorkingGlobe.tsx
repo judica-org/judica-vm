@@ -6,7 +6,7 @@ import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent, Icon, Divider } from '@mui/material';
 import { emit, Event } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
-import { PowerPlant, UserPowerPlant } from './App';
+import { PlantSelected, PowerPlant, UserPowerPlant } from './App';
 import { PlantOwnerSelect, PlantTypeSelect } from './GlobeHelpers';
 import { COORDINATE_PRECISION } from './mint-power-plant/MintingForm';
 import { EntityID } from './Types/GameMove';
@@ -59,7 +59,6 @@ export default () => {
     const [owners, setOwners] = useState<EntityID[]>([]);
     const [selectedPlantOwners, setSelectedPlantOwners] = useState<EntityID[]>([]); // default to all owners
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
-    const [selected_plant, setSelectedPlant] = useState<Plant | null>(null);
     const [plantTypes, setPlantTypes] = React.useState({
         'Hydro': true,
         'Solar': true,
@@ -135,7 +134,7 @@ export default () => {
                             el.style.pointerEvents = 'auto';
                             el.style.cursor = 'pointer';
                             // set to 
-                            el.onclick = () => setSelectedPlant(d);
+                            el.onclick = () => PlantSelected(d.id);
                             el.onmouseover = () => {
                                 el.innerHTML = `
                                 <b>ID: ${d.id}</b> <br />

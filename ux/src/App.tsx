@@ -18,6 +18,23 @@ import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
 import MoveForm from './move-form/MoveForm';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
+export const PLANT_SELECTED_EVENT = "PlantSelected";
+export const PlantSelected = (d: EntityID) => {
+  let ev = new CustomEvent(PLANT_SELECTED_EVENT, { detail: d, bubbles: false });
+  document.dispatchEvent(ev);
+}
+declare global {
+  interface DocumentEventMap {
+    PlantSelected: CustomEvent<EntityID>,
+  }
+}
+export const ListenPlantSelected = (f: (d: EntityID) => void) => {
+  document.addEventListener(PLANT_SELECTED_EVENT, (ev: CustomEvent<EntityID>) => {
+    f(ev.detail)
+  })
+}
+
+
 export type PowerPlant = {
   id: EntityID,
   plant_type: PlantType //how does PlantType enum show up
@@ -139,7 +156,7 @@ export function flip_trading_pair(s: TradingPairIDParsed): TradingPairIDParsed {
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
   const [location, setLocation] = useState<[number, number]>([0, 0]);
-  const [selected_plant, set_selected_plant] = useState<PlantLabel | null>(null);
+  const [selected_plant, set_selected_plant] = useState<EntityID|null>(null);
   const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
   const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
@@ -221,6 +238,8 @@ function App() {
     return () => {
       (async () => {
         const unlisten_all = await Promise.all([
+          unlisten_signing_key,
+          unlisten_user_keys,
           unlisten_chat_log,
           unlisten_energy_exchange,
           unlisten_game_board,
@@ -246,9 +265,9 @@ function App() {
       setLocation(JSON.parse(ev.payload));
     });
 
-    listen("plant-selected", (ev) => {
-      set_selected_plant(ev.payload as PlantLabel)
-    });
+    ListenPlantSelected((d) => {
+      set_selected_plant(d)
+    })
   });
 
   return (
