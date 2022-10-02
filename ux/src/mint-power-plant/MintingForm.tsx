@@ -6,10 +6,11 @@ import { MintingEstimate } from "./MintingEstimate";
 import { tauri_host } from "../tauri_host";
 import { PlantType } from "../App";
 
+export const COORDINATE_PRECISION = 1000000;
 const standardizeCoordinates = ({ lat, lng }: { lat: number, lng: number }): [number, number] => {
   // fix to 6 decimal places to conform with hex data then remove decimals
-  const newLat = parseFloat(lat.toFixed(6)) * 1000000;
-  const newLng = parseFloat(lng.toFixed(6)) * 1000000;
+  const newLat = parseFloat(lat.toFixed(6)) * COORDINATE_PRECISION;
+  const newLng = parseFloat(lng.toFixed(6)) * COORDINATE_PRECISION;
 
   return [newLat, newLng]
 }

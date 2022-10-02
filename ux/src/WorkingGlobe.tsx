@@ -8,6 +8,7 @@ import { emit, Event } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
 import { PowerPlant, UserPowerPlant } from './App';
 import { PlantOwnerSelect, PlantTypeSelect } from './GlobeHelpers';
+import { COORDINATE_PRECISION } from './mint-power-plant/MintingForm';
 const { useState, useEffect } = React;
 
 type Plant = (UserPowerPlant & { text: string });
@@ -118,8 +119,8 @@ export default () => {
                         width={600}
                         height={600}
                         htmlElementsData={plants_by_type}
-                        htmlLat={(d: object) => (d as Plant).coordinates[0]}
-                        htmlLng={(d: object) => (d as Plant).coordinates[1]}
+                        htmlLat={(d: object) => (d as Plant).coordinates[0] / COORDINATE_PRECISION}
+                        htmlLng={(d: object) => (d as Plant).coordinates[1] / COORDINATE_PRECISION}
                         htmlAltitude={0.02}
                         htmlElement={(m: object) => {
                             const d: Plant = m as Plant;
