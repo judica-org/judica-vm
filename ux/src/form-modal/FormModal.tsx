@@ -5,7 +5,7 @@ import PurchaseMaterialForm from '../purchase-material/PurchaseMaterialForm';
 import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
 import { RawMaterialsActions } from '../util';
 import SaleListingForm from '../sale-listing/SaleListingForm';
-import { TradingPairID } from '../Types/GameMove';
+import { EntityID, TradingPairID } from '../Types/GameMove';
 import { MaterialPriceDisplay } from '../App';
 
 type NFTActions = 'Purchase Plant' | 'Sell Plant';
@@ -14,7 +14,7 @@ type FormModalProps = ({
   readonly market: MaterialPriceDisplay;
 } | {
   readonly action: NFTActions;
-  readonly nft_id: number;
+  readonly nft_id: EntityID;
 }) & { readonly title?: string };
 
 function FormModal(props: FormModalProps) {
@@ -27,7 +27,7 @@ function FormModal(props: FormModalProps) {
       case 'SELL':
         return <PurchaseMaterialForm action={props.action} market={props.market}></PurchaseMaterialForm>
       case 'Purchase Plant':
-        return <PurchaseOfferForm subtitle={`Purchase plant ${props.nft_id as number}`} />;
+        return <PurchaseOfferForm subtitle={`Purchase plant ${props.nft_id}`} />;
       case 'Sell Plant':
         return <SaleListingForm subtitle={'Sell'} />
     }

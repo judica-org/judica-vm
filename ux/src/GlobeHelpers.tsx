@@ -4,6 +4,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
 import { lightGreen, orange, yellow } from '@mui/material/colors';
 import { Typography } from '@mui/material';
+import { EntityID } from './Types/GameMove';
 
 export function PlantTypeSelect({ handleChange, plantTypes }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantTypes: { 'Hydro': boolean, 'Solar': boolean, 'Flare': boolean } }) {
   const { Hydro, Solar, Flare } = plantTypes;
@@ -30,7 +31,7 @@ export function PlantTypeSelect({ handleChange, plantTypes }: { handleChange: (e
   );
 }
 
-export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwners }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantOwners: number[], selectedPlantOwners: number[] }) {
+export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwners }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantOwners: EntityID[], selectedPlantOwners: EntityID[] }) {
   // for each owner, add a checkbox.
   return (
     <div>

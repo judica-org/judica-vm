@@ -105,7 +105,6 @@ impl GameServer {
                                     GameMove::Heartbeat(
                                         mine_with_friends_board::game::game_move::Heartbeat(),
                                     ),
-                                    EntityID(0),
                                 )
                                 .await
                                 .map_err(|e| tracing::trace!(err=?e, "Game Heartbeat!"));

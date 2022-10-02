@@ -15,7 +15,7 @@ const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: nu
   console.log("purchase schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
-      tauri_host.make_move_inner(data.formData, "0")
+      tauri_host.make_move_inner(data.formData)
   };
 
   const formData = {

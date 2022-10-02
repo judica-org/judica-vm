@@ -82,13 +82,21 @@ impl ConstantFunctionMarketMakerPair {
 /// A TradingPair, not guaranteed to be normalized (which can lead to weird
 /// bugs) Auto-canonicalizing is undesirable since a user might specify
 /// elsewhere in corresponding order what their trade is.
-#[derive(
-    Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, JsonSchema, Debug,
-)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Copy, Clone, Serialize, Deserialize, Debug)]
 #[serde(into = "String", try_from = "String")]
 pub struct TradingPairID {
     pub asset_a: TokenPointer,
     pub asset_b: TokenPointer,
+}
+
+impl JsonSchema for TradingPairID {
+    fn schema_name() -> String {
+        "TradingPairID".into()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        String::json_schema(gen)
+    }
 }
 
 #[derive(Debug)]

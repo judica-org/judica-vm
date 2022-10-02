@@ -5,11 +5,12 @@ import { UserPowerPlant, UserInventory } from "../App";
 import FormModal from "../form-modal/FormModal";
 import { plant_type_color_map } from "../util";
 import { MoveHashboards } from "../move-hashboards/MoveHashboards";
+import { EntityID } from "../Types/GameMove";
 
-export type PlantLabel = { readonly id: number, readonly owner: string, readonly watts: string, readonly for_sale: boolean };
+export type PlantLabel = { readonly id: EntityID, readonly owner: EntityID, readonly watts: string, readonly for_sale: boolean };
 
 export const ManagePlant = ({ asic_token_id, selected_plant, power_plants, user_inventory }:
-  { asic_token_id: string | null, selected_plant: PlantLabel | null, power_plants: UserPowerPlant[] | null, user_inventory: UserInventory | null }) => {
+  { asic_token_id: string | null, selected_plant: EntityID | null, power_plants: UserPowerPlant[] | null, user_inventory: UserInventory | null }) => {
 
   // extracted from user_inventory
   const [userPowerPlants, setUserPowerPlants] = useState<Record<string, UserPowerPlant> | null>(null);
@@ -23,8 +24,8 @@ export const ManagePlant = ({ asic_token_id, selected_plant, power_plants, user_
       setUserHashboards(tokens[1])
     }
   });
-  const owner = ((selected_plant && userPowerPlants) && userPowerPlants[selected_plant.id]) ?? null;
-  const plantDetail = power_plants && selected_plant ? power_plants.find(pl => pl.id === selected_plant.id) : null;
+  const owner = ((selected_plant && userPowerPlants) && userPowerPlants[selected_plant]) ?? null;
+  const plantDetail = power_plants && selected_plant ? power_plants.find(pl => pl.id === selected_plant) : null;
   return (<Card>
     <CardHeader title={`Plant Detail`} />
     <CardContent>
@@ -70,7 +71,7 @@ export const ManagePlant = ({ asic_token_id, selected_plant, power_plants, user_
           </div> :
             <div className="NonOwnerOptions">
               <Typography variant="h6">Options</Typography>
-              <FormModal action="Purchase Plant" title={"Purchase Plant"} nft_id={selected_plant.id} />
+              <FormModal action="Purchase Plant" title={"Purchase Plant"} nft_id={selected_plant} />
             </div>)
         }
       </div>

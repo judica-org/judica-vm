@@ -73,7 +73,6 @@ pub(crate) async fn super_mint(
             location,
             plant_type,
         }),
-        EntityID(0),
     )
     .await
 }
@@ -139,7 +138,6 @@ pub(crate) async fn send_chat(
         db.inner().clone(),
         sk.inner().clone(),
         GameMove::from(Chat(chat)),
-        EntityID(0),
     )
     .await
 }
@@ -167,14 +165,12 @@ pub(crate) async fn make_move_inner(
     db: State<'_, Database>,
     sk: State<'_, SigningKeyInner>,
     nextMove: GameMove,
-    from: EntityID,
 ) -> Result<(), &'static str> {
     modify::make_move_inner_inner(
         secp.inner().clone(),
         db.inner().clone(),
         sk.inner().clone(),
         nextMove,
-        from,
     )
     .await
 }

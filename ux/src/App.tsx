@@ -13,61 +13,42 @@ import { listen } from '@tauri-apps/api/event';
 import { Box, Tab, Tabs } from '@mui/material';
 import React from 'react';
 import DrawerAppBar from './menu-bar/MenuDrawer';
-import { TradingPairID } from './Types/GameMove';
+import { EntityID, TradingPairID } from './Types/GameMove';
 import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
+import MoveForm from './move-form/MoveForm';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
+export const PLANT_SELECTED_EVENT = "PlantSelected";
+export const PlantSelected = (d: EntityID) => {
+  let ev = new CustomEvent(PLANT_SELECTED_EVENT, { detail: d, bubbles: false });
+  document.dispatchEvent(ev);
+}
+declare global {
+  interface DocumentEventMap {
+    PlantSelected: CustomEvent<EntityID>,
+  }
+}
+export const ListenPlantSelected = (f: (d: EntityID) => void) => {
+  document.addEventListener(PLANT_SELECTED_EVENT, (ev: CustomEvent<EntityID>) => {
+    f(ev.detail)
+  })
+}
+
+
 export type PowerPlant = {
-  id: number,
+  id: EntityID,
   plant_type: PlantType //how does PlantType enum show up
   watts: number,
   coordinates: number[],
-  owner: number,
+  owner: EntityID,
   miners: number,
   for_sale: boolean,
 }
 
-function MoveForm() {
-  const [schema, set_schema] = useState<null | any>(null);
-
-  useEffect(() => {
-    (async () => {
-      set_schema(await tauri_host.get_move_schema());
-    })()
-
-  }, []);
-  console.log(schema);
-  const handle_submit = (data: FormSubmit) => {
-    // TODO: Submit from correct user
-    const uid_n = uid.current?.valueAsNumber;
-    if (uid_n)
-      tauri_host.make_move_inner(data.formData, "0")
-  };
-  const schema_form = useMemo<JSX.Element>(() => {
-    const customFormats = { "uint128": (s: string) => { return true; } };
-    if (schema)
-      return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
-        <button type="submit">Submit</button>
-      </Form>;
-    else
-      return <div></div>
-  }
-    , [schema]
-  )
-  const uid = useRef<null | HTMLInputElement>(null);
-  return schema && <div className='MoveForm'>
-    <div>
-      <label>Player ID:</label>
-      <input type={"number"} ref={uid}></input>
-    </div>
-    {schema_form}
-  </div>;
-}
-
 type NFTs = {
-  nfts: { nft_id: number, owner: number, transfer_count: number }[],
+  nfts: { nft_id: EntityID, owner: EntityID, transfer_count: number }[],
   power_plants: {
-    id: number,
+    id: EntityID,
     plant_type: string //how does PlantType enum show up
     watts: number,
     coordinates: number[]
@@ -157,21 +138,25 @@ export type UserInventory = {
   user_power_plants: Record<string, UserPowerPlant>,
   user_token_balances: [string, number][]
 }
-export function parse_trading_pair(s: string): TradingPairID {
+type TradingPairIDParsed = {
+  asset_a: number,
+  asset_b: number,
+}
+export function parse_trading_pair(s: string): TradingPairIDParsed {
   const [asset_a, asset_b] = s.split(":");
   return { asset_a: parseInt(asset_a, 16), asset_b: parseInt(asset_b, 16) }
 }
-export function trading_pair_to_string(s: TradingPairID): string {
+export function trading_pair_to_string(s: TradingPairIDParsed): string {
   return `${s.asset_a.toString(16)}:${s.asset_b.toString(16)}`
 }
 
-export function flip_trading_pair(s: TradingPairID): TradingPairID {
+export function flip_trading_pair(s: TradingPairIDParsed): TradingPairIDParsed {
   return { asset_a: s.asset_b, asset_b: s.asset_a }
 }
 function App() {
   const [game_board, set_game_board] = useState<game_board | null>(null);
   const [location, setLocation] = useState<[number, number]>([0, 0]);
-  const [selected_plant, set_selected_plant] = useState<PlantLabel | null>(null);
+  const [selected_plant, set_selected_plant] = useState<EntityID|null>(null);
   const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
   const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
@@ -234,7 +219,7 @@ function App() {
       setUserInventory(ev.payload as UserInventory);
     });
 
-    const unlisten_power_plants = appWindow.listen("user-inventory", (ev) => {
+    const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
       console.log(['power-plants'], ev);
       setPowerPlants(ev.payload as UserPowerPlant[]);
     });
@@ -253,6 +238,8 @@ function App() {
     return () => {
       (async () => {
         const unlisten_all = await Promise.all([
+          unlisten_signing_key,
+          unlisten_user_keys,
           unlisten_chat_log,
           unlisten_energy_exchange,
           unlisten_game_board,
@@ -278,9 +265,10 @@ function App() {
       setLocation(JSON.parse(ev.payload));
     });
 
-    listen("plant-selected", (ev) => {
-      set_selected_plant(ev.payload as PlantLabel)
-    });
+    ListenPlantSelected((d) => {
+      set_selected_plant(d)
+      set_current_tab(8);
+    })
   });
 
   return (
