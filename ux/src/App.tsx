@@ -15,6 +15,7 @@ import React from 'react';
 import DrawerAppBar from './menu-bar/MenuDrawer';
 import { TradingPairID } from './Types/GameMove';
 import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
+import MoveForm from './move-form/MoveForm';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export type PowerPlant = {
@@ -25,43 +26,6 @@ export type PowerPlant = {
   owner: number,
   miners: number,
   for_sale: boolean,
-}
-
-function MoveForm() {
-  const [schema, set_schema] = useState<null | any>(null);
-
-  useEffect(() => {
-    (async () => {
-      set_schema(await tauri_host.get_move_schema());
-    })()
-
-  }, []);
-  console.log(schema);
-  const handle_submit = (data: FormSubmit) => {
-    // TODO: Submit from correct user
-    const uid_n = uid.current?.valueAsNumber;
-    if (uid_n)
-      tauri_host.make_move_inner(data.formData)
-  };
-  const schema_form = useMemo<JSX.Element>(() => {
-    const customFormats = { "uint128": (s: string) => { return true; } };
-    if (schema)
-      return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
-        <button type="submit">Submit</button>
-      </Form>;
-    else
-      return <div></div>
-  }
-    , [schema]
-  )
-  const uid = useRef<null | HTMLInputElement>(null);
-  return schema && <div className='MoveForm'>
-    <div>
-      <label>Player ID:</label>
-      <input type={"number"} ref={uid}></input>
-    </div>
-    {schema_form}
-  </div>;
 }
 
 type NFTs = {
