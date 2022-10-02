@@ -1,13 +1,10 @@
 use self::instances::powerplant::{PlantType, PowerPlant};
-use crate::util::{ForSale, Location, Watts};
-
 use super::entity::EntityID;
+use crate::util::{ForSale, Location, Watts};
 use schemars::JsonSchema;
-use serde::ser::SerializeStruct;
 use serde::Deserialize;
 use serde::Serialize;
 use serde::Serializer;
-
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::ops::Index;
