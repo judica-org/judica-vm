@@ -219,7 +219,7 @@ function App() {
       setUserInventory(ev.payload as UserInventory);
     });
 
-    const unlisten_power_plants = appWindow.listen("user-inventory", (ev) => {
+    const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
       console.log(['power-plants'], ev);
       setPowerPlants(ev.payload as UserPowerPlant[]);
     });
@@ -267,6 +267,7 @@ function App() {
 
     ListenPlantSelected((d) => {
       set_selected_plant(d)
+      set_current_tab(8);
     })
   });
 
