@@ -63,7 +63,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
     if (submitter_id === "mint") {
       // this expects entityID that isn't used. Remove later.
       if (plant_type === "Solar" || plant_type === "Hydro" || plant_type === "Flare")
-        await tauri_host.super_mint(scale, location, plant_type!);
+        await tauri_host.super_mint(scale, standardizeCoordinates({ lat: location[0], lng: location[1] }), plant_type!);
     }
   };
 
