@@ -4,7 +4,7 @@
     align-items: start;
     height: 500px;
     overflow-y: scroll;
-    word-wrap: break-word;
+    word-break: break-word;
     padding: 1em;
 }
 
