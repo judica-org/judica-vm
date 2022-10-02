@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::ops::Index;
 use std::ops::IndexMut;
@@ -49,6 +50,17 @@ impl Serialize for NFTRegistry {
 )]
 #[serde(transparent)]
 pub struct NftPtr(EntityID);
+
+impl NftPtr {
+    pub fn inner(&self) -> EntityID {
+        self.0
+    }
+}
+impl Borrow<EntityID> for NftPtr {
+    fn borrow(&self) -> &EntityID {
+        &self.0
+    }
+}
 
 impl NFTRegistry {
     pub(crate) fn add(&mut self, nft: Box<dyn NFT>) -> NftPtr {
