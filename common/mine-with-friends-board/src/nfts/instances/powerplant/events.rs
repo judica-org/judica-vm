@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, num::NonZeroU128, ops::Div};
 
 use crate::{callbacks::Callback, entity::EntityID, game::GameBoard};
 
@@ -24,16 +24,18 @@ impl Callback for PowerPlantEvent {
             let owner = game.nfts[id].owner();
             *shares.entry(owner).or_default() += share;
         }
-        shares
-            .values_mut()
-            .for_each(|v| *v = ((*v * 1024 * game.mining_subsidy) / total) / 1024);
+        if let Some(total) = NonZeroU128::new(total) {
+            shares
+                .values_mut()
+                .for_each(|v| *v = ((*v * 1024 * game.mining_subsidy).div(total)) / 1024);
 
-        let btc = &mut game.tokens[game.bitcoin_token_id];
-        btc.transaction();
-        for (to, amount) in shares {
-            btc.mint(&to, amount)
+            let btc = &mut game.tokens[game.bitcoin_token_id];
+            btc.transaction();
+            for (to, amount) in shares {
+                btc.mint(&to, amount)
+            }
+            btc.end_transaction();
         }
-        btc.end_transaction();
 
         // Reschedule
         self.time = game.elapsed_time + self.period;

@@ -659,31 +659,29 @@ impl GameBoard {
 
     // where does miner status come from
     pub fn get_ux_power_plant_data(&self) -> Vec<UXPlantData> {
-        let mut power_plant_data = Vec::new();
         let plants = &self.nfts.power_plants.clone();
-        plants.iter().for_each(|(pointer, power_plant)| {
-            let mut for_sale = false;
-            if let Some(_nft_sale) = &self.nft_sales.nfts.get(pointer) {
-                for_sale = true;
-            }
-            // unwrap should be safe here - we have problems if we have a pointer and cant find the NFT.
-            let nft = self.nfts.nfts.get(pointer).unwrap();
-            let owner = nft.owner();
-            let nft_entity_id = nft.id();
-            let asic_token_id = self.asic_token_id;
-            let miners = self.tokens[asic_token_id].balance_check(&nft_entity_id);
+        let power_plant_data = plants
+            .iter()
+            .map(|(pointer, power_plant)| {
+                let for_sale = self.nft_sales.nfts.get(pointer).is_some();
+                let nft = &self.nfts[*pointer];
+                let owner = nft.owner();
+                let nft_entity_id = nft.id();
+                let asic_token_id = self.asic_token_id;
+                let miners = self.tokens[asic_token_id].balance_check(&nft_entity_id);
 
-            power_plant_data.push(UXPlantData {
-                id: *pointer,
-                coordinates: power_plant.coordinates,
-                for_sale,
-                miners,
-                owner,
-                plant_type: power_plant.plant_type,
-                watts: power_plant.watts,
-                hashrate: power_plant.compute_hashrate(self),
-            });
-        });
+                UXPlantData {
+                    id: *pointer,
+                    coordinates: power_plant.coordinates,
+                    for_sale,
+                    miners,
+                    owner,
+                    plant_type: power_plant.plant_type,
+                    watts: power_plant.watts,
+                    hashrate: power_plant.compute_hashrate(self),
+                }
+            })
+            .collect();
         power_plant_data
     }
 

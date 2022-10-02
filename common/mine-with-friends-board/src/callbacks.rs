@@ -6,10 +6,11 @@ use tracing::trace;
 
 /// The registry of events. Events are processed in linear time order, then
 /// secondarily the order they are recieved
-#[derive(Default)]
+#[derive(Default, Serialize)]
 pub struct CallbackRegistry {
     /// the key in this type is a virtual "time" at which the event should be
     /// removed and processed
+    #[serde(serialize_with = "serialize_callbacks")]
     callbacks: BTreeMap<u64, Vec<Box<dyn Callback>>>,
 }
 
@@ -22,17 +23,19 @@ impl CallbackRegistry {
 }
 
 /// We implement Serialize for our Callbacks just for a human-readable representation
-impl Serialize for CallbackRegistry {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.collect_seq(self.callbacks.iter().map(
-            |(k, v): (&u64, &Vec<Box<dyn Callback + 'static>>)| {
+fn serialize_callbacks<S>(
+    v: &BTreeMap<u64, Vec<Box<dyn Callback>>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.collect_seq(
+        v.iter()
+            .map(|(k, v): (&u64, &Vec<Box<dyn Callback + 'static>>)| {
                 (k, v.iter().map(|x| x.purpose()).collect::<Vec<String>>())
-            },
-        ))
-    }
+            }),
+    )
 }
 /// Callback must be implemented in order to register a future event
 pub(crate) trait Callback: Send + Sync {
