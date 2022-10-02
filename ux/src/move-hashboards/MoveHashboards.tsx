@@ -21,9 +21,9 @@ export const MoveHashboards = ({ action: initial_action, plant, user_hashboards,
     // need the hashboard token id
     ev.preventDefault();
     if (hashboard_qty && action === "ADD")
-      tauri_host.make_move_inner({ send_tokens: { amount: hashboard_qty, currency: parseInt(hashboard_pointer), to: plant.id } });
+      tauri_host.make_move_inner({ send_tokens: { amount: hashboard_qty, currency: (hashboard_pointer), to: plant.id } });
     if (hashboard_qty && action === "REMOVE")
-      tauri_host.make_move_inner({ remove_tokens: { nft_id: plant.id, amount: hashboard_qty, currency: parseInt(hashboard_pointer) } });
+      tauri_host.make_move_inner({ remove_tokens: { nft_id: plant.id, amount: hashboard_qty, currency: (hashboard_pointer) } });
   };
 
   return <Card>

@@ -13,25 +13,25 @@ import { listen } from '@tauri-apps/api/event';
 import { Box, Tab, Tabs } from '@mui/material';
 import React from 'react';
 import DrawerAppBar from './menu-bar/MenuDrawer';
-import { TradingPairID } from './Types/GameMove';
+import { EntityID, TradingPairID } from './Types/GameMove';
 import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
 import MoveForm from './move-form/MoveForm';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export type PowerPlant = {
-  id: number,
+  id: EntityID,
   plant_type: PlantType //how does PlantType enum show up
   watts: number,
   coordinates: number[],
-  owner: number,
+  owner: EntityID,
   miners: number,
   for_sale: boolean,
 }
 
 type NFTs = {
-  nfts: { nft_id: number, owner: number, transfer_count: number }[],
+  nfts: { nft_id: EntityID, owner: EntityID, transfer_count: number }[],
   power_plants: {
-    id: number,
+    id: EntityID,
     plant_type: string //how does PlantType enum show up
     watts: number,
     coordinates: number[]
@@ -121,15 +121,19 @@ export type UserInventory = {
   user_power_plants: Record<string, UserPowerPlant>,
   user_token_balances: [string, number][]
 }
-export function parse_trading_pair(s: string): TradingPairID {
+type TradingPairIDParsed = {
+  asset_a: number,
+  asset_b: number,
+}
+export function parse_trading_pair(s: string): TradingPairIDParsed {
   const [asset_a, asset_b] = s.split(":");
   return { asset_a: parseInt(asset_a, 16), asset_b: parseInt(asset_b, 16) }
 }
-export function trading_pair_to_string(s: TradingPairID): string {
+export function trading_pair_to_string(s: TradingPairIDParsed): string {
   return `${s.asset_a.toString(16)}:${s.asset_b.toString(16)}`
 }
 
-export function flip_trading_pair(s: TradingPairID): TradingPairID {
+export function flip_trading_pair(s: TradingPairIDParsed): TradingPairIDParsed {
   return { asset_a: s.asset_b, asset_b: s.asset_a }
 }
 function App() {

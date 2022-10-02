@@ -5,8 +5,9 @@ import { UserPowerPlant, UserInventory } from "../App";
 import FormModal from "../form-modal/FormModal";
 import { plant_type_color_map } from "../util";
 import { MoveHashboards } from "../move-hashboards/MoveHashboards";
+import { EntityID } from "../Types/GameMove";
 
-export type PlantLabel = { readonly id: number, readonly owner: string, readonly watts: string, readonly for_sale: boolean };
+export type PlantLabel = { readonly id: EntityID, readonly owner: EntityID, readonly watts: string, readonly for_sale: boolean };
 
 export const ManagePlant = ({ asic_token_id, selected_plant, power_plants, user_inventory }:
   { asic_token_id: string | null, selected_plant: PlantLabel | null, power_plants: UserPowerPlant[] | null, user_inventory: UserInventory | null }) => {

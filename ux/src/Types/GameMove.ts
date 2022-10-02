@@ -16,6 +16,7 @@ export type GameMove =
   | MintPowerPlantNFT
   | PurchaseMaterialsThenMintPowerPlantNFT
 export type Heartbeat = []
+export type TradingPairID = string
 /**
 * an EntityID is just a "pointer" we assign to all different types of things in our game, e.g. - Users - Token Contracts - NFTs - etc
 *
@@ -34,14 +35,6 @@ export interface Trade {
   cap?: number | null
   pair: TradingPairID
   sell: boolean
-  [k: string]: unknown
-}
-/**
-* A TradingPair, not guaranteed to be normalized (which can lead to weird bugs) Auto-canonicalizing is undesirable since a user might specify elsewhere in corresponding order what their trade is.
-*/
-export interface TradingPairID {
-  asset_a: EntityID
-  asset_b: EntityID
   [k: string]: unknown
 }
 export interface BuyNFTs {

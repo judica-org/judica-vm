@@ -9,6 +9,7 @@ import { fireSvg, solarSvg, hydroSvg } from './util';
 import { PowerPlant, UserPowerPlant } from './App';
 import { PlantOwnerSelect, PlantTypeSelect } from './GlobeHelpers';
 import { COORDINATE_PRECISION } from './mint-power-plant/MintingForm';
+import { EntityID } from './Types/GameMove';
 const { useState, useEffect } = React;
 
 type Plant = (UserPowerPlant & { text: string });
@@ -16,9 +17,9 @@ const stub_plant_data: Plant[] = [{
     coordinates: [46.818188, 8.227512],
     for_sale: false,
     hashrate: 90,
-    id: 45637,
+    id: "45637",
     miners: 32,
-    owner: 12345566,
+    owner: "12345566",
     plant_type: "Flare",
     text: "Flare Plant",
     watts: 345634,
@@ -26,9 +27,9 @@ const stub_plant_data: Plant[] = [{
     coordinates: [49.817492, 15.472962],
     for_sale: false,
     hashrate: 327,
-    id: 13436,
+    id: "13436",
     miners: 206,
-    owner: 9494384,
+    owner: "9494384",
     plant_type: "Hydro",
     text: "Hydroelectric Plant",
     watts: 67897,
@@ -36,9 +37,9 @@ const stub_plant_data: Plant[] = [{
     coordinates: [9.145, 40.489673],
     for_sale: true,
     hashrate: 141,
-    id: 95944,
+    id: "95944",
     miners: 30,
-    owner: 12345566,
+    owner: "12345566",
     plant_type: "Solar",
     text: "Solar Farm",
     watts: 23795,
@@ -55,8 +56,8 @@ function memoized_color(name: string) {
 }
 export default () => {
     const [power_plants, set_power_plants] = useState<(UserPowerPlant & { text: string })[]>([]); // use empty list for now so it will render
-    const [owners, setOwners] = useState<number[]>([]);
-    const [selectedPlantOwners, setSelectedPlantOwners] = useState<number[]>([]); // default to all owners
+    const [owners, setOwners] = useState<EntityID[]>([]);
+    const [selectedPlantOwners, setSelectedPlantOwners] = useState<EntityID[]>([]); // default to all owners
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [selected_plant, setSelectedPlant] = useState<Plant | null>(null);
     const [plantTypes, setPlantTypes] = React.useState({
@@ -74,19 +75,19 @@ export default () => {
 
     const handleOwnersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         console.log(['owners-change-event'], event)
-        const number = parseInt(event.target.name);
-        if (selectedPlantOwners.includes(number)) {
-            setSelectedPlantOwners(selectedPlantOwners.filter((owner) => owner !== number));
+        const picked_owner = event.target.name;
+        if (selectedPlantOwners.includes(picked_owner)) {
+            setSelectedPlantOwners(selectedPlantOwners.filter((owner) => owner !== picked_owner));
         } else {
 
-            setSelectedPlantOwners([...selectedPlantOwners, number]);
+            setSelectedPlantOwners([...selectedPlantOwners, picked_owner]);
         }
     }
 
     useEffect(() => {
         const unlisten_power_plants = appWindow.listen("power-plants", (ev: Event<(UserPowerPlant & { text: string })[]>) => {
             console.log(['power-plants-received'], ev);
-            let plant_owners: number[] = [];
+            let plant_owners: EntityID[] = [];
             ev.payload.forEach((plant) => {
                 if (!plant_owners.includes(plant.owner)) {
                     plant_owners.push(plant.owner)

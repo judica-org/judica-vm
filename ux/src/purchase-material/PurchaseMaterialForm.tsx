@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardContent, FormControl, TextField, Button, Typography, ToggleButtonGroup, ToggleButton } from "@mui/material";
 import Form, { FormSubmit } from "@rjsf/core";
 import React from "react";
-import { flip_trading_pair, MaterialPriceDisplay, parse_trading_pair, trading_pair_to_string } from "../App";
+import { MaterialPriceDisplay} from "../App";
 import { SuccessfulTradeOutcome, tauri_host, UnsuccessfulTradeOutcome } from "../tauri_host";
 import { RawMaterialsActions } from "../util";
 

@@ -4,31 +4,31 @@ import { appWindow } from '@tauri-apps/api/window';
 import { useState, useEffect } from 'react';
 import { PlantType } from '../App';
 import FormModal from '../form-modal/FormModal';
-import { NftPtr } from '../Types/GameMove';
+import { EntityID } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
 
 export type NFTSale = {
   currency: any,
-  nft_id: number,
+  nft_id: EntityID,
   plant_type: PlantType
   price: number,
-  seller: number,
+  seller: EntityID,
   transfer_count: number,
 }
 
 const stub_listings: NFTSale[] = [{
   currency: 'donuts',
-  nft_id: 13134,
+  nft_id: "13134",
   plant_type: 'Flare',
   price: 937,
-  seller: 95720486,
+  seller: "95720486",
   transfer_count: 2,
 }, {
   currency: 'cookies',
-  nft_id: 26783,
+  nft_id: "26783",
   plant_type: 'Solar',
   price: 424,
-  seller: 3058572037,
+  seller: "3058572037",
   transfer_count: 1,
 }]
 
