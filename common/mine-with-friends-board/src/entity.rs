@@ -14,7 +14,9 @@ use std::num::ParseIntError;
 )]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
-pub struct EntityID(pub u64);
+pub struct EntityID(
+    #[schemars(with="String")]
+    pub u64);
 
 impl EntityID {
     pub fn is_valid(&self) -> bool {

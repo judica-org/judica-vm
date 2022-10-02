@@ -1,5 +1,7 @@
 /**
- * Grab-Bag Enum of all movesnnN.B. we do the enum-of-struct-variant pattern to make serialization/schemas nicer.
+ * Grab-Bag Enum of all moves
+ *
+ * N.B. we do the enum-of-struct-variant pattern to make serialization/schemas nicer.
  */
 export type GameMove =
   | {
@@ -9,15 +11,17 @@ export type GameMove =
   | BuyNFTs
   | SellNFTs
   | SendCoins
-  | RemoveHashboards
+  | RemoveTokens
   | SendALoggedChatMessageToAllPlayers
   | MintPowerPlantNFT
   | PurchaseMaterialsThenMintPowerPlantNFT
 export type Heartbeat = []
 /**
-* A special Pointer designed for safer access to the NFTRegistry (prevent confusion with EntityID type)nnTODO: Guarantee validity for a given NFTRegistry
+* an EntityID is just a "pointer" we assign to all different types of things in our game, e.g. - Users - Token Contracts - NFTs - etc
+*
+* EntityIDs are global and unique within the game state
 */
-export type NftPtr = number
+export type EntityID = string
 export type Chat = string
 export type PlantType = "Solar" | "Hydro" | "Flare"
 
@@ -27,34 +31,34 @@ export interface TradeCoins {
 export interface Trade {
   amount_a: number
   amount_b: number
-  pair: string
+  cap?: number | null
+  pair: TradingPairID
   sell: boolean
-  cap?: number
   [k: string]: unknown
 }
 /**
 * A TradingPair, not guaranteed to be normalized (which can lead to weird bugs) Auto-canonicalizing is undesirable since a user might specify elsewhere in corresponding order what their trade is.
 */
 export interface TradingPairID {
-  asset_a: number
-  asset_b: number
+  asset_a: EntityID
+  asset_b: EntityID
   [k: string]: unknown
 }
 export interface BuyNFTs {
   purchase_n_f_t: PurchaseNFT
 }
 export interface PurchaseNFT {
-  currency: number
+  currency: EntityID
   limit_price: number
-  nft_id: NftPtr
+  nft_id: EntityID
   [k: string]: unknown
 }
 export interface SellNFTs {
   list_n_f_t_for_sale: ListNFTForSale
 }
 export interface ListNFTForSale {
-  currency: number
-  nft_id: NftPtr
+  currency: EntityID
+  nft_id: EntityID
   price: number
   [k: string]: unknown
 }
@@ -63,17 +67,17 @@ export interface SendCoins {
 }
 export interface SendTokens {
   amount: number
-  currency: number
-  to: number
+  currency: EntityID
+  to: EntityID
   [k: string]: unknown
 }
-export interface RemoveHashboards {
-  remove_tokens: RemoveTokens
-}
 export interface RemoveTokens {
-  nft_id: NftPtr
+  remove_tokens: RemoveTokens1
+}
+export interface RemoveTokens1 {
   amount: number
-  currency: number
+  currency: EntityID
+  nft_id: EntityID
   [k: string]: unknown
 }
 export interface SendALoggedChatMessageToAllPlayers {
