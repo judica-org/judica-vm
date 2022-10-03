@@ -31,7 +31,7 @@ mod universe;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Event {
     Initialization((Vec<u8>, CreateArgs<Value>)),
-    ProtocolMessage((CanonicalJsonValue, XOnlyPublicKey)),
+    ExternalEvent(simps::Event),
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
@@ -223,7 +223,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     });
     let se_evlog = evlog.clone();
     let se_new_synthetic_event = new_synthetic_event.clone();
-    tokio::spawn(async move {
+    tokio::spawn(
         universe::extractors::sequencer::sequencer_extractor(
             config.oracle_key,
             msg_db,
@@ -231,7 +231,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
             evlog_group_id,
             se_new_synthetic_event,
         )
-    });
+    );
 
     let mut state = AppState::Uninitialized;
     loop {
@@ -297,7 +297,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                     bound_to.insert(o);
                 }
             },
-            Some(Event::ProtocolMessage(e)) => match &state {
+            Some(Event::ExternalEvent(e)) => match &state {
                 AppState::Initialized {
                     ref args,
                     ref contract,
@@ -363,6 +363,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                     }
                     // TODO: Make it so that faulty effects are ignored.
                 }
+                AppState::Uninitialized => {}
             },
             None => (),
         }
