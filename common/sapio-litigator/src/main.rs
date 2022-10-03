@@ -238,27 +238,37 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         match rx.recv().await {
             Some(Event::TransactionFinalized(_s, _tx)) => {}
             Some(Event::SyntheticPeriodicActions(_t)) => {
-                if let Some(out) = state.bound_to {
-                    if let Ok(program) = obj.bind_psbt(
-                        *out,
-                        Default::default(),
-                        Rc::new(TxIndexLogger::new()),
-                        emulator.as_ref(),
-                    ) {
-                        for obj in program.program.values() {
-                            for tx in obj.txs.iter() {
-                                let SapioStudioFormat::LinkedPSBT {
-                                    psbt: _,
-                                    hex: _,
-                                    metadata,
-                                    output_metadata: _,
-                                    added_output_metadata: _,
-                                } = tx;
-                                if let Some(_data) =
-                                    metadata.simp.get(&AutoBroadcast::get_protocol_number())
-                                {
-                                    // TODO:
-                                    // - Send PSBT out for signatures?
+                match &mut state {
+                    AppState::Uninitialized => (),
+                    AppState::Initialized {
+                        args: _,
+                        contract,
+                        bound_to,
+                        psbt_db: _,
+                    } => {
+                        if let Some(out) = bound_to {
+                            if let Ok(program) = obj.bind_psbt(
+                                *out,
+                                Default::default(),
+                                Rc::new(TxIndexLogger::new()),
+                                emulator.as_ref(),
+                            ) {
+                                for obj in program.program.values() {
+                                    for tx in obj.txs.iter() {
+                                        let SapioStudioFormat::LinkedPSBT {
+                                            psbt: _,
+                                            hex: _,
+                                            metadata,
+                                            output_metadata: _,
+                                            added_output_metadata: _,
+                                        } = tx;
+                                        if let Some(_data) =
+                                            metadata.simp.get(&AutoBroadcast::get_protocol_number())
+                                        {
+                                            // TODO:
+                                            // - Send PSBT out for signatures?
+                                        }
+                                    }
                                 }
                             }
                         }
