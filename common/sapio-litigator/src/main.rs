@@ -1,4 +1,5 @@
 use attest_messages::{Authenticated, GenericEnvelope};
+use bitcoin::blockdata::script::Script;
 use bitcoin::psbt::PartiallySignedTransaction;
 use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
@@ -194,8 +195,11 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     let game_action = EventKey("action_in_game".into());
     loop {
         match rx.recv().await {
-            Some(Event::TransactionFinalized(_s, _tx)) => {}
-            Some(Event::SyntheticPeriodicActions(_t)) => {
+            Some(Event::TransactionFinalized(_s, _tx)) => {
+                info!("Transaction Finalized");
+            }
+            Some(Event::SyntheticPeriodicActions(time)) => {
+                info!(time, "SyntehticPeriodicActions");
                 if let Some(out) = state.bound_to.as_ref() {
                     let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
                     if let Ok(program) = c.bind_psbt(
@@ -225,6 +229,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                 }
             }
             Some(Event::ModuleBytes(contract_bytes)) => {
+                info!("ModuleBytes");
                 let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
                 let module = WasmPluginHandle::<Compiled>::new_async(
                     &data_dir,
@@ -258,6 +263,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                 };
 
                 state.contract = if let Ok(c) = module.fresh_clone()?.call(&root, &args) {
+                    info!(address=?c.address,"Contract Compilation Successful");
                     Ok(c)
                 } else {
                     return Err("First Run of contract must pass")?;
@@ -265,9 +271,11 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                 state.args = Ok(args);
             }
             Some(Event::Rebind(o)) => {
+                info!(output=?o, "Rebind");
                 state.bound_to.insert(o);
             }
             Some(Event::NewRecompileTriggeringObservation(new_info_as_v)) => {
+                info!("NewRecompileTriggeringObservation");
                 let idx_str = SArc(Arc::new(format!("event-{}", state.event_counter)));
                 // work on a clone so as to not have an effect if failed
                 let mut new_args = state.args.as_ref().map_err(|e| e.as_str())?.clone();
@@ -325,7 +333,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
 
                 if any_edits {
                     new_args.context.effects = save.into();
-                    let result: Result<Compiled, ()> = {
+                    let result = {
                         let g_handle = state.module.lock().await;
                         // drop error before releasing g_handle so that the CompilationError non-send type
                         // doesn't get held across an await point
@@ -338,6 +346,13 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                         // TODO:  Belt 'n Suspsender Check:
                         // Check that old_state is augmented by new_state
                         Ok(new_contract) => {
+                            let old_addr = state.contract.as_ref().map(|c| c.address.clone());
+                            let new_addr = &new_contract.address;
+                            if Script::from(old_addr.unwrap()) != Script::from(new_addr.clone()) {
+                                Err("Critical Invariant Failed: Contract address mutated after recompile")?;
+                            }
+
+                            info!(address=?new_contract.address,"Contract ReCompilation Successful");
                             state.args = Ok(new_args);
                             state.contract = Ok(new_contract);
                         }
