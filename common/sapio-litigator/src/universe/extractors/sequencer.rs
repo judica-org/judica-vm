@@ -1,3 +1,4 @@
+use crate::{CompiledExt, Event};
 use attest_database::connection::MsgDB;
 use attest_messages::{AttestEnvelopable, Authenticated, GenericEnvelope, WrappedJson};
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
@@ -41,13 +42,6 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::info;
-
-use crate::{CompiledExt, Event};
-
-pub trait EvidenceCache<T> {
-    fn append(&mut self, item: &T);
-    fn retrieve(&self) -> Vec<T>;
-}
 
 pub fn attest_stream<F, R, E, M>(
     oracle_key: XOnlyPublicKey,
@@ -418,8 +412,7 @@ pub fn start_game(
         while let Some((game_move, s)) = moves.recv().await {
             info!(move_ = ?game_move, "New Move Recieved");
             match game.play(game_move, s.to_hex()) {
-                Ok(()) => {
-                }
+                Ok(()) => {}
                 Err(_) => {
                     // let accessor = evlog.get_accessor().await;
                     // let o: &dyn ToOccurrence =
