@@ -1,13 +1,10 @@
-use attest_database::connection::MsgDB;
-use attest_database::setup_db;
-use attest_util::bitcoin::BitcoinConfig;
+use attest_messages::{Authenticated, GenericEnvelope};
 use bitcoin::psbt::PartiallySignedTransaction;
-use bitcoin::{OutPoint, Transaction, Txid, XOnlyPublicKey};
-use bitcoincore_rpc_async::Client;
+use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
-use event_log::connection::EventLog;
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
-use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
+use game_player_messages::ParticipantAction;
+use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
 use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
@@ -15,24 +12,24 @@ use sapio::contract::{CompilationError, Compiled};
 use sapio_base::effects::{EditableMapEffectDB, PathFragment};
 use sapio_base::serialization_helpers::SArc;
 use sapio_base::txindex::TxIndexLogger;
-use sapio_wasm_plugin::host::PluginHandle;
 use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
-use sapio_wasm_plugin::CreateArgs;
+use sapio_wasm_plugin::{ContextualArguments, CreateArgs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use simps::AutoBroadcast;
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
+use universe::extractors::game_specific::{
+    module_argument_compilation_attempt_engine, WasmArgsReducer,
+};
 mod universe;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Event {
-    Initialization((Vec<u8>, CreateArgs<Value>)),
-    ExternalEvent(simps::Event),
+    ModuleBytes(Vec<u8>),
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
@@ -132,7 +129,6 @@ async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn s
         }
         Err(_) => {
             println!("Initializing contract at {:?}", config.contract_location);
-            println!("Using arguments {}", config.contract_args);
             let gid = accessor.insert_new_occurrence_group(&group)?;
             let occurrences = accessor.get_occurrences_for_group(gid)?;
             if occurrences.len() == 0 {
@@ -150,10 +146,7 @@ async fn insert_init(
     accessor: &event_log::db_handle::EventLogAccessor<'_>,
     gid: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error>> {
-    let ev = Event::Initialization((
-        tokio::fs::read(&location).await?,
-        serde_json::from_value(config.contract_args.clone())?,
-    ));
+    let ev = Event::ModuleBytes(tokio::fs::read(&location).await?);
     let ev_occ: &dyn ToOccurrence = &ev;
     accessor.insert_occurrence(gid, &ev_occ.into())?;
     Ok(())
@@ -177,7 +170,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         .await
         .get_occurrence_group_by_key(&config.event_log.group)?;
     let occurrence_list = evlog.get_accessor().await.get_occurrences_for_group(ogid)?;
-    let (contract_bytes, contract_args) = match occurrence_list.get(0) {
+    let (contract_bytes) = match occurrence_list.get(0) {
         None => {
             println!("Contract has not been initialized for this event log group!");
             // TODO: figure out how to actually construct a dyn Error
@@ -186,7 +179,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         Some((_, occ)) => {
             let ev = Event::from_occurrence(occ.clone())?;
             match ev {
-                Event::Initialization(init) => init,
+                Event::ModuleBytes(init) => init,
                 other => {
                     panic!("Invalid first event for event log: {:?}", other)
                 }
@@ -194,20 +187,18 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         }
     };
     let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
-    let module = WasmPluginHandle::<Compiled>::new_async(
-        &data_dir,
-        &emulator,
-        locator,
-        bitcoin::Network::Bitcoin,
-        Default::default(),
-    )
-    .await?;
+    let module = Arc::new(Mutex::new(
+        WasmPluginHandle::<Compiled>::new_async(
+            &data_dir,
+            &emulator,
+            locator,
+            bitcoin::Network::Bitcoin,
+            Default::default(),
+        )
+        .await?,
+    ));
 
     // check which continuation points need attest message routing
-    let obj = module.call(
-        &PathFragment::Root.into(),
-        &serde_json::from_value(config.contract_args)?,
-    )?;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let accessor = evlog.get_accessor().await;
@@ -244,7 +235,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     let se_new_synthetic_event = new_synthetic_event.clone();
     tokio::spawn(universe::extractors::sequencer::sequencer_extractor(
         config.oracle_key,
-        msg_db,
+        msg_db.clone(),
         se_evlog,
         evlog_group_id,
         se_new_synthetic_event,
@@ -264,7 +255,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                         psbt_db: _,
                     } => {
                         if let Some(out) = bound_to {
-                            if let Ok(program) = obj.bind_psbt(
+                            if let Ok(program) = contract.bind_psbt(
                                 *out,
                                 Default::default(),
                                 Rc::new(TxIndexLogger::new()),
@@ -292,17 +283,43 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                     }
                 }
             }
-            Some(Event::Initialization(x)) => {
+            Some(Event::ModuleBytes(x)) => {
                 if state.is_uninitialized() {
-                    let init: Result<Compiled, CompilationError> =
-                        module.call(&PathFragment::Root.into(), &x.1);
-                    if let Ok(c) = init {
-                        state = AppState::Initialized {
-                            args: x.1,
-                            contract: c,
-                            bound_to: None,
-                            psbt_db: Arc::new(PSBTDatabase::new()),
+                    fn read_move(
+                        e: Authenticated<GenericEnvelope<ParticipantAction>>,
+                    ) -> Result<(MoveEnvelope, XOnlyPublicKey), ()> {
+                        match e.msg() {
+                            ParticipantAction::MoveEnvelope(m) => {
+                                Ok(((m.clone(), e.header().key())))
+                            }
+                            ParticipantAction::Custom(_) => Err(()),
+                            ParticipantAction::PsbtSigningCoordination(_) => Err(()),
                         }
+                    }
+                    let stream = universe::extractors::game_specific::attest_stream(
+                        config.oracle_key,
+                        msg_db.clone(),
+                        read_move,
+                    );
+                    if let Ok((reducer, setup)) =
+                        WasmArgsReducer::new_default(msg_db.clone(), config.oracle_key, stream)
+                            .await
+                    {
+                        // todo real args for contract
+                        let args = CreateArgs {
+                            arguments: serde_json::to_value(&setup).unwrap(),
+                            context: ContextualArguments {
+                                network: bitcoin::network::constants::Network::Bitcoin,
+                                amount: Amount::from_sat(100000),
+                                effects: Default::default(),
+                            },
+                        };
+                        let next_state = module_argument_compilation_attempt_engine(
+                            reducer,
+                            &args,
+                            module.clone(),
+                        )
+                        .await;
                     }
                 }
             }
@@ -313,74 +330,6 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                 } => {
                     bound_to.insert(o);
                 }
-            },
-            Some(Event::ExternalEvent(e)) => match &state {
-                AppState::Initialized {
-                    ref args,
-                    ref contract,
-                    ref bound_to,
-                    psbt_db,
-                } => {
-                    // work on a clone so as to not have an effect if failed
-                    let mut new_args = args.clone();
-                    let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
-                    for api in contract
-                        .continuation_points()
-                        .filter(|api| {
-                            if let Some(recompiler) =
-                                api.simp.get(&simps::EventRecompiler::get_protocol_number())
-                            {
-                                if let Ok(recompiler) =
-                                    serde_json::from_value::<simps::EventRecompiler>(
-                                        recompiler.clone(),
-                                    )
-                                {
-                                    // Only pay attention to events that we are filtering for
-                                    if recompiler.filter == e.key {
-                                        return true;
-                                    }
-                                }
-                            }
-                            false
-                        })
-                        .filter(|api| {
-                            if let Some(schema) = &api.schema {
-                                let json_schema = serde_json::to_value(schema.clone())
-                                    .expect("RootSchema must always be valid JSON");
-                                jsonschema_valid::Config::from_schema(
-                                    // since schema is a RootSchema, cannot throw here
-                                    &json_schema,
-                                    Some(jsonschema_valid::schemas::Draft::Draft6),
-                                )
-                                .map(|validator| validator.validate(&e.data).is_ok())
-                                .unwrap_or(false)
-                            } else {
-                                false
-                            }
-                        })
-                    {
-                        // ensure that if specified, that we skip invalid messages
-                        save.effects
-                            .entry(SArc(api.path.clone()))
-                            .or_default()
-                            .insert(SArc(e.key.0.clone().into()), e.data.clone());
-                    }
-
-                    new_args.context.effects = save.into();
-                    let new_state: Result<Compiled, CompilationError> =
-                        module.call(&PathFragment::Root.into(), &new_args);
-                    // TODO: Check that old_state is augmented by new_state
-                    if let Ok(c) = new_state {
-                        state = AppState::Initialized {
-                            args: new_args,
-                            contract: c,
-                            bound_to: *bound_to,
-                            psbt_db: psbt_db.clone(),
-                        }
-                    }
-                    // TODO: Make it so that faulty effects are ignored.
-                }
-                AppState::Uninitialized => {}
             },
             None => (),
         }
