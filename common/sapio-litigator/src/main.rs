@@ -97,63 +97,13 @@ impl PSBTDatabase {
     }
 }
 
-#[derive(Deserialize)]
-struct Config {
-    db_app_name: String,
-    #[serde(default)]
-    db_prefix: Option<PathBuf>,
-    bitcoin: BitcoinConfig,
-    app_instance: String,
-    logfile: PathBuf,
-    event_log: EventLogConfig,
-    oracle_key: XOnlyPublicKey,
-    contract_location: PathBuf,
-    contract_args: Value,
-}
-
-#[derive(Deserialize)]
-struct EventLogConfig {
-    app_name: String,
-    #[serde(default)]
-    prefix: Option<PathBuf>,
-    group: OccurrenceGroupKey,
-}
-
-impl Config {
-    fn from_env() -> Result<Config, Box<dyn std::error::Error>> {
-        let j = std::env::var("LITIGATOR_CONFIG_JSON")?;
-        Ok(serde_json::from_str(&j)?)
-    }
-    async fn get_db(&self) -> Result<MsgDB, Box<dyn std::error::Error>> {
-        let db = setup_db(&self.db_app_name, self.db_prefix.clone()).await?;
-        Ok(db)
-    }
-    async fn get_event_log(&self) -> Result<EventLog, Box<dyn std::error::Error>> {
-        let db =
-            event_log::setup_db(&self.event_log.app_name, self.event_log.prefix.clone()).await?;
-        Ok(db)
-    }
-    async fn get_bitcoin_rpc(&self) -> Result<Arc<Client>, Box<dyn std::error::Error>> {
-        Ok(self.bitcoin.get_new_client().await?)
-    }
-}
-
-fn data_dir_modules(app_instance: &str) -> PathBuf {
-    let typ = "org";
-    let org = "judica";
-    let proj = format!("sapio-litigator.{}", app_instance);
-    let proj =
-        directories::ProjectDirs::from(typ, org, &proj).expect("Failed to find config directory");
-    let mut data_dir = proj.data_dir().to_owned();
-    data_dir.push("modules");
-    data_dir
-}
+pub mod config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let mut args = std::env::args();
-    let config = Config::from_env()?;
+    let config = config::Config::from_env()?;
     match args.nth(1) {
         None => todo!(),
         Some(s) if &s == "init" => Ok(init_contract_event_log(config).await?),
@@ -165,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-async fn init_contract_event_log(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {
     let evlog = config.get_event_log().await?;
     let accessor = evlog.get_accessor().await;
     let group = config.event_log.group;
@@ -190,14 +140,14 @@ async fn init_contract_event_log(config: Config) -> Result<(), Box<dyn std::erro
     }
 }
 
-async fn litigate_contract(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {
     // initialize db connection to the event log
     let evlog = config.get_event_log().await?;
     let msg_db = config.get_db().await?;
     let _bitcoin = config.get_bitcoin_rpc().await?;
 
     // get location of project directory modules
-    let data_dir = data_dir_modules(&config.app_instance);
+    let data_dir = config::data_dir_modules(&config.app_instance);
 
     // allocate a CTV Emulator
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
