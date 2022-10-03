@@ -444,6 +444,7 @@ fn test_send_tokens_to_plant() {
     );
 }
 
+#[test]
 fn test_sell_plant() {
     let _ = tracing_subscriber::fmt::try_init();
     let mut game = setup_game();
@@ -558,7 +559,7 @@ fn test_sell_plant() {
         ),
     ];
     run_game(moves2, &mut game);
-
+    let b_id = game.get_user_id(BOB).unwrap();
     let new_owner = game.nfts.nfts.get(&plant_id).unwrap().owner();
     assert_eq!(new_owner, b_id);
 }
