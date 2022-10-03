@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use bitcoin::{hashes::sha256, secp256k1::SecretKey, XOnlyPublicKey};
 use sapio::util::amountrange::AmountF64;
-use sapio_base::simp::{CompiledObjectLT, SIMPAttachableAt, SIMP};
+use sapio_base::simp::{CompiledObjectLT, ContinuationPointLT, SIMPAttachableAt, SIMP};
 use schemars::JsonSchema;
 use serde::*;
 use serde_json::Value;
@@ -189,3 +189,4 @@ impl SIMP for DLogSubscription {
         serde_json::from_value(value)
     }
 }
+impl SIMPAttachableAt<ContinuationPointLT> for DLogSubscription {}

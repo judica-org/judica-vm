@@ -20,15 +20,17 @@ use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
 use sapio::util::amountrange::AmountF64;
 use sapio::*;
+use sapio_base::simp::ContinuationPointLT;
+use sapio_base::simp::SIMPAttachableAt;
 use sapio_base::timelocks::RelHeight;
 use sapio_wasm_plugin::client;
 use sapio_wasm_plugin::optional_logo;
 use sapio_wasm_plugin::REGISTER;
 use schemars::*;
 use serde::*;
-use simps::GameKernel;
 use simps::GameStarted as ExtGameStarted;
 use simps::{DLogDiscovered, PK};
+use simps::{DLogSubscription, GameKernel};
 use std::str::FromStr;
 
 #[derive(Deserialize, JsonSchema)]
@@ -49,6 +51,15 @@ impl From<GameStarted> for ExtGameStarted {
 }
 
 impl GameStarted {
+    fn game_host_dlog_subscription(
+        &self,
+        ctx: Context,
+    ) -> Result<Vec<Box<dyn SIMPAttachableAt<ContinuationPointLT>>>, CompilationError> {
+        Ok(vec![Box::new(DLogSubscription {
+            dlog_subscription: self.kernel.game_host,
+        })])
+    }
+
     #[guard]
     fn all_players_signed(self, _ctx: Context) {
         let sub: Vec<_> = self
@@ -102,7 +113,8 @@ impl GameStarted {
     #[continuation(
         web_api,
         coerce_args = "coerce_dlog_discovered",
-        guarded_by = "[Self::all_players_signed]"
+        guarded_by = "[Self::all_players_signed]",
+        simps = "Some(Self::game_host_dlog_subscription)"
     )]
     fn host_cheat_equivocate(self, ctx: Context, proof: Option<DLogDiscovered>) {
         match proof {
