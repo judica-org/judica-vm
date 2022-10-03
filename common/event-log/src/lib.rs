@@ -41,5 +41,5 @@ pub async fn setup_db(
     } else {
         data_dir
     };
-    setup_db_at(data_dir, "attestations").await
+    setup_db_at(data_dir, "event_log").await
 }

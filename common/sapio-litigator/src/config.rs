@@ -41,8 +41,9 @@ impl Config {
         Ok(db)
     }
     pub(crate) async fn get_event_log(&self) -> Result<EventLog, Box<dyn std::error::Error>> {
+    let proj = format!("sapio-litigator.{}", self.event_log.app_name);
         let db =
-            event_log::setup_db(&self.event_log.app_name, self.event_log.prefix.clone()).await?;
+            event_log::setup_db(&proj, self.event_log.prefix.clone()).await?;
         Ok(db)
     }
     pub(crate) async fn get_bitcoin_rpc(&self) -> Result<Arc<Client>, Box<dyn std::error::Error>> {

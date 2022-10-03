@@ -59,7 +59,7 @@ impl GameStarted {
 
     #[guard]
     fn degraded_quorum(self, _ctx: Context) {
-        let degrade_interval = 6; // every hour
+        let degrade_every_n_blocks = 6; // every hour
         let total = self.kernel.players.len();
         let keys: Vec<Clause> = self
             .kernel
@@ -67,32 +67,30 @@ impl GameStarted {
             .keys()
             .map(|x| Clause::Key(x.0))
             .collect();
-        Clause::Or(
-            // with host
-            (total - 1..1)
-                .map(|n| {
-                    (
-                        2 * n,
-                        Clause::And(vec![
-                            RelHeight::from(((2 * (total - n) - 1) * degrade_interval) as u16)
-                                .into(),
-                            Clause::Key(self.kernel.game_host.0),
-                            Clause::Threshold(n, keys.clone()),
-                        ]),
-                    )
-                })
-                // without host
-                .chain((total - 1..1).map(|n| {
-                    (
-                        2 * n - 1,
-                        Clause::And(vec![
-                            RelHeight::from((2 * (total - n) * degrade_interval) as u16).into(),
-                            Clause::Threshold(n, keys.clone()),
-                        ]),
-                    )
-                }))
-                .collect(),
-        )
+        let mut clauses = Vec::with_capacity(2 * (total - 1));
+        let mut next_trigger_at: u16 = 0;
+        // Implements logic so that you see e.g.
+        // period = 2 * degrade_every_n_blocks
+        // 3/[a, b, c] + h @ t = 0   * periods
+        // 3/[a, b, c]     @ t = 0.5 * periods
+        // 2/[a, b, c] + h @ t = 1   * periods
+        // 2/[a, b, c]     @ t = 1.5 * periods
+        // 1/[a, b, c] + h @ t = 2   * periods
+        // 1/[a, b, c]     @ t = 2.5 * periods
+        for parties in (1..=total).rev() {
+            clauses.push(Clause::And(vec![
+                RelHeight::from(next_trigger_at).into(),
+                Clause::Threshold(parties, keys.clone()),
+                Clause::Key(self.kernel.game_host.0),
+            ]));
+            next_trigger_at += degrade_every_n_blocks;
+            clauses.push(Clause::And(vec![
+                Clause::Threshold(parties, keys.clone()),
+                RelHeight::from(next_trigger_at).into(),
+            ]));
+            next_trigger_at += degrade_every_n_blocks;
+        }
+        Clause::Threshold(1, clauses)
     }
 
     #[continuation(
@@ -126,8 +124,12 @@ impl GameStarted {
         coerce_args = "coerce_censorship_proof",
         guarded_by = "[Self::all_players_signed]"
     )]
-    fn host_cheat_censor(self, _ctx: Context, _proof: Option<CensorshipProof>) {
-        todo!()
+    fn host_cheat_censor(self, _ctx: Context, proof: Option<CensorshipProof>) {
+        if let Some(proof) = proof {
+            todo!()
+        } else {
+            empty()
+        }
     }
 
     fn get_finished_board(
