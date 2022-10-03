@@ -8,6 +8,11 @@ use serde::*;
 use serde_json::Value;
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct AutoBroadcast {}
+impl AutoBroadcast {
+    pub fn get_protocol_number() -> i64 {
+        Self::static_get_protocol_number()
+    }
+}
 impl SIMP for AutoBroadcast {
     fn get_protocol_number(&self) -> i64 {
         Self::static_get_protocol_number()

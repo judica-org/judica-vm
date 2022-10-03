@@ -303,9 +303,8 @@ async fn event_loop(
                                     output_metadata: _,
                                     added_output_metadata: _,
                                 } = tx;
-                                if let Some(_data) = metadata
-                                    .simp
-                                    .get(&AutoBroadcast::static_get_protocol_number())
+                                if let Some(_data) =
+                                    metadata.simp.get(&AutoBroadcast::get_protocol_number())
                                 {
                                     // TODO:
                                     // - Send PSBT out for signatures?
