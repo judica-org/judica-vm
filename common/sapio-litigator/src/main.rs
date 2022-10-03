@@ -4,11 +4,9 @@ use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
 use ext::CompiledExt;
-use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
-use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
 use sapio_base::effects::{EditableMapEffectDB, PathFragment};
@@ -26,7 +24,7 @@ use std::error::Error;
 use std::rc::Rc;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
-use universe::extractors::game_specific::WasmArgsReducer;
+use universe::extractors::sequencer::get_game_setup;
 mod universe;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -161,37 +159,24 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     // This should be in notify_one mode, which means that only the db reader
     // should be calling notified and wakers should call notify_one.
     let new_synthetic_event = Arc::new(Notify::new());
-    let elp_evlog = evlog.clone();
-    let elp_new_synthetic_event = new_synthetic_event.clone();
-    tokio::spawn(async move {
-        universe::linearized::event_log_processor(
-            elp_evlog,
-            evlog_group_id.clone(),
-            tx,
-            elp_new_synthetic_event,
-        )
-        .await?;
-        OK_T
-    });
-    let tee_evlog = evlog.clone();
-    let tee_new_synthetic_event = new_synthetic_event.clone();
-    tokio::spawn(async move {
-        universe::extractors::time::time_event_extractor(
-            tee_evlog,
-            evlog_group_id.clone(),
-            tee_new_synthetic_event,
-        )
-        .await?;
-        OK_T
-    });
-    let se_evlog = evlog.clone();
-    let se_new_synthetic_event = new_synthetic_event.clone();
+
+    tokio::spawn(universe::linearized::event_log_processor(
+        evlog.clone(),
+        evlog_group_id,
+        tx,
+        new_synthetic_event.clone(),
+    ));
+    tokio::spawn(universe::extractors::time::time_event_extractor(
+        evlog.clone(),
+        evlog_group_id,
+        new_synthetic_event.clone(),
+    ));
     tokio::spawn(universe::extractors::sequencer::sequencer_extractor(
         config.oracle_key,
         msg_db.clone(),
-        se_evlog,
+        evlog.clone(),
         evlog_group_id,
-        se_new_synthetic_event,
+        new_synthetic_event.clone(),
     ));
 
     let root = PathFragment::Root.into();
@@ -247,24 +232,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                     Default::default(),
                 )
                 .await?;
-                let first = msg_db
-                    .get_handle()
-                    .await
-                    .get_message_at_height_for_user::<Channelized<BroadcastByHost>>(
-                        config.oracle_key,
-                        0,
-                    )
-                    .map_err(|_| "DB Error")?
-                    .ok_or("Not Found")?;
-                let setup = Arc::new(
-                    match &first.msg().data {
-                        BroadcastByHost::GameSetup(g) => g,
-                        BroadcastByHost::Sequence(_)
-                        | BroadcastByHost::NewPeer(_)
-                        | BroadcastByHost::Heartbeat => return Err("Wrong first message")?,
-                    }
-                    .clone(),
-                );
+                let setup = get_game_setup(&msg_db, config.oracle_key).await?;
                 // todo real args for contract
                 let args = CreateArgs {
                     arguments: serde_json::to_value(&setup).unwrap(),
@@ -281,20 +249,6 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                     return Err("First Run of contract must pass")?;
                 };
                 state.args = Ok(args);
-
-                let stream = universe::extractors::game_specific::attest_stream(
-                    config.oracle_key,
-                    msg_db.clone(),
-                    read_move,
-                );
-                WasmArgsReducer::new_default(
-                    ogid,
-                    evlog.clone(),
-                    msg_db.clone(),
-                    config.oracle_key,
-                    stream,
-                )
-                .await;
             }
             Some(Event::Rebind(o)) => {
                 state.bound_to.insert(o);

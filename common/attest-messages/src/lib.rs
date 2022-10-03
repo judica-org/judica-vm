@@ -442,6 +442,10 @@ where
         self.msg.as_ref()
     }
 
+    pub fn into_msg(self) -> T {
+        self.msg
+    }
+
     pub fn header(&self) -> &Header {
         &self.header
     }
