@@ -1,5 +1,8 @@
+use std::collections::BTreeMap;
+
 use bitcoin::{hashes::sha256, XOnlyPublicKey};
-use sapio_base::simp::SIMP;
+use sapio::util::amountrange::AmountF64;
+use sapio_base::simp::{SIMP, CompiledObjectLT, SIMPAttachableAt};
 use schemars::JsonSchema;
 use serde::*;
 use serde_json::Value;
@@ -96,4 +99,35 @@ impl SIMP for AttestContinuationPointSubscription {
     fn from_json(value: serde_json::Value) -> Result<Self, serde_json::Error> {
         serde_json::from_value(value)
     }
+}
+
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct PK(#[schemars(with = "sha256::Hash")] pub XOnlyPublicKey);
+
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GameKernel {
+    pub game_host: PK,
+    pub players: BTreeMap<PK, AmountF64>,
+    pub timeout: u64,
+}
+impl GameKernel {}
+impl SIMP for GameKernel {
+    fn get_protocol_number(&self) -> i64 {
+        -119
+    }
+    fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
+        serde_json::to_value::<Self>(self.clone())
+    }
+    fn from_json(v: serde_json::Value) -> Result<Self, serde_json::Error> {
+        serde_json::from_value(v)
+    }
+}
+impl SIMPAttachableAt<CompiledObjectLT> for GameKernel {}
+
+
+// Keep in sync with type in mining_game
+pub struct GameStarted {
+    pub kernel: GameKernel,
 }

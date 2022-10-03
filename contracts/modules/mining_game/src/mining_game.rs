@@ -17,43 +17,34 @@ use mine_with_friends_board::game::GameSetup;
 use mine_with_friends_board::game::MoveRejectReason;
 use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
-use sapio::util::amountrange::AmountF64;
 use sapio::*;
-use sapio_base::simp::{CompiledObjectLT, SIMPAttachableAt, SIMP};
 use sapio_base::timelocks::RelHeight;
+use sapio_wasm_plugin::optional_logo;
+use sapio_wasm_plugin::REGISTER;
 use schemars::*;
 use serde::*;
-use std::collections::BTreeMap;
+use simps::GameKernel;
+use simps::GameStarted as ExtGameStarted;
+use simps::PK;
 use std::str::FromStr;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
-#[serde(transparent)]
-struct PK(#[schemars(with = "sha256::Hash")] XOnlyPublicKey);
+#[derive(Deserialize, JsonSchema)]
+pub struct GameStarted {
+    pub kernel: GameKernel,
+}
 
-#[derive(Clone, Serialize, Deserialize, JsonSchema)]
-struct GameKernel {
-    #[schemars(with = "sha256::Hash")]
-    game_host: PK,
-    players: BTreeMap<PK, AmountF64>,
-    timeout: u64,
-}
-impl GameKernel {}
-impl SIMP for GameKernel {
-    fn get_protocol_number(&self) -> i64 {
-        -119
-    }
-    fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
-        serde_json::to_value::<Self>(self.clone())
-    }
-    fn from_json(v: serde_json::Value) -> Result<Self, serde_json::Error> {
-        serde_json::from_value(v)
+// Help ensure that types stay synced
+impl From<ExtGameStarted> for GameStarted {
+    fn from(g: ExtGameStarted) -> Self {
+        GameStarted { kernel: g.kernel }
     }
 }
-impl SIMPAttachableAt<CompiledObjectLT> for GameKernel {}
+impl From<GameStarted> for ExtGameStarted {
+    fn from(g: GameStarted) -> Self {
+        ExtGameStarted { kernel: g.kernel }
+    }
+}
 
-struct GameStarted {
-    kernel: GameKernel,
-}
 impl GameStarted {
     #[guard]
     fn all_players_signed(self, _ctx: Context) {
@@ -364,3 +355,5 @@ fn coerce_degrade(
         None => Ok(None),
     }
 }
+
+REGISTER![GameStarted, "logo.png"];
