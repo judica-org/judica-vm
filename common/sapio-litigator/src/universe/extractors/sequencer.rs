@@ -24,7 +24,7 @@ use tokio::{
     sync::{mpsc::UnboundedReceiver, Notify, OwnedMutexGuard},
     task::JoinHandle,
 };
-use tracing::info;
+use tracing::{debug, info};
 
 pub async fn sequencer_extractor(
     oracle_key: XOnlyPublicKey,
@@ -92,7 +92,10 @@ pub async fn get_game_setup(
         let m: Channelized<BroadcastByHost> = genesis.inner().into_msg();
         match m.data {
             BroadcastByHost::GameSetup(g) => g,
-            _ => return Err("First Message was not a GameSetup"),
+            _ => {
+                debug!(?m.data, "Startup Data Was");
+                return Err("First Message was not a GameSetup");
+            }
         }
     };
     Ok(game_setup)

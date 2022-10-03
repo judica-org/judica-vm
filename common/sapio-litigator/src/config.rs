@@ -36,7 +36,8 @@ impl Config {
         Ok(serde_json::from_str(&j)?)
     }
     pub(crate) async fn get_db(&self) -> Result<MsgDB, Box<dyn std::error::Error>> {
-        let db = setup_db(&self.db_app_name, self.db_prefix.clone()).await?;
+        let application = format!("attestations.{}", self.db_app_name);
+        let db = setup_db(&application, self.db_prefix.clone()).await?;
         Ok(db)
     }
     pub(crate) async fn get_event_log(&self) -> Result<EventLog, Box<dyn std::error::Error>> {

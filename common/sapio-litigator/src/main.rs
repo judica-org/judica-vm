@@ -5,6 +5,8 @@ use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
 use ext::CompiledExt;
+use futures::select;
+use futures::stream::FuturesUnordered;
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
@@ -25,8 +27,9 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::rc::Rc;
 use std::sync::Arc;
+use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
-use tracing::info;
+use tracing::{debug, info};
 use universe::extractors::sequencer::get_game_setup;
 mod universe;
 
@@ -155,31 +158,27 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     // check which continuation points need attest message routing
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    let accessor = evlog.get_accessor().await;
     let key = &config.event_log.group;
-    let evlog_group_id = accessor.get_occurrence_group_by_key(key);
-    let evlog_group_id = evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?;
+    let evlog_group_id = {
+        let accessor = evlog.get_accessor().await;
+        let evlog_group_id = accessor.get_occurrence_group_by_key(key);
+        let evlog_group_id =
+            evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?;
+        evlog_group_id
+    };
     // This should be in notify_one mode, which means that only the db reader
     // should be calling notified and wakers should call notify_one.
     let new_synthetic_event = Arc::new(Notify::new());
+    let config = Arc::new(config);
 
-    tokio::spawn(universe::linearized::event_log_processor(
+    let tasks = FuturesUnordered::new();
+    let extractors = spawn(start_extractors(
         evlog.clone(),
         evlog_group_id,
         tx,
-        new_synthetic_event.clone(),
-    ));
-    tokio::spawn(universe::extractors::time::time_event_extractor(
-        evlog.clone(),
-        evlog_group_id,
-        new_synthetic_event.clone(),
-    ));
-    tokio::spawn(universe::extractors::sequencer::sequencer_extractor(
-        config.oracle_key,
+        new_synthetic_event,
+        config.clone(),
         msg_db.clone(),
-        evlog.clone(),
-        evlog_group_id,
-        new_synthetic_event.clone(),
     ));
 
     let root = PathFragment::Root.into();
@@ -193,7 +192,75 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     };
 
     let game_action = EventKey("action_in_game".into());
-    loop {
+    let evl = spawn(event_loop(
+        rx,
+        state,
+        emulator,
+        data_dir,
+        msg_db,
+        config,
+        root,
+        game_action,
+    ));
+
+    tasks.push(extractors);
+    tasks.push(evl);
+
+    for task in tasks {
+        task.await?;
+    }
+    Ok(())
+}
+
+async fn start_extractors(
+    evlog: event_log::connection::EventLog,
+    evlog_group_id: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
+    tx: tokio::sync::mpsc::Sender<Event>,
+    new_synthetic_event: Arc<Notify>,
+    config: Arc<config::Config>,
+    msg_db: attest_database::connection::MsgDB,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    let tasks = FuturesUnordered::new();
+    tasks.push(tokio::spawn(universe::linearized::event_log_processor(
+        evlog.clone(),
+        evlog_group_id,
+        tx,
+        new_synthetic_event.clone(),
+    )));
+    tasks.push(tokio::spawn(
+        universe::extractors::time::time_event_extractor(
+            evlog.clone(),
+            evlog_group_id,
+            new_synthetic_event.clone(),
+        ),
+    ));
+    tasks.push(tokio::spawn(
+        universe::extractors::sequencer::sequencer_extractor(
+            config.oracle_key,
+            msg_db.clone(),
+            evlog.clone(),
+            evlog_group_id,
+            new_synthetic_event.clone(),
+        ),
+    ));
+    if let Some(task) = tasks.into_iter().next() {
+        task.await?
+    } else {
+        Ok(())
+    }
+}
+
+async fn event_loop(
+    mut rx: tokio::sync::mpsc::Receiver<Event>,
+    mut state: AppState,
+    emulator: Arc<dyn CTVEmulator>,
+    data_dir: std::path::PathBuf,
+    msg_db: attest_database::connection::MsgDB,
+    config: Arc<config::Config>,
+    root: sapio_base::reverse_path::ReversePath<PathFragment>,
+    game_action: EventKey,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    Ok(loop {
         match rx.recv().await {
             Some(Event::TransactionFinalized(_s, _tx)) => {
                 info!("Transaction Finalized");
@@ -238,8 +305,17 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                     bitcoin::Network::Bitcoin,
                     Default::default(),
                 )
-                .await?;
-                let setup = get_game_setup(&msg_db, config.oracle_key).await?;
+                .await
+                .map_err(|e| e.to_string())?;
+                info!("Module Loaded Successfully");
+                let setup = match get_game_setup(&msg_db, config.oracle_key).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        debug!(error=?e, "Error");
+                        return Err(e)?;
+                    }
+                };
+                info!(?setup, "Game Setup");
                 // TODO: Game Amount from somewhere?
                 let amt_per_player: AmountF64 =
                     AmountF64::from(Amount::from_sat(100000 / setup.players.len() as u64));
@@ -262,6 +338,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                     },
                 };
 
+                info!(?args, "Contract Args Ready");
                 state.contract = if let Ok(c) = module.fresh_clone()?.call(&root, &args) {
                     info!(address=?c.address,"Contract Compilation Successful");
                     Ok(c)
@@ -337,9 +414,12 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                         let g_handle = state.module.lock().await;
                         // drop error before releasing g_handle so that the CompilationError non-send type
                         // doesn't get held across an await point
-                        g_handle.as_ref().map_err(|e|e.as_str())?.fresh_clone()?
+                        g_handle
+                            .as_ref()
+                            .map_err(|e| e.as_str())?
+                            .fresh_clone()?
                             .call(&PathFragment::Root.into(), &new_args)
-                            .map_err(|e| tracing::debug!(error=?e, "Module did not like the new argument"))
+                            .map_err(|e| debug!(error=?e, "Module did not like the new argument"))
                     };
 
                     match result {
@@ -366,9 +446,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         // Post Event:
 
         state.event_counter += 1;
-    }
-
-    Ok(())
+    })
 }
 
 const OK_T: Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> = Ok(());
