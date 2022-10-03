@@ -31,7 +31,7 @@ use tokio::{
     },
 };
 
-use crate::{CompiledExt, Event};
+use crate::{ext::CompiledExt, Event};
 
 pub fn attest_stream<F, R, E, M>(
     oracle_key: XOnlyPublicKey,

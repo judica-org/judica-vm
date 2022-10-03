@@ -3,6 +3,7 @@ use bitcoin::psbt::PartiallySignedTransaction;
 use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
+use ext::CompiledExt;
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
@@ -56,23 +57,7 @@ struct AppState {
     contract: Result<Compiled, String>,
 }
 
-trait CompiledExt {
-    fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a>;
-}
-// TODO: Do away with allocations?
-impl CompiledExt for Compiled {
-    fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a> {
-        Box::new(
-            self.continue_apis.values().chain(
-                self.suggested_txs
-                    .values()
-                    .chain(self.ctv_to_tx.values())
-                    .flat_map(|x| &x.outputs)
-                    .flat_map(|x| x.contract.continuation_points()),
-            ),
-        )
-    }
-}
+pub mod ext;
 
 struct PSBTDatabase {
     cache: BTreeMap<Txid, Vec<PartiallySignedTransaction>>,
