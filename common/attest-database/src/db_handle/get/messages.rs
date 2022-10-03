@@ -8,7 +8,7 @@ use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 
 use attest_messages::GenericEnvelope;
-use attest_util::bitcoin::Auth;
+
 use fallible_iterator::FallibleIterator;
 use rusqlite::named_params;
 use rusqlite::params;
@@ -20,7 +20,7 @@ use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::HashMap;
 use tracing::debug;
-use tracing::field::debug;
+
 use tracing::trace;
 
 impl<'a, T> MsgDBHandle<'a, T>

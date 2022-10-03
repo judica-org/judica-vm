@@ -6,7 +6,6 @@ use crate::{
         },
         FinishReason, GameBoard, GameSetup, MoveRejectReason,
     },
-    nfts::instances::powerplant::PlantType::Flare,
     sanitize::Unsanitized,
     tokens::token_swap::TradingPairID,
     MoveEnvelope,
@@ -347,7 +346,7 @@ fn test_send_tokens_to_plant() {
 
     let id = game.get_user_id(ALICE).unwrap();
     let plants = game.get_user_power_plants(id).unwrap();
-    let plant_id = plants.power_plant_data.iter().next().unwrap().0.clone();
+    let plant_id = *plants.power_plant_data.iter().next().unwrap().0;
 
     let btc_balance_before_mining = game.tokens[game.bitcoin_token_id].balance_check(&id);
 
@@ -430,7 +429,7 @@ fn test_send_tokens_to_plant() {
                     let shares = g.get_user_hashrate_share();
                     trace!(?shares);
                     trace!(game_is_finished=?g.game_is_finished());
-                    let timeout = (g.elapsed_time >= (g.finish_time / 4));
+                    let timeout = g.elapsed_time >= (g.finish_time / 4);
                     trace!(finish_time=?g.finish_time, elapsed_time=?g.elapsed_time, timeout);
                     assert!(matches!(
                         v,
@@ -716,7 +715,7 @@ fn test_remove_tokens_from_plant() {
     assert!(asics_after_removal > asics_before_removal);
 }
 
-fn run_game<I>(moves: I, mut game: &mut GameBoard)
+fn run_game<I>(moves: I, game: &mut GameBoard)
 where
     I: IntoIterator<
         Item = (
@@ -736,7 +735,7 @@ where
                 debug!(error=?e, "Failed (Non Catastrophic)")
             }
         }
-        f(&game, r);
+        f(game, r);
     }
 }
 
