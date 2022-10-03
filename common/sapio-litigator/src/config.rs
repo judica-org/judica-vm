@@ -20,7 +20,6 @@ pub(crate) struct Config {
     pub(crate) event_log: EventLogConfig,
     pub(crate) oracle_key: XOnlyPublicKey,
     pub(crate) contract_location: PathBuf,
-    pub(crate) contract_args: Value,
 }
 
 #[derive(Deserialize)]
