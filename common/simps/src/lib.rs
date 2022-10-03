@@ -8,12 +8,6 @@ use serde::*;
 use serde_json::Value;
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct AutoBroadcast {}
-impl AutoBroadcast {
-    pub fn get_protocol_number() -> i64 {
-        Self::static_get_protocol_number()
-    }
-}
-
 impl SIMP for AutoBroadcast {
     fn get_protocol_number(&self) -> i64 {
         Self::static_get_protocol_number()
@@ -168,14 +162,14 @@ pub struct DLogDiscovered {
 pub struct DLogSubscription {
     pub dlog_subscription: PK,
 }
-impl DLogSubscription {
-    pub fn get_protocol_number() -> i64 {
+impl DLogSubscription {}
+impl SIMP for DLogSubscription {
+    fn static_get_protocol_number() -> i64 {
         0x2
     }
-}
-impl SIMP for DLogSubscription {
+
     fn get_protocol_number(&self) -> i64 {
-        Self::get_protocol_number()
+        Self::static_get_protocol_number()
     }
 
     fn to_json(&self) -> Result<Value, serde_json::Error> {

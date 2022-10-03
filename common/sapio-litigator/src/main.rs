@@ -206,6 +206,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         config,
         root,
         game_action,
+        dlog_discovery,
     ));
 
     tasks.push(evl);
@@ -276,6 +277,7 @@ async fn event_loop(
     config: Arc<config::Config>,
     root: sapio_base::reverse_path::ReversePath<PathFragment>,
     game_action: EventKey,
+    dlog_discovery: EventKey,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     Ok(loop {
         match rx.recv().await {
@@ -301,8 +303,9 @@ async fn event_loop(
                                     output_metadata: _,
                                     added_output_metadata: _,
                                 } = tx;
-                                if let Some(_data) =
-                                    metadata.simp.get(&AutoBroadcast::get_protocol_number())
+                                if let Some(_data) = metadata
+                                    .simp
+                                    .get(&AutoBroadcast::static_get_protocol_number())
                                 {
                                     // TODO:
                                     // - Send PSBT out for signatures?
