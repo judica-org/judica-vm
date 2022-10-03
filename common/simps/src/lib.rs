@@ -122,11 +122,11 @@ impl SIMP for AttestContinuationPointSubscription {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(transparent)]
 pub struct PK(#[schemars(with = "sha256::Hash")] pub XOnlyPublicKey);
 
-#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema, Debug)]
 pub struct GameKernel {
     pub game_host: PK,
     pub players: BTreeMap<PK, AmountF64>,
@@ -154,6 +154,7 @@ impl SIMP for GameKernel {
 impl SIMPAttachableAt<CompiledObjectLT> for GameKernel {}
 
 // Keep in sync with type in mining_game
+#[derive(Serialize)]
 pub struct GameStarted {
     pub kernel: GameKernel,
 }

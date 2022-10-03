@@ -1,4 +1,4 @@
-use crate::{Event, OK_T};
+use crate::{Event, TaskSet, OK_T};
 use attest_database::connection::MsgDB;
 use attest_messages::GenericEnvelope;
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
@@ -32,6 +32,7 @@ pub async fn sequencer_extractor(
     evlog: EventLog,
     evlog_group_id: OccurrenceGroupID,
     new_synthetic_event: Arc<Notify>,
+    tasks: &TaskSet,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let shutdown: Arc<AtomicBool> = Default::default();
     let db_fetcher = OnlineDBFetcher::new(
@@ -48,13 +49,19 @@ pub async fn sequencer_extractor(
 
     let game_sequencer =
         game_sequencer::DemuxedSequencer::new(shutdown.clone(), db_fetcher.clone());
-    spawn(db_fetcher.run());
-    spawn({
+    tasks.push(spawn(async move {
+        db_fetcher.run().await;
+        OK_T
+    }));
+    tasks.push(spawn({
         let game_sequencer = game_sequencer.clone();
-        game_sequencer.run()
-    });
+        async move {
+            game_sequencer.run().await;
+            OK_T
+        }
+    }));
 
-    let _game_task = {
+    tasks.push({
         start_game(
             shutdown.clone(),
             evlog.clone(),
@@ -64,16 +71,21 @@ pub async fn sequencer_extractor(
             new_game,
             game_sequencer.recieve_move.lock_owned().await,
         )
-    };
-    let _psbt_task = {
-        handle_psbts(
-            shutdown.clone(),
-            evlog.clone(),
-            evlog_group_id,
-            game_sequencer.recieve_psbt.lock_owned().await,
-            new_synthetic_event,
-        )
-    };
+    });
+    tasks.push(spawn({
+        let recieved_psbt = game_sequencer.recieve_psbt.lock_owned().await;
+        async move {
+            handle_psbts(
+                shutdown.clone(),
+                evlog.clone(),
+                evlog_group_id,
+                recieved_psbt,
+                new_synthetic_event,
+            )
+            .await?;
+            OK_T
+        }
+    }));
     Ok(())
 }
 

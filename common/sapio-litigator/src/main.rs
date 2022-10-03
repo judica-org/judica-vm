@@ -5,8 +5,8 @@ use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
 use ext::CompiledExt;
-use futures::select;
 use futures::stream::FuturesUnordered;
+use futures::{select, Future};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
@@ -22,13 +22,16 @@ use sapio_wasm_plugin::plugin_handle::PluginHandle;
 use sapio_wasm_plugin::{ContextualArguments, CreateArgs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use simps::GameStarted;
 use simps::{AutoBroadcast, EventKey, GameKernel, PK};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
+use tokio::task::{JoinError, JoinHandle};
 use tracing::{debug, info, trace};
 use universe::extractors::sequencer::get_game_setup;
 mod universe;
@@ -172,14 +175,16 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     let config = Arc::new(config);
 
     let tasks = FuturesUnordered::new();
-    let extractors = spawn(start_extractors(
+    start_extractors(
         evlog.clone(),
         evlog_group_id,
         tx,
         new_synthetic_event,
         config.clone(),
         msg_db.clone(),
-    ));
+        &tasks,
+    )
+    .await;
 
     let root = PathFragment::Root.into();
     let mut state = AppState {
@@ -203,17 +208,26 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         game_action,
     ));
 
-    tasks.push(extractors);
     tasks.push(evl);
 
     for task in tasks {
         let r = task.await?;
-        trace!(?r);
+        trace!(?r, "Error From Task Joining");
         r.map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
+pub type TaskSet = FuturesUnordered<
+    JoinHandle<
+        std::result::Result<
+            (),
+            std::boxed::Box<
+                (dyn std::error::Error + std::marker::Send + std::marker::Sync + 'static),
+            >,
+        >,
+    >,
+>;
 async fn start_extractors(
     evlog: event_log::connection::EventLog,
     evlog_group_id: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
@@ -221,8 +235,8 @@ async fn start_extractors(
     new_synthetic_event: Arc<Notify>,
     config: Arc<config::Config>,
     msg_db: attest_database::connection::MsgDB,
-) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    let tasks = FuturesUnordered::new();
+    tasks: &TaskSet,
+) {
     tasks.push(tokio::spawn(universe::linearized::event_log_processor(
         evlog.clone(),
         evlog_group_id,
@@ -236,20 +250,15 @@ async fn start_extractors(
             new_synthetic_event.clone(),
         ),
     ));
-    tasks.push(tokio::spawn(
-        universe::extractors::sequencer::sequencer_extractor(
-            config.oracle_key,
-            msg_db.clone(),
-            evlog.clone(),
-            evlog_group_id,
-            new_synthetic_event.clone(),
-        ),
-    ));
-    if let Some(task) = tasks.into_iter().next() {
-        task.await?
-    } else {
-        Ok(())
-    }
+    universe::extractors::sequencer::sequencer_extractor(
+        config.oracle_key,
+        msg_db.clone(),
+        evlog.clone(),
+        evlog_group_id,
+        new_synthetic_event.clone(),
+        tasks,
+    )
+    .await;
 }
 
 async fn event_loop(
@@ -326,13 +335,22 @@ async fn event_loop(
                     players: setup
                         .players
                         .iter()
-                        .map(|p| Ok((serde_json::from_str(&p)?, amt_per_player)))
-                        .collect::<Result<_, serde_json::Error>>()?,
+                        .map(|p| Ok((PK(XOnlyPublicKey::from_str(p)?), amt_per_player)))
+                        .collect::<Result<_, bitcoin::secp256k1::Error>>()
+                        .map_err(|e| {
+                            format!(
+                                "Failed To Make JSON {}:{}\n    Error: {:?}",
+                                file!(),
+                                line!(),
+                                e
+                            )
+                        })?,
                     timeout: setup.finish_time,
                 };
+                info!(?g, "Game Kernel");
                 // todo real args for contract
                 let args = CreateArgs {
-                    arguments: serde_json::to_value(&g).unwrap(),
+                    arguments: serde_json::to_value(&GameStarted { kernel: g }).unwrap(),
                     context: ContextualArguments {
                         network: bitcoin::network::constants::Network::Bitcoin,
                         amount: Amount::from_sat(100000),
@@ -341,11 +359,15 @@ async fn event_loop(
                 };
 
                 info!(?args, "Contract Args Ready");
-                state.contract = if let Ok(c) = module.fresh_clone()?.call(&root, &args) {
-                    info!(address=?c.address,"Contract Compilation Successful");
-                    Ok(c)
-                } else {
-                    return Err("First Run of contract must pass")?;
+                state.contract = match module.call(&root, &args) {
+                    Ok(c) => {
+                        info!(address=?c.address,"Contract Compilation Successful");
+                        Ok(c)
+                    }
+                    Err(e) => {
+                        debug!(error=?e, "Contract Failed to Compiled");
+                        return Err("First Run of contract must pass")?;
+                    }
                 };
                 state.args = Ok(args);
             }
