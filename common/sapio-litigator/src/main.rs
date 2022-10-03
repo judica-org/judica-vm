@@ -3,26 +3,29 @@ use bitcoin::psbt::PartiallySignedTransaction;
 use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
+use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
 use sapio::contract::abi::continuation::ContinuationPoint;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
+use sapio_base::effects::{EditableMapEffectDB, PathFragment};
+use sapio_base::serialization_helpers::SArc;
+use sapio_base::simp::SIMP;
 use sapio_base::txindex::TxIndexLogger;
 use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
+use sapio_wasm_plugin::plugin_handle::PluginHandle;
 use sapio_wasm_plugin::{ContextualArguments, CreateArgs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use simps::AutoBroadcast;
+use simps::{AutoBroadcast, EventKey};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::rc::Rc;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
-use universe::extractors::game_specific::{
-    module_argument_compilation_attempt_engine, WasmArgsReducer,
-};
+use universe::extractors::game_specific::WasmArgsReducer;
 mod universe;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,6 +34,7 @@ pub enum Event {
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
+    NewRecompileTriggeringObservation(Value),
 }
 
 impl ToOccurrence for Event {
@@ -42,19 +46,14 @@ impl ToOccurrence for Event {
     }
 }
 
-enum AppState {
-    Uninitialized,
-    Initialized {
-        args: CreateArgs<Value>,
-        contract: Compiled,
-        bound_to: Option<OutPoint>,
-        psbt_db: Arc<PSBTDatabase>,
-    },
-}
-impl AppState {
-    fn is_uninitialized(&self) -> bool {
-        matches!(self, AppState::Uninitialized)
-    }
+struct AppState {
+    bound_to: Option<OutPoint>,
+    psbt_db: Arc<PSBTDatabase>,
+    event_counter: u64,
+    // Initialized after first move
+    module: Arc<Mutex<Result<WasmPluginHandle<Compiled>, String>>>,
+    args: Result<CreateArgs<Value>, String>,
+    contract: Result<Compiled, String>,
 }
 
 trait CompiledExt {
@@ -145,8 +144,7 @@ async fn insert_init(
     gid: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error>> {
     let ev = Event::ModuleBytes(tokio::fs::read(&location).await?);
-    let ev_occ: &dyn ToOccurrence = &ev;
-    accessor.insert_occurrence(gid, &ev_occ.into())?;
+    accessor.insert_new_occurrence_now_from(gid, &ev)?;
     Ok(())
 }
 
@@ -167,34 +165,6 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         .get_accessor()
         .await
         .get_occurrence_group_by_key(&config.event_log.group)?;
-    let occurrence_list = evlog.get_accessor().await.get_occurrences_for_group(ogid)?;
-    let (contract_bytes) = match occurrence_list.get(0) {
-        None => {
-            println!("Contract has not been initialized for this event log group!");
-            // TODO: figure out how to actually construct a dyn Error
-            return Ok(());
-        }
-        Some((_, occ)) => {
-            let ev = Event::from_occurrence(occ.clone())?;
-            match ev {
-                Event::ModuleBytes(init) => init,
-                other => {
-                    panic!("Invalid first event for event log: {:?}", other)
-                }
-            }
-        }
-    };
-    let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
-    let module = Arc::new(Mutex::new(
-        WasmPluginHandle::<Compiled>::new_async(
-            &data_dir,
-            &emulator,
-            locator,
-            bitcoin::Network::Bitcoin,
-            Default::default(),
-        )
-        .await?,
-    ));
 
     // check which continuation points need attest message routing
 
@@ -239,101 +209,208 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         se_new_synthetic_event,
     ));
 
-    let mut state = AppState::Uninitialized;
+    let root = PathFragment::Root.into();
+    let mut state = AppState {
+        args: Err("No Args Loaded".into()),
+        module: Arc::new(Mutex::new(Err("No Module Loaded".into()))),
+        contract: Err("No Compiled Object".into()),
+        bound_to: None,
+        psbt_db: Arc::new(PSBTDatabase::new()),
+        event_counter: 0,
+    };
+
+    let game_action = EventKey("action_in_game".into());
     loop {
         match rx.recv().await {
             Some(Event::TransactionFinalized(_s, _tx)) => {}
             Some(Event::SyntheticPeriodicActions(_t)) => {
-                match &mut state {
-                    AppState::Uninitialized => (),
-                    AppState::Initialized {
-                        args: _,
-                        contract,
-                        bound_to,
-                        psbt_db: _,
-                    } => {
-                        if let Some(out) = bound_to {
-                            if let Ok(program) = contract.bind_psbt(
-                                *out,
-                                Default::default(),
-                                Rc::new(TxIndexLogger::new()),
-                                emulator.as_ref(),
-                            ) {
-                                for obj in program.program.values() {
-                                    for tx in obj.txs.iter() {
-                                        let SapioStudioFormat::LinkedPSBT {
-                                            psbt: _,
-                                            hex: _,
-                                            metadata,
-                                            output_metadata: _,
-                                            added_output_metadata: _,
-                                        } = tx;
-                                        if let Some(_data) =
-                                            metadata.simp.get(&AutoBroadcast::get_protocol_number())
-                                        {
-                                            // TODO:
-                                            // - Send PSBT out for signatures?
-                                        }
-                                    }
+                if let Some(out) = state.bound_to.as_ref() {
+                    let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
+                    if let Ok(program) = c.bind_psbt(
+                        *out,
+                        Default::default(),
+                        Rc::new(TxIndexLogger::new()),
+                        emulator.as_ref(),
+                    ) {
+                        for obj in program.program.values() {
+                            for tx in obj.txs.iter() {
+                                let SapioStudioFormat::LinkedPSBT {
+                                    psbt: _,
+                                    hex: _,
+                                    metadata,
+                                    output_metadata: _,
+                                    added_output_metadata: _,
+                                } = tx;
+                                if let Some(_data) =
+                                    metadata.simp.get(&AutoBroadcast::get_protocol_number())
+                                {
+                                    // TODO:
+                                    // - Send PSBT out for signatures?
                                 }
                             }
                         }
                     }
                 }
             }
-            Some(Event::ModuleBytes(x)) => {
-                if state.is_uninitialized() {
-                    fn read_move(
-                        e: Authenticated<GenericEnvelope<ParticipantAction>>,
-                    ) -> Result<(MoveEnvelope, XOnlyPublicKey), ()> {
-                        match e.msg() {
-                            ParticipantAction::MoveEnvelope(m) => {
-                                Ok(((m.clone(), e.header().key())))
-                            }
-                            ParticipantAction::Custom(_) => Err(()),
-                            ParticipantAction::PsbtSigningCoordination(_) => Err(()),
-                        }
-                    }
-                    let stream = universe::extractors::game_specific::attest_stream(
+            Some(Event::ModuleBytes(contract_bytes)) => {
+                let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
+                let module = WasmPluginHandle::<Compiled>::new_async(
+                    &data_dir,
+                    &emulator,
+                    locator,
+                    bitcoin::Network::Bitcoin,
+                    Default::default(),
+                )
+                .await?;
+                let first = msg_db
+                    .get_handle()
+                    .await
+                    .get_message_at_height_for_user::<Channelized<BroadcastByHost>>(
                         config.oracle_key,
-                        msg_db.clone(),
-                        read_move,
-                    );
-                    if let Ok((reducer, setup)) =
-                        WasmArgsReducer::new_default(msg_db.clone(), config.oracle_key, stream)
-                            .await
-                    {
-                        // todo real args for contract
-                        let args = CreateArgs {
-                            arguments: serde_json::to_value(&setup).unwrap(),
-                            context: ContextualArguments {
-                                network: bitcoin::network::constants::Network::Bitcoin,
-                                amount: Amount::from_sat(100000),
-                                effects: Default::default(),
-                            },
-                        };
-                        let next_state = module_argument_compilation_attempt_engine(
-                            reducer,
-                            &args,
-                            module.clone(),
-                        )
-                        .await;
+                        0,
+                    )
+                    .map_err(|_| "DB Error")?
+                    .ok_or("Not Found")?;
+                let setup = Arc::new(
+                    match &first.msg().data {
+                        BroadcastByHost::GameSetup(g) => g,
+                        BroadcastByHost::Sequence(_)
+                        | BroadcastByHost::NewPeer(_)
+                        | BroadcastByHost::Heartbeat => return Err("Wrong first message")?,
+                    }
+                    .clone(),
+                );
+                // todo real args for contract
+                let args = CreateArgs {
+                    arguments: serde_json::to_value(&setup).unwrap(),
+                    context: ContextualArguments {
+                        network: bitcoin::network::constants::Network::Bitcoin,
+                        amount: Amount::from_sat(100000),
+                        effects: Default::default(),
+                    },
+                };
+
+                state.contract = if let Ok(c) = module.fresh_clone()?.call(&root, &args) {
+                    Ok(c)
+                } else {
+                    return Err("First Run of contract must pass")?;
+                };
+                state.args = Ok(args);
+
+                let stream = universe::extractors::game_specific::attest_stream(
+                    config.oracle_key,
+                    msg_db.clone(),
+                    read_move,
+                );
+                WasmArgsReducer::new_default(
+                    ogid,
+                    evlog.clone(),
+                    msg_db.clone(),
+                    config.oracle_key,
+                    stream,
+                )
+                .await;
+            }
+            Some(Event::Rebind(o)) => {
+                state.bound_to.insert(o);
+            }
+            Some(Event::NewRecompileTriggeringObservation(new_info_as_v)) => {
+                let idx_str = SArc(Arc::new(format!("event-{}", state.event_counter)));
+                // work on a clone so as to not have an effect if failed
+                let mut new_args = state.args.as_ref().map_err(|e| e.as_str())?.clone();
+                let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
+
+                let mut any_edits = false;
+                for api in state
+                    .contract
+                    .as_ref()
+                    .map_err(|e| e.as_str())?
+                    .continuation_points()
+                    .filter(|api| {
+                        if let Some(recompiler) =
+                            api.simp.get(&simps::EventRecompiler::get_protocol_number())
+                        {
+                            if let Ok(recompiler) =
+                                simps::EventRecompiler::from_json(recompiler.clone())
+                            {
+                                // Only pay attention to events that we are filtering for
+                                if recompiler.filter == game_action {
+                                    return true;
+                                }
+                            }
+                        }
+                        false
+                    })
+                    .filter(|api| {
+                        if let Some(schema) = &api.schema {
+                            let json_schema = serde_json::to_value(&schema)
+                                .expect("RootSchema must always be valid JSON");
+                            // todo: cache?
+                            jsonschema_valid::Config::from_schema(
+                                // since schema is a RootSchema, cannot throw here
+                                &json_schema,
+                                Some(jsonschema_valid::schemas::Draft::Draft6),
+                            )
+                            .map(|validator| validator.validate(&new_info_as_v).is_ok())
+                            .unwrap_or(false)
+                        } else {
+                            false
+                        }
+                    })
+                {
+                    any_edits = true;
+                    // ensure that if specified, that we skip invalid messages
+                    save.effects
+                        .entry(SArc(api.path.clone()))
+                        .or_default()
+                        .insert(
+                            idx_str.clone(),
+                            // todo: maybe use arcs here too
+                            new_info_as_v.clone(),
+                        );
+                }
+
+                if any_edits {
+                    new_args.context.effects = save.into();
+                    let result: Result<Compiled, ()> = {
+                        let g_handle = state.module.lock().await;
+                        // drop error before releasing g_handle so that the CompilationError non-send type
+                        // doesn't get held across an await point
+                        g_handle.as_ref().map_err(|e|e.as_str())?.fresh_clone()?
+                            .call(&PathFragment::Root.into(), &new_args)
+                            .map_err(|e| tracing::debug!(error=?e, "Module did not like the new argument"))
+                    };
+
+                    match result {
+                        // TODO:  Belt 'n Suspsender Check:
+                        // Check that old_state is augmented by new_state
+                        Ok(new_contract) => {
+                            state.args = Ok(new_args);
+                            state.contract = Ok(new_contract);
+                        }
+                        Err(e) => {}
                     }
                 }
             }
-            Some(Event::Rebind(o)) => match &mut state {
-                AppState::Uninitialized => todo!(),
-                AppState::Initialized {
-                    ref mut bound_to, ..
-                } => {
-                    bound_to.insert(o);
-                }
-            },
             None => (),
         }
+
+        // Post Event:
+
+        state.event_counter += 1;
     }
 
     Ok(())
 }
 
 const OK_T: Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> = Ok(());
+
+fn read_move(
+    e: Authenticated<GenericEnvelope<ParticipantAction>>,
+) -> Result<(MoveEnvelope, XOnlyPublicKey), ()> {
+    match e.msg() {
+        ParticipantAction::MoveEnvelope(m) => Ok(((m.clone(), e.header().key()))),
+        ParticipantAction::Custom(_) => Err(()),
+        ParticipantAction::PsbtSigningCoordination(_) => Err(()),
+    }
+}

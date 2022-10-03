@@ -1,6 +1,7 @@
 use attest_database::connection::MsgDB;
 use attest_messages::{AttestEnvelopable, Authenticated, GenericEnvelope};
 use bitcoin::XOnlyPublicKey;
+use event_log::{connection::EventLog, db_handle::accessors::occurrence_group::OccurrenceGroupID};
 use futures::Future;
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
@@ -30,7 +31,7 @@ use tokio::{
     },
 };
 
-use crate::CompiledExt;
+use crate::{CompiledExt, Event};
 
 pub fn attest_stream<F, R, E, M>(
     oracle_key: XOnlyPublicKey,
@@ -87,6 +88,8 @@ impl<Output> WasmArgsReducer<Output> {
 }
 impl WasmArgsReducer<UnauthenticatedRawSequencer<ParticipantAction>> {
     pub async fn new_default<F>(
+        gid: OccurrenceGroupID,
+        evlog: EventLog,
         msg_db: MsgDB,
         key: XOnlyPublicKey,
         g: Arc<GenericSequencer<F, (MoveEnvelope, XOnlyPublicKey), (), ParticipantAction>>,
@@ -117,12 +120,7 @@ impl WasmArgsReducer<UnauthenticatedRawSequencer<ParticipantAction>> {
         let setup_ret = setup.clone();
         let task = Self::new(
             move |mut recv_new_move: Arc<
-                GenericSequencer<
-                    _,
-                    (MoveEnvelope, XOnlyPublicKey),
-                    (),
-                    ParticipantAction,
-                >,
+                GenericSequencer<_, (MoveEnvelope, XOnlyPublicKey), (), ParticipantAction>,
             >,
                   output_args_to_try: Sender<(
                 UnauthenticatedRawSequencer<ParticipantAction>,
@@ -130,6 +128,7 @@ impl WasmArgsReducer<UnauthenticatedRawSequencer<ParticipantAction>> {
             )>| {
                 let msg_db = msg_db.clone();
                 let setup = setup.clone();
+                let evlog = evlog.clone();
                 async move {
                     let mut game = GameBoard::new(&setup);
                     let mut move_count = 0;
@@ -138,7 +137,6 @@ impl WasmArgsReducer<UnauthenticatedRawSequencer<ParticipantAction>> {
                         if let Err(MoveRejectReason::GameIsFinished(_)) =
                             game.play(next_move, signed_by.to_string())
                         {
-                            let (tx_should_quit, rx_should_quit) = tokio::sync::oneshot::channel();
                             // todo: get a real one derived only from data we've seen up to the point we've executed.
                             // for now, a fresh expensive copy will have to do until we can refactor this.
                             let handle = msg_db.get_handle().await;
@@ -166,21 +164,18 @@ impl WasmArgsReducer<UnauthenticatedRawSequencer<ParticipantAction>> {
                                 .flat_map(|k| Some((*k, m.remove(k)?)))
                                 .collect();
 
-                            let v = UnauthenticatedRawSequencer {
+                            let v = UnauthenticatedRawSequencer::<ParticipantAction> {
                                 sequencer_envelopes,
                                 msg_cache,
                             };
-                            if output_args_to_try.send((v, tx_should_quit)).await.is_err() {
-                                break;
-                            }
-                            match rx_should_quit.await {
-                                Ok(true) => {
-                                    break;
-                                }
-                                Ok(false) => {
-                                    continue;
-                                }
-                                Err(_) => break,
+                            if let Ok(v) = serde_json::to_value(v) {
+                                let accessor = evlog.get_accessor().await;
+                                accessor
+                                    .insert_new_occurrence_now_from(
+                                        gid,
+                                        &Event::NewRecompileTriggeringObservation(v),
+                                    )
+                                    .ok();
                             }
                         }
                     }
@@ -191,115 +186,4 @@ impl WasmArgsReducer<UnauthenticatedRawSequencer<ParticipantAction>> {
         );
         Ok((task, setup_ret))
     }
-}
-
-pub async fn module_argument_compilation_attempt_engine(
-    mut reducer: WasmArgsReducer<UnauthenticatedRawSequencer<ParticipantAction>>,
-    init: &CreateArgs<Value>,
-    handle: Arc<Mutex<WasmPluginHandle<Compiled>>>,
-) -> Receiver<Compiled> {
-    let (tx_contract_state, rx) = channel(1);
-
-    let mut args = init.clone();
-    spawn(async move {
-        let mut contract = {
-            let g_handle = handle.lock().await;
-            g_handle.call(&PathFragment::Root.into(), &args).ok()?
-        };
-        let game_action = EventKey("action_in_game".into());
-        let mut idx = 0;
-
-        while let Some((new_information_learned_derived_from_reducer, quit_reducer)) =
-            reducer.output.recv().await
-        {
-            let idx_str = SArc(Arc::new(format!("event-{}", idx)));
-            idx += 1;
-            // work on a clone so as to not have an effect if failed
-            let mut new_args = args.clone();
-            let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
-
-            let new_info_as_v = if let Ok(new_info_as_v) =
-                serde_json::to_value(&new_information_learned_derived_from_reducer)
-            {
-                new_info_as_v
-            } else {
-                tracing::warn!("Could Not Serialize UnauthenticatedRawSequencer");
-                continue;
-            };
-            for api in contract
-                .continuation_points()
-                .filter(|api| {
-                    if let Some(recompiler) =
-                        api.simp.get(&simps::EventRecompiler::get_protocol_number())
-                    {
-                        if let Ok(recompiler) =
-                            simps::EventRecompiler::from_json(recompiler.clone())
-                        {
-                            // Only pay attention to events that we are filtering for
-                            if recompiler.filter == game_action {
-                                return true;
-                            }
-                        }
-                    }
-                    false
-                })
-                .filter(|api| {
-                    if let Some(schema) = &api.schema {
-                        let json_schema = serde_json::to_value(&schema)
-                            .expect("RootSchema must always be valid JSON");
-                        // todo: cache?
-                        jsonschema_valid::Config::from_schema(
-                            // since schema is a RootSchema, cannot throw here
-                            &json_schema,
-                            Some(jsonschema_valid::schemas::Draft::Draft6),
-                        )
-                        .map(|validator| validator.validate(&new_info_as_v).is_ok())
-                        .unwrap_or(false)
-                    } else {
-                        false
-                    }
-                })
-            {
-                // ensure that if specified, that we skip invalid messages
-                save.effects
-                    .entry(SArc(api.path.clone()))
-                    .or_default()
-                    .insert(
-                        idx_str.clone(),
-                        // todo: maybe use arcs here too
-                        new_info_as_v.clone(),
-                    );
-            }
-
-            new_args.context.effects = save.into();
-            let result: Result<Compiled, ()> = {
-                let g_handle = handle.lock().await;
-                // drop error before releasing g_handle so that the CompilationError non-send type
-                // doesn't get held across an await point
-                g_handle
-                    .call(&PathFragment::Root.into(), &new_args)
-                    .map_err(|e| tracing::debug!(error=?e, "Module did not like the new argument"))
-            };
-
-            match result {
-                // TODO:  Belt 'n Suspsender Check:
-                // Check that old_state is augmented by new_state
-                Ok(new_contract) => {
-                    args = new_args;
-                    contract = new_contract;
-                    quit_reducer.send(true);
-                    if tx_contract_state.send(contract.clone()).await.is_err() {
-                        // Channel Closure
-                        break;
-                    }
-                }
-                Err(e) => {
-                    quit_reducer.send(false);
-                }
-            }
-        }
-        None::<()>
-    });
-
-    rx
 }
