@@ -196,6 +196,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     };
 
     let game_action = EventKey("action_in_game".into());
+    let dlog_discovery = EventKey("dlog_discovery".into());
     let evl = spawn(event_loop(
         rx,
         state,
@@ -258,6 +259,12 @@ async fn start_extractors(
         tasks,
     )
     .await;
+
+    tasks.push(tokio::spawn(universe::extractors::dlog::dlog_extractor(
+        msg_db.clone(),
+        evlog.clone(),
+        evlog_group_id,
+    )));
 }
 
 async fn event_loop(
@@ -395,7 +402,9 @@ async fn event_loop(
                                 simps::EventRecompiler::from_json(recompiler.clone())
                             {
                                 // Only pay attention to events that we are filtering for
-                                if recompiler.filter == game_action {
+                                if recompiler.filter == game_action
+                                    || recompiler.filter == dlog_discovery
+                                {
                                     return true;
                                 }
                             }

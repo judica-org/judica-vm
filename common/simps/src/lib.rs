@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use bitcoin::{hashes::sha256, XOnlyPublicKey};
+use bitcoin::{hashes::sha256, secp256k1::SecretKey, XOnlyPublicKey};
 use sapio::util::amountrange::AmountF64;
 use sapio_base::simp::{CompiledObjectLT, SIMPAttachableAt, SIMP};
 use schemars::JsonSchema;
@@ -157,4 +157,35 @@ impl SIMPAttachableAt<CompiledObjectLT> for GameKernel {}
 #[derive(Serialize)]
 pub struct GameStarted {
     pub kernel: GameKernel,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+pub struct DLogDiscovered {
+    pub dlog_discovered: SecretKey,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+pub struct DLogSubscription {
+    pub dlog_subscription: PK,
+}
+impl DLogSubscription {
+    pub fn get_protocol_number() -> i64 {
+        0x2
+    }
+}
+impl SIMP for DLogSubscription {
+    fn get_protocol_number(&self) -> i64 {
+        Self::get_protocol_number()
+    }
+
+    fn to_json(&self) -> Result<Value, serde_json::Error> {
+        serde_json::to_value(self)
+    }
+
+    fn from_json(value: Value) -> Result<Self, serde_json::Error>
+    where
+        Self: Sized,
+    {
+        serde_json::from_value(value)
+    }
 }

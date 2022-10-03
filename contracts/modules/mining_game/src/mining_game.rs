@@ -28,7 +28,7 @@ use schemars::*;
 use serde::*;
 use simps::GameKernel;
 use simps::GameStarted as ExtGameStarted;
-use simps::PK;
+use simps::{DLogDiscovered, PK};
 use std::str::FromStr;
 
 #[derive(Deserialize, JsonSchema)]
@@ -101,14 +101,14 @@ impl GameStarted {
 
     #[continuation(
         web_api,
-        coerce_args = "coerce_host_key",
+        coerce_args = "coerce_dlog_discovered",
         guarded_by = "[Self::all_players_signed]"
     )]
-    fn host_cheat_equivocate(self, ctx: Context, proof: Option<HostKey>) {
+    fn host_cheat_equivocate(self, ctx: Context, proof: Option<DLogDiscovered>) {
         match proof {
             Some(k) => {
                 let secp = Secp256k1::new();
-                if k.0.x_only_public_key(&secp).0 == self.kernel.game_host.0 {
+                if k.dlog_discovered.x_only_public_key(&secp).0 == self.kernel.game_host.0 {
                     let mut tmpl = ctx.template();
                     for (player, balance) in &self.kernel.players {
                         tmpl = tmpl.add_output((*balance).into(), &player.0, None)?
@@ -281,7 +281,7 @@ pub struct HostKey(SecretKey);
 pub struct CensorshipProof {}
 
 pub enum GameEnd {
-    HostCheatEquivocate(HostKey),
+    HostCheatEquivocate(DLogDiscovered),
     HostCheatCensor(CensorshipProof),
     PlayersWin(ExtractedMoveEnvelopes),
     PlayersLose(ExtractedMoveEnvelopes),
@@ -312,9 +312,9 @@ impl Contract for GameStarted {
 }
 
 // Coercions
-fn coerce_host_key(
+fn coerce_dlog_discovered(
     k: <GameStarted as Contract>::StatefulArguments,
-) -> Result<Option<HostKey>, CompilationError> {
+) -> Result<Option<DLogDiscovered>, CompilationError> {
     match k {
         Some(GameEnd::HostCheatEquivocate(x)) => Ok(Some(x)),
         Some(_) => Err(CompilationError::ContinuationCoercion(
