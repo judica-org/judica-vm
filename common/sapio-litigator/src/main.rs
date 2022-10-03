@@ -29,7 +29,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 use universe::extractors::sequencer::get_game_setup;
 mod universe;
 
@@ -207,7 +207,9 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     tasks.push(evl);
 
     for task in tasks {
-        task.await?;
+        let r = task.await?;
+        trace!(?r);
+        r.map_err(|e| e.to_string())?;
     }
     Ok(())
 }

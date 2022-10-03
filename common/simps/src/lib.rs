@@ -10,13 +10,13 @@ use serde_json::Value;
 pub struct AutoBroadcast {}
 impl AutoBroadcast {
     pub fn get_protocol_number() -> i64 {
-        -0xcafe
+        Self::static_get_protocol_number()
     }
 }
 
 impl SIMP for AutoBroadcast {
     fn get_protocol_number(&self) -> i64 {
-        Self::get_protocol_number()
+        Self::static_get_protocol_number()
     }
 
     fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
@@ -28,6 +28,13 @@ impl SIMP for AutoBroadcast {
         Self: Sized,
     {
         serde_json::from_value(value)
+    }
+
+    fn static_get_protocol_number() -> i64
+    where
+        Self: Sized,
+    {
+        -0xcafe
     }
 }
 
@@ -52,12 +59,12 @@ pub struct Event {
 
 impl EventRecompiler {
     pub fn get_protocol_number() -> i64 {
-        -0xbeef
+        Self::static_get_protocol_number()
     }
 }
 impl SIMP for EventRecompiler {
     fn get_protocol_number(&self) -> i64 {
-        Self::get_protocol_number()
+        Self::static_get_protocol_number()
     }
     fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
         serde_json::to_value(self)
@@ -68,6 +75,13 @@ impl SIMP for EventRecompiler {
         Self: Sized,
     {
         serde_json::from_value(value)
+    }
+
+    fn static_get_protocol_number() -> i64
+    where
+        Self: Sized,
+    {
+        -0xbeef
     }
 }
 
@@ -86,18 +100,25 @@ pub struct AttestContinuationPointSubscription {
 }
 impl AttestContinuationPointSubscription {
     pub fn get_protocol_number() -> i64 {
-        0x1
+        Self::static_get_protocol_number()
     }
 }
 impl SIMP for AttestContinuationPointSubscription {
     fn get_protocol_number(&self) -> i64 {
-        Self::get_protocol_number()
+        Self::static_get_protocol_number()
     }
     fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
         serde_json::to_value(self)
     }
     fn from_json(value: serde_json::Value) -> Result<Self, serde_json::Error> {
         serde_json::from_value(value)
+    }
+
+    fn static_get_protocol_number() -> i64
+    where
+        Self: Sized,
+    {
+        0x1
     }
 }
 
@@ -114,13 +135,20 @@ pub struct GameKernel {
 impl GameKernel {}
 impl SIMP for GameKernel {
     fn get_protocol_number(&self) -> i64 {
-        -119
+        Self::static_get_protocol_number()
     }
     fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
         serde_json::to_value::<Self>(self.clone())
     }
     fn from_json(v: serde_json::Value) -> Result<Self, serde_json::Error> {
         serde_json::from_value(v)
+    }
+
+    fn static_get_protocol_number() -> i64
+    where
+        Self: Sized,
+    {
+        -119
     }
 }
 impl SIMPAttachableAt<CompiledObjectLT> for GameKernel {}
