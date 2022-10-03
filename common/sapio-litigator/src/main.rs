@@ -9,6 +9,7 @@ use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
+use sapio::util::amountrange::AmountF64;
 use sapio_base::effects::{EditableMapEffectDB, PathFragment};
 use sapio_base::serialization_helpers::SArc;
 use sapio_base::simp::SIMP;
@@ -18,7 +19,7 @@ use sapio_wasm_plugin::plugin_handle::PluginHandle;
 use sapio_wasm_plugin::{ContextualArguments, CreateArgs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use simps::{AutoBroadcast, EventKey};
+use simps::{AutoBroadcast, EventKey, GameKernel, PK};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::rc::Rc;
@@ -233,9 +234,21 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
                 )
                 .await?;
                 let setup = get_game_setup(&msg_db, config.oracle_key).await?;
+                // TODO: Game Amount from somewhere?
+                let amt_per_player: AmountF64 =
+                    AmountF64::from(Amount::from_sat(100000 / setup.players.len() as u64));
+                let g = GameKernel {
+                    game_host: PK(config.oracle_key),
+                    players: setup
+                        .players
+                        .iter()
+                        .map(|p| Ok((serde_json::from_str(&p)?, amt_per_player)))
+                        .collect::<Result<_, serde_json::Error>>()?,
+                    timeout: setup.finish_time,
+                };
                 // todo real args for contract
                 let args = CreateArgs {
-                    arguments: serde_json::to_value(&setup).unwrap(),
+                    arguments: serde_json::to_value(&g).unwrap(),
                     context: ContextualArguments {
                         network: bitcoin::network::constants::Network::Bitcoin,
                         amount: Amount::from_sat(100000),
