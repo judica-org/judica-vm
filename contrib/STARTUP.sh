@@ -37,6 +37,10 @@ else
   cargo build --release || exit -1
   popd
 
+  # Build WASM Module
+  $SCRIPT_LOCATION/build_wasm.sh || exit -1
+  export WASM_MODULE="$SCRIPT_LOCATION/../contracts/modules/target/wasm32-unknown-unknown/release/mining_game_contract.wasm"
+
   case "$USE_RELEASE_TAURI" in
   dev) ;;
 

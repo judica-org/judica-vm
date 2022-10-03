@@ -11,5 +11,6 @@
         "app_name": "testing-$PLAYER",
         "group": "$PLAYER-event-group"
     },
-    "oracle_key": "$SEQUENCER_KEY"
+    "oracle_key": "$SEQUENCER_KEY",
+    "contract_location": "$WASM_MODULE"
 }

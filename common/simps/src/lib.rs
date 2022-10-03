@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use bitcoin::{hashes::sha256, XOnlyPublicKey};
 use sapio::util::amountrange::AmountF64;
-use sapio_base::simp::{SIMP, CompiledObjectLT, SIMPAttachableAt};
+use sapio_base::simp::{CompiledObjectLT, SIMPAttachableAt, SIMP};
 use schemars::JsonSchema;
 use serde::*;
 use serde_json::Value;
@@ -101,7 +101,6 @@ impl SIMP for AttestContinuationPointSubscription {
     }
 }
 
-
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(transparent)]
 pub struct PK(#[schemars(with = "sha256::Hash")] pub XOnlyPublicKey);
@@ -125,7 +124,6 @@ impl SIMP for GameKernel {
     }
 }
 impl SIMPAttachableAt<CompiledObjectLT> for GameKernel {}
-
 
 // Keep in sync with type in mining_game
 pub struct GameStarted {

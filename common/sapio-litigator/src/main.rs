@@ -25,6 +25,7 @@ use std::error::Error;
 use std::rc::Rc;
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
+use tracing::info;
 use universe::extractors::sequencer::get_game_setup;
 mod universe;
 
@@ -84,12 +85,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args();
     let config = config::Config::from_env()?;
     match args.nth(1) {
-        None => todo!(),
+        None => Err("Must have init or run")?,
         Some(s) if &s == "init" => Ok(init_contract_event_log(config).await?),
         Some(s) if &s == "run" => Ok(litigate_contract(config).await?),
         Some(s) => {
             println!("Invalid argument: {}", s);
-            return Ok(());
+            Ok(())
         }
     }
 }
@@ -98,27 +99,27 @@ async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn s
     let evlog = config.get_event_log().await?;
     let accessor = evlog.get_accessor().await;
     let group = config.event_log.group.clone();
-    match accessor.get_occurrence_group_by_key(&group) {
+    let gid = match accessor.get_occurrence_group_by_key(&group) {
         Ok(gid) => {
-            let occurrences = accessor.get_occurrences_for_group(gid)?;
-            if occurrences.len() == 0 {
-                let location = config.contract_location.to_str().unwrap();
-                insert_init(location, &config, &accessor, gid).await?;
-            }
-            println!("Instance {} has already been initialized", group);
-            return Ok(());
+            info!("Instance {} has already been initialized", group);
+            gid
         }
         Err(_) => {
-            println!("Initializing contract at {:?}", config.contract_location);
+            info!("Initializing OccurenceGroupID for {:?}", group);
             let gid = accessor.insert_new_occurrence_group(&group)?;
-            let occurrences = accessor.get_occurrences_for_group(gid)?;
-            if occurrences.len() == 0 {
-                let location = config.contract_location.to_str().unwrap();
-                insert_init(location, &config, &accessor, gid).await?;
-            }
-            return Ok(());
+            gid
         }
+    };
+    let occurrences = accessor.get_occurrences_for_group(gid)?;
+    if occurrences.is_empty() {
+        info!(
+            "Initializing OccurrenceGroup with module at {:?}",
+            config.contract_location
+        );
+        let location = config.contract_location.to_str().unwrap();
+        insert_init(location, &config, &accessor, gid).await?;
     }
+    Ok(())
 }
 
 async fn insert_init(
