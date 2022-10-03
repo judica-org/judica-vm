@@ -475,7 +475,7 @@ fn test_sell_plant() {
             BOB,
             MoveEnvelope {
                 d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
-                sequence: 0,
+                sequence: bob_seq_next(),
                 time_millis: 1232,
             },
             NO_POST,
@@ -484,7 +484,7 @@ fn test_sell_plant() {
             BOB,
             MoveEnvelope {
                 d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
-                sequence: 1,
+                sequence: bob_seq_next(),
                 time_millis: 30000,
             },
             NO_POST,
@@ -507,7 +507,6 @@ fn test_sell_plant() {
     run_game(moves, &mut game);
 
     let a_id = game.get_user_id(ALICE).unwrap();
-    let b_id = game.get_user_id(BOB).unwrap();
     let plants = game.get_user_power_plants(a_id).unwrap();
     let plant_id = plants.power_plant_data.iter().next().unwrap().0.clone();
     let btc_token_id = game.bitcoin_token_id;
@@ -563,6 +562,10 @@ fn test_sell_plant() {
     let new_owner = game.nfts.nfts.get(&plant_id).unwrap().owner();
     assert_eq!(new_owner, b_id);
 }
+
+// fn test_remove_tokens_from_plant() {
+
+// }
 
 fn run_game<I>(moves: I, mut game: &mut GameBoard)
 where
