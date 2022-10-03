@@ -93,16 +93,16 @@ impl<T: 'static + Send + Sync> WasmArgsReducer<T> {
     }
 }
 impl WasmArgsReducer<(MoveEnvelope, XOnlyPublicKey)> {
-    async fn new_default(init: &CreateArgs<Value>) -> Self {
-        let mut args = init.clone();
-        Self::new(|recv_new_move, output_args_to_try| async move {
+    async fn new_default() -> Self {
+        Self::new(|mut recv_new_move, output_args_to_try| async move {
             while let Some(next_move) = recv_new_move.recv().await {
                 let (tx_should_save, rx_should_save) = tokio::sync::oneshot::channel();
-                output_args_to_try.send((todo!(), tx_should_save)).await;
-                if rx_should_save.await {
-                    todo!()
+                let v = Value::Null;
+                if output_args_to_try.send((v, tx_should_save)).await.is_err() {
+                    break;
+                }
+                if let Ok(_) = rx_should_save.await {
                 } else {
-                    todo!()
                 }
             }
         })
@@ -115,8 +115,9 @@ async fn module_argument_compilation_attempt_engine<T: 'static + Send + Sync>(
     mut reducer: WasmArgsReducer<T>,
     init: &CreateArgs<Value>,
     handle: Arc<Mutex<WasmPluginHandle<Compiled>>>,
-) -> Receiver<Compiled> {
-    let (tx, rx) = channel(1);
+) -> Receiver<Compiled>
+{
+    let (tx_contract_state, rx) = channel(1);
 
     let mut args = init.clone();
     spawn(async move {
@@ -185,11 +186,14 @@ async fn module_argument_compilation_attempt_engine<T: 'static + Send + Sync>(
                     }
 
                     new_args.context.effects = save.into();
-                    let g_handle = handle.lock().await;
-
-                    let result: Result<Compiled, CompilationError> =
-                        g_handle.call(&PathFragment::Root.into(), &new_args);
-                    drop(g_handle);
+                    let result: Result<Compiled, ()> = {
+                        let g_handle = handle.lock().await;
+                        // drop error before releasing g_handle so that the CompilationError non-send type
+                        // doesn't get held across an await point
+                        g_handle.call(&PathFragment::Root.into(), &new_args).map_err(|e|
+                            tracing::debug!(error=?e, "Module did not like the new argument")
+                        )
+                    };
 
                     match result {
                         // TODO:  Belt 'n Suspsender Check:
@@ -198,20 +202,20 @@ async fn module_argument_compilation_attempt_engine<T: 'static + Send + Sync>(
                             args = new_args;
                             contract = new_contract;
                             save_arg.send(true);
-                            if tx.send(new_contract).await.is_err() {
-                                break;
-                            }
+                           if  tx_contract_state.send(contract.clone()).await.is_err() {
+                            // Channel Closure
+                            break;
+                           }
                         }
                         Err(e) => {
                             save_arg.send(false);
-                            tracing::debug!(error=?e, "Module did not like the new argument");
                         }
                     }
                 }
                 None => break,
             }
         }
-        None
+        None::<()>
     });
 
     rx
