@@ -188,7 +188,7 @@ impl AttestEnvelopable for WrappedJson {
 }
 
 pub type Envelope = GenericEnvelope<WrappedJson>;
-impl<M:AttestEnvelopable> AsRef<GenericEnvelope<M>> for GenericEnvelope<M> {
+impl<M: AttestEnvelopable> AsRef<GenericEnvelope<M>> for GenericEnvelope<M> {
     fn as_ref(&self) -> &Self {
         self
     }

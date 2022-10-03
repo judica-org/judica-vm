@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use simps::AutoBroadcast;
 use std::collections::BTreeMap;
+use std::error::Error;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -118,39 +119,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {
     let evlog = config.get_event_log().await?;
     let accessor = evlog.get_accessor().await;
-    let group = config.event_log.group;
+    let group = config.event_log.group.clone();
     match accessor.get_occurrence_group_by_key(&group) {
         Ok(gid) => {
             let occurrences = accessor.get_occurrences_for_group(gid)?;
             if occurrences.len() == 0 {
                 let location = config.contract_location.to_str().unwrap();
-                let ev = Event::Initialization((
-                    tokio::fs::read(&location).await?,
-                    serde_json::from_value(config.contract_args)?,
-                ));
-                let ev_occ: &dyn ToOccurrence = &ev;
-                accessor.insert_occurrence(gid, &ev_occ.into())?;
+                insert_init(location, &config, &accessor, gid).await?;
             }
             println!("Instance {} has already been initialized", group);
             return Ok(());
         }
         Err(_) => {
-            let location = config.contract_location.to_str().unwrap();
-            println!("Initializing contract at {}", location);
+            println!("Initializing contract at {:?}", config.contract_location);
             println!("Using arguments {}", config.contract_args);
             let gid = accessor.insert_new_occurrence_group(&group)?;
             let occurrences = accessor.get_occurrences_for_group(gid)?;
             if occurrences.len() == 0 {
-                let ev = Event::Initialization((
-                    tokio::fs::read(&location).await?,
-                    serde_json::from_value(config.contract_args)?,
-                ));
-                let ev_occ: &dyn ToOccurrence = &ev;
-                accessor.insert_occurrence(gid, &ev_occ.into())?;
+                let location = config.contract_location.to_str().unwrap();
+                insert_init(location, &config, &accessor, gid).await?;
             }
             return Ok(());
         }
     }
+}
+
+async fn insert_init(
+    location: &str,
+    config: &config::Config,
+    accessor: &event_log::db_handle::EventLogAccessor<'_>,
+    gid: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
+) -> Result<(), Box<dyn Error>> {
+    let ev = Event::Initialization((
+        tokio::fs::read(&location).await?,
+        serde_json::from_value(config.contract_args.clone())?,
+    ));
+    let ev_occ: &dyn ToOccurrence = &ev;
+    accessor.insert_occurrence(gid, &ev_occ.into())?;
+    Ok(())
 }
 
 async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {

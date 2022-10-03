@@ -1,2 +1,2 @@
-pub mod linearized;
 pub mod extractors;
+pub mod linearized;
