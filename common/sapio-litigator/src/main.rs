@@ -120,7 +120,17 @@ async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn s
     let accessor = evlog.get_accessor().await;
     let group = config.event_log.group;
     match accessor.get_occurrence_group_by_key(&group) {
-        Ok(_) => {
+        Ok(gid) => {
+            let occurrences = accessor.get_occurrences_for_group(gid)?;
+            if occurrences.len() == 0 {
+                let location = config.contract_location.to_str().unwrap();
+                let ev = Event::Initialization((
+                    tokio::fs::read(&location).await?,
+                    serde_json::from_value(config.contract_args)?,
+                ));
+                let ev_occ: &dyn ToOccurrence = &ev;
+                accessor.insert_occurrence(gid, &ev_occ.into())?;
+            }
             println!("Instance {} has already been initialized", group);
             return Ok(());
         }
@@ -129,12 +139,15 @@ async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn s
             println!("Initializing contract at {}", location);
             println!("Using arguments {}", config.contract_args);
             let gid = accessor.insert_new_occurrence_group(&group)?;
-            let ev = Event::Initialization((
-                tokio::fs::read(&location).await?,
-                serde_json::from_value(config.contract_args)?,
-            ));
-            let ev_occ: &dyn ToOccurrence = &ev;
-            accessor.insert_occurrence(gid, &ev_occ.into())?;
+            let occurrences = accessor.get_occurrences_for_group(gid)?;
+            if occurrences.len() == 0 {
+                let ev = Event::Initialization((
+                    tokio::fs::read(&location).await?,
+                    serde_json::from_value(config.contract_args)?,
+                ));
+                let ev_occ: &dyn ToOccurrence = &ev;
+                accessor.insert_occurrence(gid, &ev_occ.into())?;
+            }
             return Ok(());
         }
     }
@@ -223,15 +236,13 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     });
     let se_evlog = evlog.clone();
     let se_new_synthetic_event = new_synthetic_event.clone();
-    tokio::spawn(
-        universe::extractors::sequencer::sequencer_extractor(
-            config.oracle_key,
-            msg_db,
-            se_evlog,
-            evlog_group_id,
-            se_new_synthetic_event,
-        )
-    );
+    tokio::spawn(universe::extractors::sequencer::sequencer_extractor(
+        config.oracle_key,
+        msg_db,
+        se_evlog,
+        evlog_group_id,
+        se_new_synthetic_event,
+    ));
 
     let mut state = AppState::Uninitialized;
     loop {
