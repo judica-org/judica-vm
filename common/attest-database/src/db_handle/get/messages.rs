@@ -214,18 +214,19 @@ where
     }
 
     /// loads all the messages from a given user
-    pub fn load_all_messages_for_user_by_key_connected<M>(
+    pub fn load_all_messages_for_user_by_key_connected<M, E>(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
+    ) -> Result<Vec<E>, rusqlite::Error>
     where
         M: AttestEnvelopable,
+        E: AsRef<GenericEnvelope<M>> + FromSql,
     {
         let mut stmt = self
             .0
             .prepare_cached(SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED)?;
         let rows = stmt.query(params![key.to_hex()])?;
-        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows.map(|r| r.get(0)).collect()?;
+        let vs: Vec<E> = rows.map(|r| r.get(0)).collect()?;
         Ok(vs)
     }
 

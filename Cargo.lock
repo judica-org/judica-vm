@@ -2437,6 +2437,7 @@ dependencies = [
  "event-log",
  "futures",
  "game-host-messages",
+ "game-player-messages",
  "game-sequencer",
  "jsonschema-valid",
  "mine-with-friends-board",

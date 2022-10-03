@@ -46,8 +46,8 @@ pub struct UnauthenticatedRawSequencer<M>
 where
     M: AttestEnvelopable,
 {
-    sequencer_envelopes: Vec<GenericEnvelope<Channelized<BroadcastByHost>>>,
-    msg_cache: HashMap<CanonicalEnvelopeHash, GenericEnvelope<M>>,
+    pub sequencer_envelopes: Vec<GenericEnvelope<Channelized<BroadcastByHost>>>,
+    pub msg_cache: HashMap<CanonicalEnvelopeHash, GenericEnvelope<M>>,
 }
 impl<M: AttestEnvelopable> TryFrom<UnauthenticatedRawSequencer<M>> for RawSequencer<M> {
     type Error = AuthenticationError;

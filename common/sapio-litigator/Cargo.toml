@@ -71,3 +71,6 @@ path = "../game-host-messages"
 
 [dependencies.bitcoinconsensus]
 version = "0.19.0-3"
+
+[dependencies.game-player-messages]
+path = "../game-player-messages"
