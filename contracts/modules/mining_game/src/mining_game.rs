@@ -20,15 +20,20 @@ use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
 use sapio::util::amountrange::AmountF64;
 use sapio::*;
+use sapio_base::simp::ContinuationPointLT;
+use sapio_base::simp::SIMPAttachableAt;
 use sapio_base::timelocks::RelHeight;
 use sapio_wasm_plugin::client;
 use sapio_wasm_plugin::optional_logo;
 use sapio_wasm_plugin::REGISTER;
 use schemars::*;
 use serde::*;
-use simps::GameKernel;
+use simps::EventKey;
+use simps::EventRecompiler;
+use simps::EventSource;
 use simps::GameStarted as ExtGameStarted;
-use simps::PK;
+use simps::{DLogDiscovered, PK};
+use simps::{DLogSubscription, GameKernel};
 use std::str::FromStr;
 
 #[derive(Deserialize, JsonSchema)]
@@ -49,6 +54,21 @@ impl From<GameStarted> for ExtGameStarted {
 }
 
 impl GameStarted {
+    fn game_host_dlog_subscription(
+        &self,
+        ctx: Context,
+    ) -> Result<Vec<Box<dyn SIMPAttachableAt<ContinuationPointLT>>>, CompilationError> {
+        Ok(vec![
+            Box::new(DLogSubscription {
+                dlog_subscription: self.kernel.game_host,
+            }),
+            Box::new(EventRecompiler {
+                source: EventSource("*".into()),
+                filter: (*simps::EK_NEW_DLOG.0).clone(),
+            }),
+        ])
+    }
+
     #[guard]
     fn all_players_signed(self, _ctx: Context) {
         let sub: Vec<_> = self
@@ -101,14 +121,15 @@ impl GameStarted {
 
     #[continuation(
         web_api,
-        coerce_args = "coerce_host_key",
-        guarded_by = "[Self::all_players_signed]"
+        coerce_args = "coerce_dlog_discovered",
+        guarded_by = "[Self::all_players_signed]",
+        simps = "Some(Self::game_host_dlog_subscription)"
     )]
-    fn host_cheat_equivocate(self, ctx: Context, proof: Option<HostKey>) {
+    fn host_cheat_equivocate(self, ctx: Context, proof: Option<DLogDiscovered>) {
         match proof {
             Some(k) => {
                 let secp = Secp256k1::new();
-                if k.0.x_only_public_key(&secp).0 == self.kernel.game_host.0 {
+                if k.dlog_discovered.x_only_public_key(&secp).0 == self.kernel.game_host.0 {
                     let mut tmpl = ctx.template();
                     for (player, balance) in &self.kernel.players {
                         tmpl = tmpl.add_output((*balance).into(), &player.0, None)?
@@ -138,6 +159,25 @@ impl GameStarted {
         }
     }
 
+    fn subscribe_players_win(
+        &self,
+        ctx: Context,
+    ) -> Result<Vec<Box<dyn SIMPAttachableAt<ContinuationPointLT>>>, CompilationError> {
+        Ok(vec![Box::new(EventRecompiler {
+            source: EventSource("*".into()),
+            filter: (*simps::EK_GAME_ACTION_WIN.0).clone(),
+        })])
+    }
+
+    fn subscribe_players_lose(
+        &self,
+        ctx: Context,
+    ) -> Result<Vec<Box<dyn SIMPAttachableAt<ContinuationPointLT>>>, CompilationError> {
+        Ok(vec![Box::new(EventRecompiler {
+            source: EventSource("*".into()),
+            filter: (*simps::EK_GAME_ACTION_LOSE.0).clone(),
+        })])
+    }
     fn get_finished_board(
         &self,
         trace: ExtractedMoveEnvelopes,
@@ -166,7 +206,8 @@ impl GameStarted {
     #[continuation(
         web_api,
         coerce_args = "coerce_players_win",
-        guarded_by = "[Self::all_players_signed]"
+        guarded_by = "[Self::all_players_signed]",
+        simps = "Some(Self::subscribe_players_win)"
     )]
     fn game_end_players_win(self, ctx: Context, game_trace: Option<ExtractedMoveEnvelopes>) {
         match game_trace {
@@ -208,7 +249,8 @@ impl GameStarted {
     #[continuation(
         web_api,
         coerce_args = "coerce_players_lose",
-        guarded_by = "[Self::all_players_signed]"
+        guarded_by = "[Self::all_players_signed]",
+        simps = "Some(Self::subscribe_players_lose)"
     )]
     fn game_end_players_lose(self, ctx: Context, game_trace: Option<ExtractedMoveEnvelopes>) {
         match game_trace {
@@ -281,7 +323,7 @@ pub struct HostKey(SecretKey);
 pub struct CensorshipProof {}
 
 pub enum GameEnd {
-    HostCheatEquivocate(HostKey),
+    HostCheatEquivocate(DLogDiscovered),
     HostCheatCensor(CensorshipProof),
     PlayersWin(ExtractedMoveEnvelopes),
     PlayersLose(ExtractedMoveEnvelopes),
@@ -312,9 +354,9 @@ impl Contract for GameStarted {
 }
 
 // Coercions
-fn coerce_host_key(
+fn coerce_dlog_discovered(
     k: <GameStarted as Contract>::StatefulArguments,
-) -> Result<Option<HostKey>, CompilationError> {
+) -> Result<Option<DLogDiscovered>, CompilationError> {
     match k {
         Some(GameEnd::HostCheatEquivocate(x)) => Ok(Some(x)),
         Some(_) => Err(CompilationError::ContinuationCoercion(

@@ -1,11 +1,14 @@
-use std::collections::BTreeMap;
-
-use bitcoin::{hashes::sha256, XOnlyPublicKey};
+use bitcoin::{hashes::sha256, secp256k1::SecretKey, XOnlyPublicKey};
+use lazy_static::lazy_static;
 use sapio::util::amountrange::AmountF64;
-use sapio_base::simp::{CompiledObjectLT, SIMPAttachableAt, SIMP};
+use sapio_base::{
+    serialization_helpers::SArc,
+    simp::{CompiledObjectLT, ContinuationPointLT, SIMPAttachableAt, SIMP},
+};
 use schemars::JsonSchema;
 use serde::*;
 use serde_json::Value;
+use std::{collections::BTreeMap, sync::Arc};
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct AutoBroadcast {}
 impl AutoBroadcast {
@@ -13,7 +16,6 @@ impl AutoBroadcast {
         Self::static_get_protocol_number()
     }
 }
-
 impl SIMP for AutoBroadcast {
     fn get_protocol_number(&self) -> i64 {
         Self::static_get_protocol_number()
@@ -85,12 +87,14 @@ impl SIMP for EventRecompiler {
     }
 }
 
+impl SIMPAttachableAt<ContinuationPointLT> for EventRecompiler {}
+
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(transparent)]
 struct XOnlyPublicKeyString(#[schemars(with = "sha256::Hash")] XOnlyPublicKey);
-impl Into<XOnlyPublicKey> for XOnlyPublicKeyString {
-    fn into(self) -> XOnlyPublicKey {
-        self.0
+impl From<XOnlyPublicKeyString> for XOnlyPublicKey {
+    fn from(val: XOnlyPublicKeyString) -> Self {
+        val.0
     }
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -118,11 +122,13 @@ impl SIMP for AttestContinuationPointSubscription {
     where
         Self: Sized,
     {
-        0x1
+        -0xa7735c09055
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(
+    Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema, Debug, Copy,
+)]
 #[serde(transparent)]
 pub struct PK(#[schemars(with = "sha256::Hash")] pub XOnlyPublicKey);
 
@@ -157,4 +163,45 @@ impl SIMPAttachableAt<CompiledObjectLT> for GameKernel {}
 #[derive(Serialize)]
 pub struct GameStarted {
     pub kernel: GameKernel,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+pub struct DLogDiscovered {
+    pub dlog_discovered: SecretKey,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+pub struct DLogSubscription {
+    pub dlog_subscription: PK,
+}
+impl DLogSubscription {}
+impl SIMP for DLogSubscription {
+    fn static_get_protocol_number() -> i64 {
+        -0xd15c12337109
+    }
+
+    fn get_protocol_number(&self) -> i64 {
+        Self::static_get_protocol_number()
+    }
+
+    fn to_json(&self) -> Result<Value, serde_json::Error> {
+        serde_json::to_value(self)
+    }
+
+    fn from_json(value: Value) -> Result<Self, serde_json::Error>
+    where
+        Self: Sized,
+    {
+        serde_json::from_value(value)
+    }
+}
+impl SIMPAttachableAt<ContinuationPointLT> for DLogSubscription {}
+
+lazy_static! {
+    pub static ref EK_GAME_ACTION_WIN: SArc<EventKey> =
+        SArc(Arc::new(EventKey("game_action_players_win".into())));
+    pub static ref EK_GAME_ACTION_LOSE: SArc<EventKey> =
+        SArc(Arc::new(EventKey("game_action_players_lose".into())));
+    pub static ref EK_NEW_DLOG: SArc<EventKey> =
+        SArc(Arc::new(EventKey("discrete_log_discovery".into())));
 }
