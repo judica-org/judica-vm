@@ -48,13 +48,13 @@ impl From<GameStarted> for ExtGameStarted {
 impl GameStarted {
     #[guard]
     fn all_players_signed(self, _ctx: Context) {
-        Clause::And(
-            self.kernel
-                .players
-                .iter()
-                .map(|x| Clause::Key(x.0 .0.clone()))
-                .collect(),
-        )
+        let sub: Vec<_> = self
+            .kernel
+            .players
+            .iter()
+            .map(|x| Clause::Key(x.0 .0))
+            .collect();
+        Clause::Threshold(sub.len(), sub)
     }
 
     #[guard]
@@ -78,11 +78,12 @@ impl GameStarted {
         // 1/[a, b, c] + h @ t = 2   * periods
         // 1/[a, b, c]     @ t = 2.5 * periods
         for parties in (1..=total).rev() {
-            clauses.push(Clause::And(vec![
+            let v = vec![
                 RelHeight::from(next_trigger_at).into(),
                 Clause::Threshold(parties, keys.clone()),
                 Clause::Key(self.kernel.game_host.0),
-            ]));
+            ];
+            clauses.push(Clause::Threshold(v.len(), v));
             next_trigger_at += degrade_every_n_blocks;
             clauses.push(Clause::And(vec![
                 Clause::Threshold(parties, keys.clone()),
