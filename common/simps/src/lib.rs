@@ -170,7 +170,7 @@ pub struct DLogSubscription {
 impl DLogSubscription {}
 impl SIMP for DLogSubscription {
     fn static_get_protocol_number() -> i64 {
-        0x2
+        -0xd15c12337109
     }
 
     fn get_protocol_number(&self) -> i64 {
