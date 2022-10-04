@@ -1,13 +1,16 @@
 use std::{collections::BTreeSet, error::Error, time::Duration};
 
 use attest_database::{connection::MsgDB, db_handle::get::nonces::extract_sk_from_envelopes};
-use bitcoin::{secp256k1::SecretKey, XOnlyPublicKey};
-use event_log::{connection::EventLog, db_handle::accessors::occurrence_group::OccurrenceGroupID};
+use bitcoin::{hashes::hex::ToHex, secp256k1::SecretKey, XOnlyPublicKey};
+use event_log::{
+    connection::EventLog,
+    db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
+};
 use simps::{DLogDiscovered, EK_NEW_DLOG};
 use tokio::{spawn, time};
 use tracing::{debug, info, trace};
 
-use crate::{Event, OK_T};
+use crate::{Event, Tag, TaggedEvent, OK_T};
 
 pub async fn dlog_extractor(
     msg_db: MsgDB,
@@ -50,10 +53,19 @@ pub async fn dlog_extractor(
                 // break if error, since this serialization should never fail.
                 let msg = serde_json::to_value(DLogDiscovered { dlog_discovered })?;
                 // break if DB error
-                let _eid = evlog.get_accessor().await.insert_new_occurrence_now_from(
+                match evlog.get_accessor().await.insert_new_occurrence_now_from(
                     evlog_group_id,
-                    &Event::NewRecompileTriggeringObservation(msg, EK_NEW_DLOG.clone()),
-                )?;
+                    &TaggedEvent(
+                        Event::NewRecompileTriggeringObservation(msg, EK_NEW_DLOG.clone()),
+                        Some(Tag::ScopedValue(
+                            "dlog".into(),
+                            dlog_discovered.secret_bytes().to_hex(),
+                        )),
+                    ),
+                )? {
+                    Ok(_) => {}
+                    Err(Idempotent::AlreadyExists) => {}
+                }
             } else {
                 debug!(?k, "Expected to learn DLog, but it failed. Try manually inspecting the envelopes for k.");
             }

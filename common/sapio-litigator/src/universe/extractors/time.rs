@@ -5,7 +5,7 @@ use event_log::{
 use std::{error::Error, sync::Arc, time::Duration};
 use tokio::sync::Notify;
 
-use crate::Event;
+use crate::{Event, TaggedEvent};
 
 pub async fn time_event_extractor(
     evlog: EventLog,
@@ -15,8 +15,9 @@ pub async fn time_event_extractor(
     loop {
         tokio::time::sleep(Duration::from_secs(30)).await;
         let accessor = evlog.get_accessor().await;
-        let o: &dyn ToOccurrence = &Event::SyntheticPeriodicActions(attest_util::now());
-        accessor.insert_new_occurrence_now_from(evlog_group_id, o)?;
+        // no need for a tag because this is always fresh
+        let o = TaggedEvent(Event::SyntheticPeriodicActions(attest_util::now()), None);
+        accessor.insert_new_occurrence_now_from(evlog_group_id, &o)?;
         new_synthetic_event.notify_one();
     }
 }

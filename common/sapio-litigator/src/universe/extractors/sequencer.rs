@@ -1,10 +1,16 @@
-use crate::{Event, TaskSet, OK_T};
+use crate::{Event, Tag, TaggedEvent, TaskSet, OK_T};
 use attest_database::connection::MsgDB;
 use attest_messages::GenericEnvelope;
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
 use event_log::{
     connection::EventLog,
-    db_handle::accessors::{occurrence::ToOccurrence, occurrence_group::OccurrenceGroupID},
+    db_handle::accessors::{
+        occurrence::{
+            sql::insert::{self, Idempotent},
+            ToOccurrence,
+        },
+        occurrence_group::OccurrenceGroupID,
+    },
 };
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
@@ -72,22 +78,19 @@ pub async fn sequencer_extractor(
             evlog_group_id,
             new_game,
             game_sequencer.recieve_move.lock_owned().await,
+            new_synthetic_event.clone(),
         )
     });
-    tasks.push(spawn({
+    tasks.push({
         let recieved_psbt = game_sequencer.recieve_psbt.lock_owned().await;
-        async move {
-            handle_psbts(
-                shutdown.clone(),
-                evlog.clone(),
-                evlog_group_id,
-                recieved_psbt,
-                new_synthetic_event,
-            )
-            .await?;
-            OK_T
-        }
-    }));
+        handle_psbts(
+            shutdown.clone(),
+            evlog.clone(),
+            evlog_group_id,
+            recieved_psbt,
+            new_synthetic_event,
+        )
+    });
     Ok(())
 }
 
@@ -125,6 +128,7 @@ pub fn handle_psbts(
     let mut psbts = BTreeMap::<String, Vec<PartiallySignedTransaction>>::new();
     spawn(async move {
         // TODO: Check which game the move is for?
+        let mut psbt_counter = 0;
         while let Some((psbt, s)) = moves.recv().await {
             info!(psbt_id = ?s, "New PSBT Recieved");
             let psbts = psbts.entry(s.clone()).or_default();
@@ -148,9 +152,17 @@ pub fn handle_psbts(
                 let verified = tx.verify_with_flags(|_o| None, bitcoinconsensus::VERIFY_ALL);
                 if verified.is_ok() {
                     let accessor = evlog.get_accessor().await;
-                    let o: &dyn ToOccurrence = &Event::TransactionFinalized(s, tx);
-                    accessor.insert_new_occurrence_now_from(evlog_group_id, o)?;
-                    new_synthetic_event.notify_one();
+                    psbt_counter += 1;
+                    let o = TaggedEvent(
+                        Event::TransactionFinalized(s, tx),
+                        Some(Tag::ScopedCounter("psbts".into(), psbt_counter)),
+                    );
+                    match accessor.insert_new_occurrence_now_from(evlog_group_id, &o)? {
+                        Err(Idempotent::AlreadyExists) => {}
+                        Ok(_) => {
+                            new_synthetic_event.notify_one();
+                        }
+                    }
                 }
             }
         }
@@ -166,6 +178,7 @@ pub fn start_game(
     evlog_group_id: OccurrenceGroupID,
     mut game: GameBoard,
     mut moves: OwnedMutexGuard<UnboundedReceiver<(MoveEnvelope, XOnlyPublicKey)>>,
+    new_synthetic_event: Arc<Notify>,
 ) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
     spawn(async move {
         // TODO: Check which game the move is for?
@@ -189,6 +202,8 @@ pub fn start_game(
                         FinishReason::TimeExpired => EK_GAME_ACTION_WIN.clone(),
                         FinishReason::DominatingPlayer(_) => EK_GAME_ACTION_LOSE.clone(),
                     },
+                    Some(Tag::ScopedCounter("game_move".into(), move_count)),
+                    new_synthetic_event,
                 );
 
                 // contract specific, game will not change hereafter
@@ -201,12 +216,14 @@ pub fn start_game(
 
 type HostEnvelope = GenericEnvelope<Channelized<BroadcastByHost>>;
 fn make_snapshot(
-    move_count: usize,
+    move_count: u64,
     evlog: EventLog,
     msg_db: MsgDB,
     oracle_key: XOnlyPublicKey,
     evlog_group_id: OccurrenceGroupID,
     event_for: SArc<EventKey>,
+    tag: Option<Tag>,
+    new_synthetic_event: Arc<Notify>,
 ) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
     spawn(async move {
         let handle = msg_db.get_handle().await;
@@ -229,7 +246,7 @@ fn make_snapshot(
                 BroadcastByHost::Sequence(d) => d,
                 _ => &def,
             })
-            .take(move_count)
+            .take(move_count as usize)
             .flat_map(|k| Some((*k, m.remove(k)?)))
             .collect();
 
@@ -239,12 +256,20 @@ fn make_snapshot(
         };
         if let Ok(v) = serde_json::to_value(v) {
             let accessor = evlog.get_accessor().await;
-            accessor
-                .insert_new_occurrence_now_from(
-                    evlog_group_id,
-                    &Event::NewRecompileTriggeringObservation(v, event_for),
-                )
-                .ok();
+            // don't care if this fails
+            match accessor.insert_new_occurrence_now_from(
+                evlog_group_id,
+                &TaggedEvent(
+                    Event::NewRecompileTriggeringObservation(v, event_for),
+                    tag.clone(),
+                ),
+            )? {
+                Ok(_) => {
+                    // TODO: notify?
+                    new_synthetic_event.notify_one()
+                }
+                Err(Idempotent::AlreadyExists) => {}
+            }
         }
         OK_T
     })

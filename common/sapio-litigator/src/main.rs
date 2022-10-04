@@ -7,7 +7,9 @@ use bitcoin::secp256k1::Secp256k1;
 use bitcoin::util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint};
 use bitcoin::{Amount, KeyPair, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
-use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
+use event_log::db_handle::accessors::occurrence::{
+    ApplicationTypeID, Occurrence, OccurrenceConversionError, ToOccurrence,
+};
 use ext::CompiledExt;
 use futures::stream::FuturesUnordered;
 use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
@@ -50,12 +52,52 @@ pub enum Event {
     NewRecompileTriggeringObservation(Value, SArc<EventKey>),
 }
 
-impl ToOccurrence for Event {
-    fn to_data(&self) -> CanonicalJsonValue {
-        ruma_serde::to_canonical_value(self).unwrap()
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+enum Tag {
+    InitModule,
+    EvLoopCounter(u64),
+    ScopedCounter(String, u64),
+    ScopedValue(String, String),
+}
+impl ToString for Tag {
+    fn to_string(&self) -> String {
+        ruma_serde::to_canonical_value(self)
+            .expect("Tag Type Should not have Fallible Serialization")
+            .to_string()
     }
-    fn stable_typeid(&self) -> ApplicationTypeID {
+}
+
+#[derive(Serialize, Deserialize)]
+struct TaggedEvent(Event, Option<Tag>);
+impl ToOccurrence for TaggedEvent {
+    fn to_data(&self) -> CanonicalJsonValue {
+        ruma_serde::to_canonical_value(&self.0).unwrap()
+    }
+    fn stable_typeid() -> ApplicationTypeID {
         ApplicationTypeID::from_inner("LitigatorEvent")
+    }
+    fn unique_tag(&self) -> Option<String> {
+        self.1.as_ref().map(ToString::to_string)
+    }
+    fn from_occurrence(occurrence: Occurrence) -> Result<TaggedEvent, OccurrenceConversionError>
+    where
+        Self: Sized + for<'de> Deserialize<'de>,
+    {
+        let v: Event = serde_json::from_value(occurrence.data.into())
+            .map_err(OccurrenceConversionError::DeserializationError)?;
+        if occurrence.typeid != Self::stable_typeid() {
+            return Err(OccurrenceConversionError::TypeidMismatch {
+                expected: occurrence.typeid,
+                got: Self::stable_typeid(),
+            });
+        }
+        let tag = occurrence
+            .unique_tag
+            .map(|t| serde_json::from_str(&t))
+            .transpose()
+            .map_err(OccurrenceConversionError::DeserializationError)?;
+        Ok(TaggedEvent(v, tag))
     }
 }
 
@@ -141,7 +183,7 @@ async fn insert_init(
     gid: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error>> {
     let ev = Event::ModuleBytes(tokio::fs::read(&location).await?);
-    accessor.insert_new_occurrence_now_from(gid, &ev)?;
+    accessor.insert_new_occurrence_now_from(gid, &TaggedEvent(ev, Some(Tag::InitModule)))?;
     Ok(())
 }
 
