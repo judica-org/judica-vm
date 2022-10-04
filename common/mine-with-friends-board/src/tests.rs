@@ -1,6 +1,9 @@
 use crate::{
     game::{
-        game_move::{GameMove, Heartbeat, MintPowerPlant, SendTokens, Trade},
+        game_move::{
+            GameMove, Heartbeat, ListNFTForSale, MintPowerPlant, PurchaseNFT, RemoveTokens,
+            SendTokens, Trade,
+        },
         FinishReason, GameBoard, GameSetup, MoveRejectReason,
     },
     nfts::instances::powerplant::PlantType::Flare,
@@ -440,6 +443,277 @@ fn test_send_tokens_to_plant() {
         ],
         &mut game,
     );
+}
+
+#[test]
+fn test_sell_plant() {
+    let _ = tracing_subscriber::fmt::try_init();
+    let mut game = setup_game();
+
+    let mut alice_seq = 0;
+    let mut alice_seq_next = || {
+        alice_seq += 1;
+        alice_seq - 1
+    };
+
+    let mut bob_seq = 0;
+    let mut bob_seq_next = || {
+        bob_seq += 1;
+        bob_seq - 1
+    };
+    // moves to make a plant
+    let moves = [
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: alice_seq_next(),
+                time_millis: 123,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: bob_seq_next(),
+                time_millis: 500,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: bob_seq_next(),
+                time_millis: 900,
+            },
+            NO_POST,
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::SuperMintPowerPlant(MintPowerPlant {
+                    scale: 1,
+                    plant_type: crate::nfts::instances::powerplant::PlantType::Solar,
+                    location: (15, 15),
+                })),
+                sequence: alice_seq_next(),
+                time_millis: 1000,
+            },
+            NO_POST,
+        ),
+    ];
+
+    run_game(moves, &mut game);
+
+    let a_id = game.get_user_id(ALICE).unwrap();
+    let plants = game.get_user_power_plants(a_id).unwrap();
+    let plant_id = plants.power_plant_data.iter().next().unwrap().0.clone();
+    let btc_token_id = game.bitcoin_token_id;
+
+    let moves2 = [
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::ListNFTForSale(ListNFTForSale {
+                    nft_id: plant_id,
+                    price: 1,
+                    currency: btc_token_id,
+                })),
+                sequence: alice_seq_next(),
+                time_millis: 2000,
+            },
+            NO_POST,
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: alice_seq_next(),
+                time_millis: 3000,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::PurchaseNFT(PurchaseNFT {
+                    nft_id: plant_id,
+                    currency: btc_token_id,
+                    limit_price: 2,
+                })),
+                sequence: bob_seq_next(),
+                time_millis: 10000,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: bob_seq_next(),
+                time_millis: 12000,
+            },
+            NO_POST,
+        ),
+    ];
+    run_game(moves2, &mut game);
+    let b_id = game.get_user_id(BOB).unwrap();
+    let new_owner = game.nfts.nfts.get(&plant_id).unwrap().owner();
+    assert_eq!(new_owner, b_id);
+}
+
+#[test]
+fn test_remove_tokens_from_plant() {
+    // setup, build plant, tx tokens (assert it happened), tx tokens back
+    let _ = tracing_subscriber::fmt::try_init();
+    let mut game = setup_game();
+
+    let mut alice_seq = 0;
+    let mut alice_seq_next = || {
+        alice_seq += 1;
+        alice_seq - 1
+    };
+
+    let mut bob_seq = 0;
+    let mut bob_seq_next = || {
+        bob_seq += 1;
+        bob_seq - 1
+    };
+    // moves to make a plant
+    let moves = [
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: alice_seq_next(),
+                time_millis: 123,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: bob_seq_next(),
+                time_millis: 1232,
+            },
+            NO_POST,
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::SuperMintPowerPlant(MintPowerPlant {
+                    scale: 1,
+                    plant_type: crate::nfts::instances::powerplant::PlantType::Solar,
+                    location: (15, 15),
+                })),
+                sequence: alice_seq_next(),
+                time_millis: 1000,
+            },
+            NO_POST,
+        ),
+    ];
+    run_game(moves, &mut game);
+
+    let id = game.get_user_id(ALICE).unwrap();
+    let plants = game.get_user_power_plants(id).unwrap();
+    let plant_id = plants.power_plant_data.iter().next().unwrap().0.clone();
+    let btc_balance_before_mining = game.tokens[game.bitcoin_token_id].balance_check(&id);
+
+    let moves2 = [
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Trade(Trade {
+                    pair: TradingPairID {
+                        asset_a: game.bitcoin_token_id,
+                        asset_b: game.asic_token_id,
+                    },
+                    amount_a: 0,
+                    amount_b: 1,
+                    sell: false,
+                    cap: None,
+                })),
+                sequence: alice_seq_next(),
+                time_millis: 2000,
+            },
+            NO_POST,
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::SendTokens(SendTokens {
+                    to: plant_id.inner(),
+                    amount: 1,
+                    currency: game.asic_token_id,
+                })),
+                sequence: alice_seq_next(),
+                time_millis: 3000,
+            },
+            &|g, v| {
+                let id = g.get_user_id(ALICE).unwrap();
+                let plants = &g.get_user_power_plants(id).unwrap();
+                let plant_id = plants.power_plant_data.iter().next().unwrap().0;
+                assert!(v.is_ok());
+                let t = &g.tokens[g.asic_token_id];
+                assert_eq!(1, t.balance_check(&plant_id.inner()));
+            },
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: alice_seq_next(),
+                time_millis: 10000,
+            },
+            NO_POST,
+        ),
+    ];
+
+    run_game(moves2, &mut game);
+
+    let asics_before_removal = game.tokens[game.asic_token_id].balance_check(&id);
+    // transfer tokens back to A
+    let moves3 = [
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::RemoveTokens(RemoveTokens {
+                    nft_id: plant_id,
+                    amount: 1,
+                    currency: game.asic_token_id,
+                })),
+                sequence: alice_seq_next(),
+                time_millis: 12000,
+            },
+            NO_POST,
+        ),
+        (
+            ALICE,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: alice_seq_next(),
+                time_millis: 13000,
+            },
+            NO_POST,
+        ),
+        (
+            BOB,
+            MoveEnvelope {
+                d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
+                sequence: bob_seq_next(),
+                time_millis: 100_000,
+            },
+            NO_POST,
+        ),
+    ];
+
+    run_game(moves3, &mut game);
+    let asics_after_removal = game.tokens[game.asic_token_id].balance_check(&id);
+    trace!(asics_after_removal, asics_before_removal);
+    assert!(asics_after_removal > asics_before_removal);
 }
 
 fn run_game<I>(moves: I, mut game: &mut GameBoard)

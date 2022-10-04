@@ -14,6 +14,7 @@ use crate::util::Price;
 use crate::{nfts::BaseNFT, nfts::NftPtr, tokens::TokenPointer};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 pub(crate) type PowerPlantPrices = HashMap<PlantType, Vec<(Currency, Price)>>;
 
@@ -113,7 +114,8 @@ impl PowerPlant {
         game: &mut GameBoard,
     ) {
         let owner = game.nfts[self.id].owner();
-        CoinLockup::lockup(game, owner, miners, amount, shipping_time)
+        let sender = self.id.0;
+        CoinLockup::lockup(game, sender, owner, miners, amount, shipping_time)
     }
 }
 

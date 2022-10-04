@@ -596,13 +596,15 @@ impl GameBoard {
                 amount,
                 currency,
             }) => {
-                let shipping_time = 1000;
+                let shipping_time = 1;
                 let owner = &self.nfts.nfts[&nft_id].owner();
                 if owner.eq(&from) {
                     let plant = &self.nfts.power_plants[&nft_id];
                     plant
                         .to_owned()
                         .ship_hashrate(currency, amount, shipping_time, self);
+                } else {
+                    info!("Remove Tokens: NFT owner mismatch");
                 }
             }
             GameMove::Chat(Chat(s)) => {
