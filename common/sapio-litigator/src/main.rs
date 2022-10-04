@@ -14,7 +14,7 @@ use sapio::contract::Compiled;
 use sapio::util::amountrange::AmountF64;
 use sapio_base::effects::{EditableMapEffectDB, PathFragment};
 use sapio_base::serialization_helpers::SArc;
-use sapio_base::simp::SIMP;
+use sapio_base::simp::{by_simp, SIMP};
 use sapio_base::txindex::TxIndexLogger;
 use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
 use sapio_wasm_plugin::plugin_handle::PluginHandle;
@@ -386,33 +386,25 @@ async fn event_loop(
                     .map_err(|e| e.as_str())?
                     .continuation_points()
                     .filter(|api| {
-                        if let Some(recompiler) =
-                            api.simp.get(&simps::EventRecompiler::get_protocol_number())
-                        {
-                            if let Ok(recompiler) =
-                                simps::EventRecompiler::from_json(recompiler.clone())
-                            {
-                                // Only pay attention to events that we are filtering for
-                                if recompiler.filter == *filter.0 {
-                                    return true;
-                                }
-                            }
-                        }
-                        false
+                        (&api.simp >> by_simp::<simps::EventRecompiler>())
+                            .and_then(|j| simps::EventRecompiler::from_json(j.clone()).ok())
+                            .map(|j| j.filter == *filter.0)
+                            .unwrap_or(false)
                     })
                     .filter(|api| {
-                        if let Some(schema) = &api.schema {
-                            // todo: cache?
-                            jsonschema_valid::Config::from_schema(
-                                // since schema is a RootSchema, cannot throw here
-                                &schema.0,
-                                Some(jsonschema_valid::schemas::Draft::Draft6),
-                            )
+                        api.schema
+                            .as_ref()
+                            .and_then(|schema| {
+                                // todo: cache?
+                                jsonschema_valid::Config::from_schema(
+                                    // since schema is a RootSchema, cannot throw here
+                                    &schema.0,
+                                    Some(jsonschema_valid::schemas::Draft::Draft6),
+                                )
+                                .ok()
+                            })
                             .map(|validator| validator.validate(&new_info_as_v).is_ok())
                             .unwrap_or(false)
-                        } else {
-                            false
-                        }
                     })
                 {
                     any_edits = true;
