@@ -146,7 +146,7 @@ export default function DrawerAppBar({ db_name_loaded, which_game_loaded, availa
             component="div"
             sx={{ flexGrow: 1, display: { xs: 'none', sm: 'block' } }}
           >
-            MINE WITH FRIENDS!
+            MASTER MINE!
           </Typography>
           {gameMoves && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
             <Button key={"moves"} sx={{ color: '#fff' }} onClick={toggleMoveDrawer(true)}>
