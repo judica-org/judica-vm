@@ -405,12 +405,10 @@ async fn event_loop(
                     })
                     .filter(|api| {
                         if let Some(schema) = &api.schema {
-                            let json_schema = serde_json::to_value(&schema)
-                                .expect("RootSchema must always be valid JSON");
                             // todo: cache?
                             jsonschema_valid::Config::from_schema(
                                 // since schema is a RootSchema, cannot throw here
-                                &json_schema,
+                                &schema.0,
                                 Some(jsonschema_valid::schemas::Draft::Draft6),
                             )
                             .map(|validator| validator.validate(&new_info_as_v).is_ok())
