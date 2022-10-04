@@ -28,6 +28,9 @@ use sapio_wasm_plugin::optional_logo;
 use sapio_wasm_plugin::REGISTER;
 use schemars::*;
 use serde::*;
+use simps::EventKey;
+use simps::EventRecompiler;
+use simps::EventSource;
 use simps::GameStarted as ExtGameStarted;
 use simps::{DLogDiscovered, PK};
 use simps::{DLogSubscription, GameKernel};
@@ -55,9 +58,15 @@ impl GameStarted {
         &self,
         ctx: Context,
     ) -> Result<Vec<Box<dyn SIMPAttachableAt<ContinuationPointLT>>>, CompilationError> {
-        Ok(vec![Box::new(DLogSubscription {
-            dlog_subscription: self.kernel.game_host,
-        })])
+        Ok(vec![
+            Box::new(DLogSubscription {
+                dlog_subscription: self.kernel.game_host,
+            }),
+            Box::new(EventRecompiler {
+                source: EventSource("*".into()),
+                filter: (*simps::EK_NEW_DLOG.0).clone(),
+            }),
+        ])
     }
 
     #[guard]

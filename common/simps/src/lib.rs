@@ -1,11 +1,14 @@
-use std::collections::BTreeMap;
-
 use bitcoin::{hashes::sha256, secp256k1::SecretKey, XOnlyPublicKey};
+use lazy_static::lazy_static;
 use sapio::util::amountrange::AmountF64;
-use sapio_base::simp::{CompiledObjectLT, ContinuationPointLT, SIMPAttachableAt, SIMP};
+use sapio_base::{
+    serialization_helpers::SArc,
+    simp::{CompiledObjectLT, ContinuationPointLT, SIMPAttachableAt, SIMP},
+};
 use schemars::JsonSchema;
 use serde::*;
 use serde_json::Value;
+use std::{collections::BTreeMap, sync::Arc};
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct AutoBroadcast {}
 impl AutoBroadcast {
@@ -84,6 +87,8 @@ impl SIMP for EventRecompiler {
     }
 }
 
+impl SIMPAttachableAt<ContinuationPointLT> for EventRecompiler {}
+
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(transparent)]
 struct XOnlyPublicKeyString(#[schemars(with = "sha256::Hash")] XOnlyPublicKey);
@@ -121,7 +126,9 @@ impl SIMP for AttestContinuationPointSubscription {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(
+    Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema, Debug, Copy,
+)]
 #[serde(transparent)]
 pub struct PK(#[schemars(with = "sha256::Hash")] pub XOnlyPublicKey);
 
@@ -189,3 +196,10 @@ impl SIMP for DLogSubscription {
     }
 }
 impl SIMPAttachableAt<ContinuationPointLT> for DLogSubscription {}
+
+lazy_static! {
+    pub static ref EK_GAME_ACTION: SArc<EventKey> =
+        SArc(Arc::new(EventKey("game_action_update".into())));
+    pub static ref EK_NEW_DLOG: SArc<EventKey> =
+        SArc(Arc::new(EventKey("discrete_log_discovery".into())));
+}

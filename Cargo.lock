@@ -2440,7 +2440,6 @@ dependencies = [
  "game-player-messages",
  "game-sequencer",
  "jsonschema-valid",
- "lazy_static",
  "mine-with-friends-board",
  "ruma-serde",
  "sapio",
@@ -2711,6 +2710,7 @@ dependencies = [
 name = "simps"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "sapio",
  "sapio-base",
  "sapio-bitcoin",

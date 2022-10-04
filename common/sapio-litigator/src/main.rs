@@ -6,9 +6,7 @@ use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
 use ext::CompiledExt;
 use futures::stream::FuturesUnordered;
-
 use game_player_messages::ParticipantAction;
-use lazy_static::lazy_static;
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
 use sapio::contract::object::SapioStudioFormat;
@@ -54,13 +52,6 @@ impl ToOccurrence for Event {
     fn stable_typeid(&self) -> ApplicationTypeID {
         ApplicationTypeID::from_inner("LitigatorEvent")
     }
-}
-
-lazy_static! {
-    pub static ref EK_GAME_ACTION: SArc<EventKey> =
-        { SArc(Arc::new(EventKey("action_in_game".into()))) };
-    pub static ref EK_NEW_DLOG: SArc<EventKey> =
-        { SArc(Arc::new(EventKey("dlog_discovery".into()))) };
 }
 
 struct AppState {

@@ -3,10 +3,10 @@ use std::{collections::BTreeSet, error::Error, time::Duration};
 use attest_database::{connection::MsgDB, db_handle::get::nonces::extract_sk_from_envelopes};
 use bitcoin::{secp256k1::SecretKey, XOnlyPublicKey};
 use event_log::{connection::EventLog, db_handle::accessors::occurrence_group::OccurrenceGroupID};
-use simps::DLogDiscovered;
+use simps::{DLogDiscovered, EK_NEW_DLOG};
 use tokio::{spawn, time};
 
-use crate::{Event, EK_NEW_DLOG, OK_T};
+use crate::{Event, OK_T};
 
 pub async fn dlog_extractor(
     msg_db: MsgDB,

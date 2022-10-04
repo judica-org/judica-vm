@@ -9,6 +9,7 @@ edition = "2021"
 schemars = "0.8.10"
 serde = "1.0.144"
 serde_json = "1.0.85"
+lazy_static = "1.4.0"
 
 [dependencies.sapio]
 path = "../../submodule/sapio/sapio"

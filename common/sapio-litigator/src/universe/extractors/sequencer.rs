@@ -1,4 +1,4 @@
-use crate::{Event, TaskSet, EK_GAME_ACTION, OK_T};
+use crate::{Event, TaskSet, OK_T};
 use attest_database::connection::MsgDB;
 use attest_messages::GenericEnvelope;
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
@@ -13,6 +13,7 @@ use mine_with_friends_board::{
     game::{GameBoard, MoveRejectReason},
     MoveEnvelope,
 };
+use simps::EK_GAME_ACTION;
 use std::{
     collections::BTreeMap,
     error::Error,
