@@ -55,11 +55,17 @@ function memoized_color(name: string) {
     return memo_colors[name];
 }
 
-type OutputData = { coordinates: number[], hashrate?: number, watts?: number };
+type BarData = { coordinates: number[], hashrate?: number, watts?: number, id: string };
 
-const chose_color = (d: { points: OutputData[] }): string => {
-    console.log(["picking-color"], d.points);
-    if (d.points[0].hashrate && d.points[0].hashrate > 0) {
+function getBarData(plants: (UserPowerPlant & { text: string })[]) {
+    return plants.reduce<BarData[]>((acc, { coordinates, hashrate, watts, id }) => {
+        return [...acc, { id, coordinates, hashrate }, { id, coordinates: [coordinates[0] + 100000, coordinates[1] + 100000], watts }];
+    }, []);
+}
+
+const chose_color = (d: BarData): string => {
+    console.log(["picking-color"], d);
+    if (d.hashrate && d.hashrate > 0) {
         return 'orange'
     } else {
         return 'green'
@@ -70,7 +76,7 @@ export default () => {
     const [power_plants, set_power_plants] = useState<(UserPowerPlant & { text: string })[]>([]); // use empty list for now so it will render
     const [owners, setOwners] = useState<EntityID[]>([]);
     const [selectedPlantOwners, setSelectedPlantOwners] = useState<EntityID[]>([]); // default to all owners
-    const [output_bars, set_output_bars] = useState<OutputData[]>([]);
+    const [output_bars, set_output_bars] = useState<BarData[]>([]);
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [plantTypes, setPlantTypes] = React.useState({
         'Hydro': true,
@@ -94,46 +100,28 @@ export default () => {
             setSelectedPlantOwners([...selectedPlantOwners, picked_owner]);
         }
     }
-    useEffect(() => {
-        let o = stub_plant_data.reduce<OutputData[]>((acc, { coordinates, hashrate, watts }) => {
-            return [...acc, { coordinates, hashrate }, { coordinates: [coordinates[0] + 100000, coordinates[1] + 100000], watts }]
-        }, []);
-        console.log(['output-bars'], o);
-        set_output_bars(o);
-    }, [])
 
     useEffect(() => {
-        let plant_owners: string[] = [];
-        stub_plant_data.forEach((plant) => {
-            if (!plant_owners.includes(plant.owner)) {
-                plant_owners.push(plant.owner)
-            }
+        const unlisten_power_plants = appWindow.listen("power-plants", (ev: Event<(UserPowerPlant & { text: string })[]>) => {
+            console.log(['power-plants-received'], ev);
+            let plant_owners: string[] = [];
+            ev.payload.forEach((plant) => {
+                if (!plant_owners.includes(plant.owner)) {
+                    plant_owners.push(plant.owner)
+                }
+            })
+            setOwners(plant_owners);
+            setSelectedPlantOwners(plant_owners)
+            set_power_plants(ev.payload);
+            set_output_bars(getBarData(ev.payload));
         });
-        setOwners(plant_owners);
-        setSelectedPlantOwners(plant_owners)
-        set_power_plants(stub_plant_data);
-    }, [])
 
-    // useEffect(() => {
-    //     const unlisten_power_plants = appWindow.listen("power-plants", (ev: Event<(UserPowerPlant & { text: string })[]>) => {
-    //         console.log(['power-plants-received'], ev);
-    //         // let plant_owners: number[] = [];
-    //         // ev.payload.forEach((plant) => {
-    //         //     if (!plant_owners.includes(plant.owner)) {
-    //         //         plant_owners.push(plant.owner)
-    //         //     }
-    //         // })
-    //         // setOwners(plant_owners);
-    //         // setSelectedPlantOwners(plant_owners)
-    //         // set_power_plants(ev.payload);
-    //     });
-
-    //     return () => {
-    //         (async () => {
-    //             (await unlisten_power_plants)();
-    //         })();
-    //     }
-    // }, [power_plants, owners, location]);
+        return () => {
+            (async () => {
+                (await unlisten_power_plants)();
+            })();
+        }
+    }, [power_plants, owners, location]);
 
     const selectedPlantTypes = Object.entries(plantTypes).filter(([_type, selected]) => selected === true).map(([type, _selected]) => type);
     const plants_by_type = power_plants.filter(({ plant_type, owner }) => selectedPlantTypes.includes(plant_type) && selectedPlantOwners.includes(owner));
@@ -193,26 +181,42 @@ export default () => {
                             console.log(['globe-click'], { lat, lng });
                             emit('globe-click', [lat, lng]);
                         }}
-
-                        hexBinPointsData={output_bars}
-                        hexBinPointWeight={1}
-                        hexBinPointLat={(d: object) => (d as OutputData).coordinates[0] / COORDINATE_PRECISION}
-                        hexBinPointLng={(d: object) => (d as OutputData).coordinates[1] / COORDINATE_PRECISION}
-                        hexAltitude={(d: object) => {
-                            let alt = 12
-                            if ((d as { points: OutputData[] }).points[0].hashrate) {
-                                alt = (d as { points: OutputData[] }).points[0].hashrate! * 6e-6
+                        pointsData={output_bars}
+                        pointLabel={(d: object) => {
+                            const p = d as BarData;
+                            let label = `<></>`;
+                            if (p.hashrate) {
+                                label = `
+                                <b>ID: ${p.id}</b> <br />
+                                Hashrate: <i>${p.hashrate}</i> <br />
+                                `
                             }
-                            if ((d as { points: OutputData[] }).points[0].watts) {
-                                alt = (d as { points: OutputData[] }).points[0].watts! * 6e-6
+                            if (p.watts) {
+                                label = `
+                                <b>ID: ${p.id}</b> <br />
+                                Watts: <i>${p.watts}</i> <br />
+                                `
+                            }
+                            return label;
+                        }}
+                        pointLat={(d: object) => (d as BarData).coordinates[0] / COORDINATE_PRECISION}
+                        pointLng={(d: object) => (d as BarData).coordinates[1] / COORDINATE_PRECISION}
+                        pointAltitude={(d: object) => {
+                            const p = d as BarData;
+                            let alt = 1
+                            console.log(["data-looks-like"], d);
+                            if (p.hashrate) {
+                                alt = p.hashrate! * 6e-6
+                            }
+                            if (p.watts) {
+                                alt = p.watts! * 6e-6
                             }
                             return alt
                         }}
-                        hexBinResolution={4}
-                        hexMargin={0.2}
-                        hexTopColor={(d: object) => chose_color(d as { points: OutputData[] })}
-                        hexSideColor={(d: object) => chose_color(d as { points: OutputData[] })}
-                        hexBinMerge={true}
+                        pointRadius={0.25}
+                        pointColor={(d: object) => chose_color(d as BarData)}
+                        pointResolution={12}
+                        pointsMerge={true}
                     />
                 </div>
                 <Divider />
@@ -222,3 +226,4 @@ export default () => {
         </Card>
     </div>;
 };
+
