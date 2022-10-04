@@ -29,6 +29,7 @@ use std::error::Error;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
@@ -265,6 +266,7 @@ async fn start_extractors(
         msg_db.clone(),
         evlog.clone(),
         evlog_group_id,
+        Duration::from_secs(10)
     )));
 }
 

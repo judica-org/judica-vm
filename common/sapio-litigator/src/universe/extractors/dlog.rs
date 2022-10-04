@@ -1,10 +1,10 @@
-use std::{collections::BTreeSet, error::Error};
+use std::{collections::BTreeSet, error::Error, time::Duration};
 
 use attest_database::{connection::MsgDB, db_handle::get::nonces::extract_sk_from_envelopes};
 use bitcoin::{secp256k1::SecretKey, XOnlyPublicKey};
 use event_log::{connection::EventLog, db_handle::accessors::occurrence_group::OccurrenceGroupID};
 use simps::DLogDiscovered;
-use tokio::spawn;
+use tokio::{spawn, time};
 
 use crate::{Event, OK_T};
 
@@ -12,9 +12,13 @@ pub async fn dlog_extractor(
     msg_db: MsgDB,
     evlog: EventLog,
     evlog_group_id: OccurrenceGroupID,
+    interval: Duration,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut known: BTreeSet<XOnlyPublicKey> = Default::default();
     loop {
+
+        time::sleep(interval).await;
+
         let mut reused_nonce_map = {
             let hdl = msg_db.get_handle().await;
             hdl.get_reused_nonces().map_err(|e| {
@@ -47,5 +51,6 @@ pub async fn dlog_extractor(
                 )?;
             }
         }
+
     }
 }
