@@ -87,9 +87,9 @@ impl SIMP for EventRecompiler {
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(transparent)]
 struct XOnlyPublicKeyString(#[schemars(with = "sha256::Hash")] XOnlyPublicKey);
-impl Into<XOnlyPublicKey> for XOnlyPublicKeyString {
-    fn into(self) -> XOnlyPublicKey {
-        self.0
+impl From<XOnlyPublicKeyString> for XOnlyPublicKey {
+    fn from(val: XOnlyPublicKeyString) -> Self {
+        val.0
     }
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -117,7 +117,7 @@ impl SIMP for AttestContinuationPointSubscription {
     where
         Self: Sized,
     {
-        0x1
+        -0xa7735c09055
     }
 }
 
