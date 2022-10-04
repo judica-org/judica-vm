@@ -15,10 +15,13 @@ use mine_with_friends_board::game::FinishReason;
 use mine_with_friends_board::game::GameBoard;
 use mine_with_friends_board::game::GameSetup;
 use mine_with_friends_board::game::MoveRejectReason;
+use sapio::contract::error::CompilationError;
 use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
+use sapio::util::amountrange::AmountF64;
 use sapio::*;
 use sapio_base::timelocks::RelHeight;
+use sapio_wasm_plugin::client;
 use sapio_wasm_plugin::optional_logo;
 use sapio_wasm_plugin::REGISTER;
 use schemars::*;
@@ -26,7 +29,6 @@ use serde::*;
 use simps::GameKernel;
 use simps::GameStarted as ExtGameStarted;
 use simps::PK;
-use sapio::contract::error::CompilationError;
 use std::str::FromStr;
 
 #[derive(Deserialize, JsonSchema)]
@@ -298,6 +300,14 @@ impl Contract for GameStarted {
 
     fn metadata(&self, _ctx: Context) -> Result<object::ObjectMetadata, CompilationError> {
         Ok(ObjectMetadata::default().add_simp(self.kernel.clone())?)
+    }
+    fn ensure_amount(&self, ctx: Context) -> Result<Amount, CompilationError> {
+        Ok(self
+            .kernel
+            .players
+            .values()
+            .map(|a| Amount::from(*a))
+            .sum::<Amount>())
     }
 }
 
