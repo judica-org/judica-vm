@@ -10,7 +10,7 @@ use simps::{DLogDiscovered, EK_NEW_DLOG};
 use tokio::{spawn, time};
 use tracing::{debug, info, trace};
 
-use crate::{Event, Tag, TaggedEvent, OK_T};
+use crate::{events::Event, events::Tag, events::TaggedEvent, OK_T};
 
 pub async fn dlog_extractor(
     msg_db: MsgDB,

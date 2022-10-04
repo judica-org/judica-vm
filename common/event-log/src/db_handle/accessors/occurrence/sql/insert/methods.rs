@@ -90,7 +90,7 @@ pub fn insert_occurrence_txn<'conn>(
         Ok(q) => {
             drop(stmt);
             Ok(Ok((OccurrenceID(q), txn)))
-        },
+        }
         Err(e) => {
             drop(stmt);
             match e {

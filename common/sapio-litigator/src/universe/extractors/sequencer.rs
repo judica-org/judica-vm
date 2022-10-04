@@ -1,4 +1,9 @@
-use crate::{Event, Tag, TaggedEvent, TaskSet, OK_T};
+use crate::{
+    events::Tag,
+    events::TaggedEvent,
+    events::{self, Event},
+    TaskSet, OK_T,
+};
 use attest_database::connection::MsgDB;
 use attest_messages::GenericEnvelope;
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
@@ -153,9 +158,9 @@ pub fn handle_psbts(
                 if verified.is_ok() {
                     let accessor = evlog.get_accessor().await;
                     psbt_counter += 1;
-                    let o = TaggedEvent(
-                        Event::TransactionFinalized(s, tx),
-                        Some(Tag::ScopedCounter("psbts".into(), psbt_counter)),
+                    let o = events::TaggedEvent(
+                        events::Event::TransactionFinalized(s, tx),
+                        Some(events::Tag::ScopedCounter("psbts".into(), psbt_counter)),
                     );
                     match accessor.insert_new_occurrence_now_from(evlog_group_id, &o)? {
                         Err(Idempotent::AlreadyExists) => {}
@@ -202,7 +207,7 @@ pub fn start_game(
                         FinishReason::TimeExpired => EK_GAME_ACTION_WIN.clone(),
                         FinishReason::DominatingPlayer(_) => EK_GAME_ACTION_LOSE.clone(),
                     },
-                    Some(Tag::ScopedCounter("game_move".into(), move_count)),
+                    Some(events::Tag::ScopedCounter("game_move".into(), move_count)),
                     new_synthetic_event,
                 );
 
@@ -222,7 +227,7 @@ fn make_snapshot(
     oracle_key: XOnlyPublicKey,
     evlog_group_id: OccurrenceGroupID,
     event_for: SArc<EventKey>,
-    tag: Option<Tag>,
+    tag: Option<events::Tag>,
     new_synthetic_event: Arc<Notify>,
 ) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
     spawn(async move {
@@ -259,8 +264,8 @@ fn make_snapshot(
             // don't care if this fails
             match accessor.insert_new_occurrence_now_from(
                 evlog_group_id,
-                &TaggedEvent(
-                    Event::NewRecompileTriggeringObservation(v, event_for),
+                &events::TaggedEvent(
+                    events::Event::NewRecompileTriggeringObservation(v, event_for),
                     tag.clone(),
                 ),
             )? {
