@@ -10,10 +10,7 @@ use event_log::{
 use tokio::sync::{mpsc::Sender, Notify};
 use tracing::{trace, warn};
 
-use crate::{
-    events::Event,
-    events::{self, TaggedEvent},
-};
+use crate::events::{self, TaggedEvent};
 
 // About 25 steps, 1.5 mins, max wait 30s
 const MAX_WAIT_TO_CHECK_LOG: Duration = Duration::from_secs(30);

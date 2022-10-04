@@ -63,7 +63,7 @@ pub(crate) async fn event_loop(
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     loop {
         match rx.recv().await {
-            Some(events::Event::EmittedPSBTVia(a, b)) => {}
+            Some(events::Event::EmittedPSBTVia(_a, _b)) => {}
             Some(events::Event::TransactionFinalized(_s, _tx)) => {
                 info!("Transaction Finalized");
             }
@@ -195,7 +195,7 @@ pub(crate) async fn handle_module_bytes(
     let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
     let module = WasmPluginHandle::<Compiled>::new_async(
         &data_dir,
-        &emulator,
+        emulator,
         locator,
         bitcoin::Network::Bitcoin,
         Default::default(),
@@ -203,7 +203,7 @@ pub(crate) async fn handle_module_bytes(
     .await
     .map_err(|e| e.to_string())?;
     info!("Module Loaded Successfully");
-    let setup = match get_game_setup(&msg_db, config.oracle_key).await {
+    let setup = match get_game_setup(msg_db, config.oracle_key).await {
         Ok(s) => s,
         Err(e) => {
             debug!(error=?e, "Error");
@@ -240,7 +240,7 @@ pub(crate) async fn handle_module_bytes(
         },
     };
     info!(?args, "Contract Args Ready");
-    state.contract = match module.call(&root, &args) {
+    state.contract = match module.call(root, &args) {
         Ok(c) => {
             info!(address=?c.address,"Contract Compilation Successful");
             Ok(c)
@@ -271,7 +271,7 @@ pub(crate) async fn handle_synthetic_periodic(
     info!(time, "SyntehticPeriodicActions");
     if let Some(out) = state.bound_to.as_ref() {
         let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
-        if let Ok(program) = bind_psbt(c, out, &emulator) {
+        if let Ok(program) = bind_psbt(c, out, emulator) {
             // TODO learn available keys through an extractor...
             let keys = Arc::new({
                 let handle = msg_db.get_handle().await;
@@ -334,7 +334,7 @@ pub(crate) async fn process_psbt_fail_ok(
             &secp,
             bitcoin::SchnorrSighashType::AllPlusAnyoneCanPay,
         )
-        .map_err(|(old, e)| e)?;
+        .map_err(|(_old, e)| e)?;
     if signed == psbt {
         return OK_T;
     }
@@ -346,7 +346,7 @@ pub(crate) async fn process_psbt_fail_ok(
 
     let emitter = keypair.x_only_public_key().0;
     // TODO: confirm serialization is deterministic?
-    let psbt_hash = sha256::Hash::hash(&signed.to_string().as_bytes());
+    let psbt_hash = sha256::Hash::hash(signed.to_string().as_bytes());
     let o = events::TaggedEvent(
         events::Event::EmittedPSBTVia(PsbtString(signed.clone()), emitter),
         Some(events::Tag::ScopedValue(
@@ -360,7 +360,7 @@ pub(crate) async fn process_psbt_fail_ok(
     let v2 = v?;
     match v2 {
         Err(Idempotent::AlreadyExists) => Ok(()),
-        Ok((oid, txn)) => {
+        Ok((_oid, txn)) => {
             handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
                 ParticipantAction::PsbtSigningCoordination(Multiplexed {
                     channel: txid_s,
@@ -394,7 +394,7 @@ pub(crate) fn extract_keys_for_simp(
         .signer_roles
         .iter()
         .filter(|(_, o)| o.sign && o.sign_all)
-        .filter_map(|(PK(pk), _)| keys.get(&pk).cloned())
+        .filter_map(|(PK(pk), _)| keys.get(pk).cloned())
     {
         let hmac_engine: HmacEngine<sha512::Hash> = HmacEngine::new(&private_key[..]);
         let hmac_result: Hmac<sha512::Hash> = Hmac::from_engine(hmac_engine);

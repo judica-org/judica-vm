@@ -6,7 +6,7 @@ use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID;
 use futures::stream::FuturesUnordered;
 use sapio::contract::Compiled;
 use sapio_base::effects::PathFragment;
-use sapio_wasm_plugin::host::{WasmPluginHandle};
+use sapio_wasm_plugin::host::WasmPluginHandle;
 use sapio_wasm_plugin::CreateArgs;
 use serde_json::Value;
 use std::collections::BTreeMap;

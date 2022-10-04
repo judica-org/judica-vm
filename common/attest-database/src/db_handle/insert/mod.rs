@@ -1,4 +1,3 @@
-use super::create::TipControl;
 use super::get::messages::message_exists_children;
 use super::handle_type;
 use super::ChainCommitGroupID;
@@ -23,7 +22,7 @@ use rusqlite::ErrorCode;
 use rusqlite::Transaction;
 use sapio_bitcoin::secp256k1::rand::thread_rng;
 use sapio_bitcoin::secp256k1::rand::Rng;
-use sapio_bitcoin::secp256k1::Verification;
+
 use sapio_bitcoin::{
     hashes::hex::ToHex,
     secp256k1::{Secp256k1, Signing},

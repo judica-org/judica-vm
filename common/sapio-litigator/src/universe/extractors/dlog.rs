@@ -1,16 +1,16 @@
 use std::{collections::BTreeSet, error::Error, time::Duration};
 
 use attest_database::{connection::MsgDB, db_handle::get::nonces::extract_sk_from_envelopes};
-use bitcoin::{hashes::hex::ToHex, secp256k1::SecretKey, XOnlyPublicKey};
+use bitcoin::{hashes::hex::ToHex, XOnlyPublicKey};
 use event_log::{
     connection::EventLog,
     db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
 };
 use simps::{DLogDiscovered, EK_NEW_DLOG};
-use tokio::{spawn, time};
-use tracing::{debug, info, trace};
+use tokio::time;
+use tracing::{debug, info};
 
-use crate::{events::Event, events::Tag, events::TaggedEvent, OK_T};
+use crate::{events::Event, events::Tag, events::TaggedEvent};
 
 pub async fn dlog_extractor(
     msg_db: MsgDB,

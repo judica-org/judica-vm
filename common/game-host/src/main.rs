@@ -1,5 +1,5 @@
 use attest_database::setup_db;
-use attest_database::sql_error::SqliteFail;
+
 use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_messages::{
     Authenticated, CanonicalEnvelopeHash, Envelope, GenericEnvelope, WrappedJson,

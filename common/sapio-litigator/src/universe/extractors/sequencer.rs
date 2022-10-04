@@ -1,7 +1,5 @@
 use crate::{
-    events::Tag,
-    events::TaggedEvent,
-    events::{self, Event},
+    events::{self},
     TaskSet, OK_T,
 };
 use attest_database::connection::MsgDB;
@@ -10,11 +8,7 @@ use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
 use event_log::{
     connection::EventLog,
     db_handle::accessors::{
-        occurrence::{
-            sql::insert::{self, Idempotent},
-            ToOccurrence,
-        },
-        occurrence_group::OccurrenceGroupID,
+        occurrence::sql::insert::Idempotent, occurrence_group::OccurrenceGroupID,
     },
 };
 use game_host_messages::{BroadcastByHost, Channelized};
