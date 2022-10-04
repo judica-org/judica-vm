@@ -1,5 +1,4 @@
 use serde::Serialize;
-use tracing::info;
 
 use crate::{
     callbacks::Callback,

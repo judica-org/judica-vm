@@ -508,7 +508,7 @@ fn test_sell_plant() {
 
     let a_id = game.get_user_id(ALICE).unwrap();
     let plants = game.get_user_power_plants(a_id).unwrap();
-    let plant_id = plants.power_plant_data.iter().next().unwrap().0.clone();
+    let plant_id = *plants.power_plant_data.iter().next().unwrap().0;
     let btc_token_id = game.bitcoin_token_id;
 
     let moves2 = [
@@ -618,8 +618,8 @@ fn test_remove_tokens_from_plant() {
 
     let id = game.get_user_id(ALICE).unwrap();
     let plants = game.get_user_power_plants(id).unwrap();
-    let plant_id = plants.power_plant_data.iter().next().unwrap().0.clone();
-    let btc_balance_before_mining = game.tokens[game.bitcoin_token_id].balance_check(&id);
+    let plant_id = *plants.power_plant_data.iter().next().unwrap().0;
+    let _btc_balance_before_mining = game.tokens[game.bitcoin_token_id].balance_check(&id);
 
     let moves2 = [
         (

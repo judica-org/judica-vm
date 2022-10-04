@@ -6,7 +6,7 @@ use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
 use ext::CompiledExt;
 use futures::stream::FuturesUnordered;
-use futures::{select, Future};
+
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
@@ -31,7 +31,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
-use tokio::task::{JoinError, JoinHandle};
+use tokio::task::JoinHandle;
 use tracing::{debug, info, trace};
 use universe::extractors::sequencer::get_game_setup;
 mod universe;
@@ -113,8 +113,8 @@ async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn s
         }
         Err(_) => {
             info!("Initializing OccurenceGroupID for {:?}", group);
-            let gid = accessor.insert_new_occurrence_group(&group)?;
-            gid
+
+            accessor.insert_new_occurrence_group(&group)?
         }
     };
     let occurrences = accessor.get_occurrences_for_group(gid)?;
@@ -131,7 +131,7 @@ async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn s
 
 async fn insert_init(
     location: &str,
-    config: &config::Config,
+    _config: &config::Config,
     accessor: &event_log::db_handle::EventLogAccessor<'_>,
     gid: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error>> {
@@ -153,21 +153,20 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
 
     // create wasm plugin handle from contract initialization data at beginning of the event log
-    let ogid = evlog
+    let _ogid = evlog
         .get_accessor()
         .await
         .get_occurrence_group_by_key(&config.event_log.group)?;
 
     // check which continuation points need attest message routing
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
     let key = &config.event_log.group;
     let evlog_group_id = {
         let accessor = evlog.get_accessor().await;
         let evlog_group_id = accessor.get_occurrence_group_by_key(key);
-        let evlog_group_id =
-            evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?;
-        evlog_group_id
+
+        evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?
     };
     // This should be in notify_one mode, which means that only the db reader
     // should be calling notified and wakers should call notify_one.
@@ -187,7 +186,7 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     .await;
 
     let root = PathFragment::Root.into();
-    let mut state = AppState {
+    let state = AppState {
         args: Err("No Args Loaded".into()),
         module: Arc::new(Mutex::new(Err("No Module Loaded".into()))),
         contract: Err("No Compiled Object".into()),
@@ -458,7 +457,7 @@ async fn event_loop(
                             state.args = Ok(new_args);
                             state.contract = Ok(new_contract);
                         }
-                        Err(e) => {}
+                        Err(_e) => {}
                     }
                 }
             }
@@ -477,7 +476,7 @@ fn read_move(
     e: Authenticated<GenericEnvelope<ParticipantAction>>,
 ) -> Result<(MoveEnvelope, XOnlyPublicKey), ()> {
     match e.msg() {
-        ParticipantAction::MoveEnvelope(m) => Ok(((m.clone(), e.header().key()))),
+        ParticipantAction::MoveEnvelope(m) => Ok((m.clone(), e.header().key())),
         ParticipantAction::Custom(_) => Err(()),
         ParticipantAction::PsbtSigningCoordination(_) => Err(()),
     }

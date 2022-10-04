@@ -6,7 +6,7 @@ use bitcoincore_rpc_async::Client;
 use event_log::connection::EventLog;
 use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
 use serde::Deserialize;
-use serde_json::Value;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -41,9 +41,8 @@ impl Config {
         Ok(db)
     }
     pub(crate) async fn get_event_log(&self) -> Result<EventLog, Box<dyn std::error::Error>> {
-    let proj = format!("sapio-litigator.{}", self.event_log.app_name);
-        let db =
-            event_log::setup_db(&proj, self.event_log.prefix.clone()).await?;
+        let proj = format!("sapio-litigator.{}", self.event_log.app_name);
+        let db = event_log::setup_db(&proj, self.event_log.prefix.clone()).await?;
         Ok(db)
     }
     pub(crate) async fn get_bitcoin_rpc(&self) -> Result<Arc<Client>, Box<dyn std::error::Error>> {
