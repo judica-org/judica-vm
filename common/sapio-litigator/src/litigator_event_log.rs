@@ -2,8 +2,6 @@ use super::AppState;
 use super::OK_T;
 use crate::{config, events, ext::CompiledExt, universe::extractors::sequencer::get_game_setup};
 use attest_database::db_handle::create::TipControl;
-use attest_messages::Authenticated;
-use attest_messages::GenericEnvelope;
 use bitcoin::{
     blockdata::script::Script,
     hashes::{sha256, sha512, Hash, Hmac, HmacEngine},
@@ -18,7 +16,6 @@ use event_log::{
     db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
 };
 use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
-use mine_with_friends_board::MoveEnvelope;
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
 use sapio::util::amountrange::AmountF64;
@@ -86,7 +83,6 @@ pub(crate) async fn event_loop(
 
         e.state.event_counter += 1;
     }
-    OK_T
 }
 
 pub(crate) async fn handle_new_information(
@@ -175,7 +171,7 @@ pub(crate) async fn handle_new_information(
 pub(crate) fn handle_rebind(e: &mut EventLoopContext, o: OutPoint) {
     let EventLoopContext { ref mut state, .. } = e;
     info!(output=?o, "Rebind");
-    state.bound_to.insert(o);
+    state.bound_to.replace(o);
 }
 
 pub(crate) async fn handle_module_bytes(
@@ -425,14 +421,4 @@ pub(crate) fn bind_psbt(
         emulator.as_ref(),
     )
     .map_err(|e| e.to_string())?)
-}
-
-pub(crate) fn read_move(
-    e: Authenticated<GenericEnvelope<ParticipantAction>>,
-) -> Result<(MoveEnvelope, XOnlyPublicKey), ()> {
-    match e.msg() {
-        ParticipantAction::MoveEnvelope(m) => Ok((m.clone(), e.header().key())),
-        ParticipantAction::Custom(_) => Err(()),
-        ParticipantAction::PsbtSigningCoordination(_) => Err(()),
-    }
 }

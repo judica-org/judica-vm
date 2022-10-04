@@ -107,7 +107,7 @@ async fn insert_init(
     accessor.insert_new_occurrence_now_from(
         gid,
         &events::TaggedEvent(ev, Some(events::Tag::InitModule)),
-    )?;
+    )??;
     Ok(())
 }
 

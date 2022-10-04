@@ -17,7 +17,7 @@ pub async fn time_event_extractor(
             events::Event::SyntheticPeriodicActions(attest_util::now()),
             None,
         );
-        accessor.insert_new_occurrence_now_from(evlog_group_id, &o)?;
+        accessor.insert_new_occurrence_now_from(evlog_group_id, &o)??;
         new_synthetic_event.notify_one();
     }
 }

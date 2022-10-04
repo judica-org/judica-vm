@@ -63,8 +63,8 @@ pub async fn sequencer_extractor(
     tasks.push(spawn({
         let game_sequencer = game_sequencer.clone();
         async move {
-            game_sequencer.run().await;
-            OK_T
+            game_sequencer.run().await?;
+            Ok(())
         }
     }));
 
