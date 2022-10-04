@@ -198,8 +198,10 @@ impl SIMP for DLogSubscription {
 impl SIMPAttachableAt<ContinuationPointLT> for DLogSubscription {}
 
 lazy_static! {
-    pub static ref EK_GAME_ACTION: SArc<EventKey> =
-        SArc(Arc::new(EventKey("game_action_update".into())));
+    pub static ref EK_GAME_ACTION_WIN: SArc<EventKey> =
+        SArc(Arc::new(EventKey("game_action_players_win".into())));
+    pub static ref EK_GAME_ACTION_LOSE: SArc<EventKey> =
+        SArc(Arc::new(EventKey("game_action_players_lose".into())));
     pub static ref EK_NEW_DLOG: SArc<EventKey> =
         SArc(Arc::new(EventKey("discrete_log_discovery".into())));
 }

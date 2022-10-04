@@ -10,10 +10,11 @@ use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
 use game_sequencer::{OnlineDBFetcher, UnauthenticatedRawSequencer};
 use mine_with_friends_board::{
-    game::{GameBoard, MoveRejectReason},
+    game::{FinishReason, GameBoard, MoveRejectReason},
     MoveEnvelope,
 };
-use simps::EK_GAME_ACTION;
+use sapio_base::serialization_helpers::SArc;
+use simps::{EventKey, EK_GAME_ACTION_LOSE, EK_GAME_ACTION_WIN};
 use std::{
     collections::BTreeMap,
     error::Error,
@@ -173,7 +174,7 @@ pub fn start_game(
             info!(move_ = ?next_move, "New Move Recieved");
 
             move_count += 1;
-            if let Err(MoveRejectReason::GameIsFinished(_)) =
+            if let Err(MoveRejectReason::GameIsFinished(r)) =
                 game.play(next_move, signed_by.to_string())
             {
                 // todo: get a real one derived only from data we've seen up to the point we've executed.
@@ -184,6 +185,10 @@ pub fn start_game(
                     msg_db.clone(),
                     oracle_key,
                     evlog_group_id,
+                    match r {
+                        FinishReason::TimeExpired => EK_GAME_ACTION_WIN.clone(),
+                        FinishReason::DominatingPlayer(_) => EK_GAME_ACTION_LOSE.clone(),
+                    },
                 );
 
                 // contract specific, game will not change hereafter
@@ -201,6 +206,7 @@ fn make_snapshot(
     msg_db: MsgDB,
     oracle_key: XOnlyPublicKey,
     evlog_group_id: OccurrenceGroupID,
+    event_for: SArc<EventKey>,
 ) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
     spawn(async move {
         let handle = msg_db.get_handle().await;
@@ -236,7 +242,7 @@ fn make_snapshot(
             accessor
                 .insert_new_occurrence_now_from(
                     evlog_group_id,
-                    &Event::NewRecompileTriggeringObservation(v, EK_GAME_ACTION.clone()),
+                    &Event::NewRecompileTriggeringObservation(v, event_for),
                 )
                 .ok();
         }

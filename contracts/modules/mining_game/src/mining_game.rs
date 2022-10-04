@@ -159,6 +159,25 @@ impl GameStarted {
         }
     }
 
+    fn subscribe_players_win(
+        &self,
+        ctx: Context,
+    ) -> Result<Vec<Box<dyn SIMPAttachableAt<ContinuationPointLT>>>, CompilationError> {
+        Ok(vec![Box::new(EventRecompiler {
+            source: EventSource("*".into()),
+            filter: (*simps::EK_GAME_ACTION_WIN.0).clone(),
+        })])
+    }
+
+    fn subscribe_players_lose(
+        &self,
+        ctx: Context,
+    ) -> Result<Vec<Box<dyn SIMPAttachableAt<ContinuationPointLT>>>, CompilationError> {
+        Ok(vec![Box::new(EventRecompiler {
+            source: EventSource("*".into()),
+            filter: (*simps::EK_GAME_ACTION_LOSE.0).clone(),
+        })])
+    }
     fn get_finished_board(
         &self,
         trace: ExtractedMoveEnvelopes,
@@ -187,7 +206,8 @@ impl GameStarted {
     #[continuation(
         web_api,
         coerce_args = "coerce_players_win",
-        guarded_by = "[Self::all_players_signed]"
+        guarded_by = "[Self::all_players_signed]",
+        simps = "Some(Self::subscribe_players_win)"
     )]
     fn game_end_players_win(self, ctx: Context, game_trace: Option<ExtractedMoveEnvelopes>) {
         match game_trace {
@@ -229,7 +249,8 @@ impl GameStarted {
     #[continuation(
         web_api,
         coerce_args = "coerce_players_lose",
-        guarded_by = "[Self::all_players_signed]"
+        guarded_by = "[Self::all_players_signed]",
+        simps = "Some(Self::subscribe_players_lose)"
     )]
     fn game_end_players_lose(self, ctx: Context, game_trace: Option<ExtractedMoveEnvelopes>) {
         match game_trace {
