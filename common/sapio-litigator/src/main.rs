@@ -8,6 +8,7 @@ use ext::CompiledExt;
 use futures::stream::FuturesUnordered;
 
 use game_player_messages::ParticipantAction;
+use lazy_static::lazy_static;
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
 use sapio::contract::object::SapioStudioFormat;
@@ -43,7 +44,7 @@ pub enum Event {
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
-    NewRecompileTriggeringObservation(Value),
+    NewRecompileTriggeringObservation(Value, SArc<EventKey>),
 }
 
 impl ToOccurrence for Event {
@@ -53,6 +54,13 @@ impl ToOccurrence for Event {
     fn stable_typeid(&self) -> ApplicationTypeID {
         ApplicationTypeID::from_inner("LitigatorEvent")
     }
+}
+
+lazy_static! {
+    pub static ref EK_GAME_ACTION: SArc<EventKey> =
+        { SArc(Arc::new(EventKey("action_in_game".into()))) };
+    pub static ref EK_NEW_DLOG: SArc<EventKey> =
+        { SArc(Arc::new(EventKey("dlog_discovery".into()))) };
 }
 
 struct AppState {
@@ -196,18 +204,8 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         event_counter: 0,
     };
 
-    let game_action = EventKey("action_in_game".into());
-    let dlog_discovery = EventKey("dlog_discovery".into());
     let evl = spawn(event_loop(
-        rx,
-        state,
-        emulator,
-        data_dir,
-        msg_db,
-        config,
-        root,
-        game_action,
-        dlog_discovery,
+        rx, state, emulator, data_dir, msg_db, config, root,
     ));
 
     tasks.push(evl);
@@ -266,7 +264,7 @@ async fn start_extractors(
         msg_db.clone(),
         evlog.clone(),
         evlog_group_id,
-        Duration::from_secs(10)
+        Duration::from_secs(10),
     )));
 }
 
@@ -278,8 +276,6 @@ async fn event_loop(
     msg_db: attest_database::connection::MsgDB,
     config: Arc<config::Config>,
     root: sapio_base::reverse_path::ReversePath<PathFragment>,
-    game_action: EventKey,
-    dlog_discovery: EventKey,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     Ok(loop {
         match rx.recv().await {
@@ -385,7 +381,7 @@ async fn event_loop(
                 info!(output=?o, "Rebind");
                 state.bound_to.insert(o);
             }
-            Some(Event::NewRecompileTriggeringObservation(new_info_as_v)) => {
+            Some(Event::NewRecompileTriggeringObservation(new_info_as_v, filter)) => {
                 info!("NewRecompileTriggeringObservation");
                 let idx_str = SArc(Arc::new(format!("event-{}", state.event_counter)));
                 // work on a clone so as to not have an effect if failed
@@ -406,9 +402,7 @@ async fn event_loop(
                                 simps::EventRecompiler::from_json(recompiler.clone())
                             {
                                 // Only pay attention to events that we are filtering for
-                                if recompiler.filter == game_action
-                                    || recompiler.filter == dlog_discovery
-                                {
+                                if recompiler.filter == *filter.0 {
                                     return true;
                                 }
                             }

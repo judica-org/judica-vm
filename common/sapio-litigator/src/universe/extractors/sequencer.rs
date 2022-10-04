@@ -1,4 +1,4 @@
-use crate::{Event, TaskSet, OK_T};
+use crate::{Event, TaskSet, EK_GAME_ACTION, OK_T};
 use attest_database::connection::MsgDB;
 use attest_messages::GenericEnvelope;
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
@@ -235,7 +235,7 @@ fn make_snapshot(
             accessor
                 .insert_new_occurrence_now_from(
                     evlog_group_id,
-                    &Event::NewRecompileTriggeringObservation(v),
+                    &Event::NewRecompileTriggeringObservation(v, EK_GAME_ACTION.clone()),
                 )
                 .ok();
         }

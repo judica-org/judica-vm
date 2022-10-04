@@ -2440,6 +2440,7 @@ dependencies = [
  "game-player-messages",
  "game-sequencer",
  "jsonschema-valid",
+ "lazy_static",
  "mine-with-friends-board",
  "ruma-serde",
  "sapio",

@@ -6,7 +6,7 @@ use event_log::{connection::EventLog, db_handle::accessors::occurrence_group::Oc
 use simps::DLogDiscovered;
 use tokio::{spawn, time};
 
-use crate::{Event, OK_T};
+use crate::{Event, EK_NEW_DLOG, OK_T};
 
 pub async fn dlog_extractor(
     msg_db: MsgDB,
@@ -16,7 +16,6 @@ pub async fn dlog_extractor(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut known: BTreeSet<XOnlyPublicKey> = Default::default();
     loop {
-
         time::sleep(interval).await;
 
         let mut reused_nonce_map = {
@@ -47,10 +46,9 @@ pub async fn dlog_extractor(
                 // break if DB error
                 let _eid = evlog.get_accessor().await.insert_new_occurrence_now_from(
                     evlog_group_id,
-                    &Event::NewRecompileTriggeringObservation(msg),
+                    &Event::NewRecompileTriggeringObservation(msg, EK_NEW_DLOG.clone()),
                 )?;
             }
         }
-
     }
 }
