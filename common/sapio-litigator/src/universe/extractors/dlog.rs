@@ -5,51 +5,38 @@ use event_log::{connection::EventLog, db_handle::accessors::occurrence_group::Oc
 use simps::DLogDiscovered;
 use tokio::spawn;
 
-use crate::Event;
+use crate::{Event, OK_T};
 
 pub async fn dlog_extractor(
     msg_db: MsgDB,
     evlog: EventLog,
     evlog_group_id: OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    spawn(async move {
-        loop {
+    loop {
+        let reused_nonce_map = {
             let hdl = msg_db.get_handle().await;
-            let reused = hdl.get_reused_nonces();
-            drop(hdl);
-            match reused {
-                Ok(reused_nonce_map) => {
-                    for (k, mut v) in reused_nonce_map {
-                        match (v.pop(), v.pop()) {
-                            (Some(e1), Some(e2)) => {
-                                if let Some(dlog_value) = extract_sk_from_envelopes(e1, e2)
-                                    .and_then(|sk| {
-                                        serde_json::to_value(DLogDiscovered {
-                                            dlog_discovered: sk,
-                                        })
-                                        .ok()
-                                    })
-                                {
-                                    let accessor = evlog.get_accessor().await;
-                                    accessor.insert_new_occurrence_now_from(
-                                        evlog_group_id,
-                                        &Event::NewRecompileTriggeringObservation(dlog_value),
-                                    );
-                                    drop(accessor);
-                                }
-                            }
-                            _ => {
-                                continue;
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(error=?e, "Failed to fetch reused nonces");
-                    break;
-                }
+            hdl.get_reused_nonces().map_err(|e| {
+                tracing::error!(error=?e, "Failed to fetch reused nonces");
+                e
+            })?
+        };
+
+        for (k, mut v) in reused_nonce_map {
+            let e1 = v
+                .pop()
+                .ok_or("Invariant Broken in Database, reused nonce returned fewer than two")?;
+            let e2 = v
+                .pop()
+                .ok_or("Invariant Broken in Database, reused nonce returned fewer than two")?;
+            if let Some(dlog_discovered) = extract_sk_from_envelopes(e1, e2) {
+                // break if error, since this serialization should never fail.
+                let msg = serde_json::to_value(DLogDiscovered { dlog_discovered })?;
+                // break if DB error
+                let _eid = evlog.get_accessor().await.insert_new_occurrence_now_from(
+                    evlog_group_id,
+                    &Event::NewRecompileTriggeringObservation(msg),
+                )?;
             }
         }
-    });
-    Ok(())
+    }
 }
