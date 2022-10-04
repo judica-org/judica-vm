@@ -9,6 +9,9 @@ use bitcoin::hashes::sha256;
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
 use bitcoin::util::amount::Amount;
+use bitcoin::BlockHash;
+use bitcoin::BlockHeader;
+use bitcoin::TxMerkleNode;
 use bitcoin::XOnlyPublicKey;
 use game_sequencer::ExtractedMoveEnvelopes;
 use mine_with_friends_board::game::FinishReason;
@@ -18,6 +21,7 @@ use mine_with_friends_board::game::MoveRejectReason;
 use sapio::contract::error::CompilationError;
 use sapio::contract::object::ObjectMetadata;
 use sapio::contract::*;
+use sapio::template::Template;
 use sapio::util::amountrange::AmountF64;
 use sapio::*;
 use sapio_base::simp::ContinuationPointLT;
@@ -28,10 +32,15 @@ use sapio_wasm_plugin::optional_logo;
 use sapio_wasm_plugin::REGISTER;
 use schemars::*;
 use serde::*;
+use simps::AutBroadcastOptions;
+use simps::AutoBroadcast;
 use simps::EventKey;
 use simps::EventRecompiler;
 use simps::EventSource;
 use simps::GameStarted as ExtGameStarted;
+use simps::ListenBlockHeader;
+use simps::EK_BITCOIN_BLOCKHEADER;
+use simps::SOURCE_BITCOIN_RPC;
 use simps::{DLogDiscovered, PK};
 use simps::{DLogSubscription, GameKernel};
 use std::str::FromStr;
@@ -293,12 +302,22 @@ impl GameStarted {
         }
     }
 
+    fn degrade_metadata(
+        &self,
+        ctx: Context,
+    ) -> Result<Vec<Box<dyn SIMPAttachableAt<ContinuationPointLT>>>, CompilationError> {
+        Ok(vec![Box::new(EventRecompiler {
+            source: (*SOURCE_BITCOIN_RPC.0).clone(),
+            filter: (*EK_BITCOIN_BLOCKHEADER.0).clone(),
+        })])
+    }
     #[continuation(
         web_api,
         coerce_args = "coerce_degrade",
-        guarded_by = "[Self::degraded_quorum]"
+        guarded_by = "[Self::degraded_quorum]",
+        simps = "Some(Self::degrade_metadata)"
     )]
-    fn degrade(self, ctx: Context, unit: Option<()>) {
+    fn degrade(self, ctx: Context, unit: Option<ListenBlockHeader>) {
         match unit {
             None => empty(),
             Some(_) => {
@@ -306,7 +325,28 @@ impl GameStarted {
                 for (k, v) in self.kernel.players.iter() {
                     tmpl = tmpl.add_output((*v).into(), &k.0, None)?;
                 }
-                tmpl.into()
+                tmpl = tmpl.add_simp(AutoBroadcast {
+                    signer_roles: self
+                        .kernel
+                        .players
+                        .keys()
+                        .chain(Some(self.kernel.game_host).iter())
+                        .map(|f| {
+                            (
+                                *f,
+                                AutBroadcastOptions {
+                                    sign: true,
+                                    sign_all: true,
+                                    send: true,
+                                    finalize: true,
+                                },
+                            )
+                        })
+                        .collect(),
+                })?;
+                let built: Template = tmpl.into();
+
+                return Ok(Box::new(std::iter::once(Ok(built))));
             }
         }
     }
@@ -327,7 +367,7 @@ pub enum GameEnd {
     HostCheatCensor(CensorshipProof),
     PlayersWin(ExtractedMoveEnvelopes),
     PlayersLose(ExtractedMoveEnvelopes),
-    Degrade,
+    Degrade(ListenBlockHeader),
 }
 
 impl Contract for GameStarted {
@@ -404,9 +444,9 @@ fn coerce_players_lose(
 
 fn coerce_degrade(
     k: <GameStarted as Contract>::StatefulArguments,
-) -> Result<Option<()>, CompilationError> {
+) -> Result<Option<ListenBlockHeader>, CompilationError> {
     match k {
-        Some(GameEnd::Degrade) => Ok(Some(())),
+        Some(GameEnd::Degrade(l)) => Ok(Some(l)),
         Some(_) => Err(CompilationError::ContinuationCoercion(
             "Failed to coerce GameEnd into Degrade".into(),
         )),
