@@ -131,7 +131,7 @@ export type MaterialPriceDisplay = {
 }
 
 export type UserPowerPlant = PowerPlant & {
-  readonly hashrate: number | null;
+  readonly hashrate: number;
 }
 
 export type UserInventory = {
