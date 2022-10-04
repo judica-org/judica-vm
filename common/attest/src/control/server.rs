@@ -223,7 +223,7 @@ async fn push_message_dangerous(
         .map(|k| KeyPair::from_secret_key(&secp, k))
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
     let tips = bitcoin_tipcache.0.read_cache().await;
-    let env = handle
+    handle
         .retry_insert_authenticated_envelope_atomic::<WrappedJson, _, _>(
             msg,
             &kp,

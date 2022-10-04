@@ -113,26 +113,16 @@ pub(crate) async fn make_move_inner_inner(
     let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;
     let keypair = KeyPair::from_secret_key(&secp, sk);
     // TODO: Runa tipcache
-    let msg = handle
-        .wrap_message_in_envelope_for_user_by_key::<_, ParticipantAction, _>(
+    handle
+        .retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
             mve,
             &keypair,
             &secp,
             None,
-            None,
             TipControl::AllTips,
         )
-        .or(Err("Could Not Wrap Message"))?
-        .or(Err("Signing Failed"))?;
-    let authenticated = msg
-        .self_authenticate(&secp)
-        .ok()
-        .ok_or("Signature Incorrect")?;
-    let _ = handle
-        .try_insert_authenticated_envelope(authenticated)
-        .ok()
-        .ok_or("Could Not Insert Message")?;
-    Ok::<(), _>(())
+        .or(Err("Could Not Wrap/Insert Message"))
+        .into()
 }
 
 pub(crate) async fn switch_to_game_inner(
