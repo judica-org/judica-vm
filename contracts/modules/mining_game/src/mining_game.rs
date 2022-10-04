@@ -26,6 +26,7 @@ use serde::*;
 use simps::GameKernel;
 use simps::GameStarted as ExtGameStarted;
 use simps::PK;
+use sapio::contract::error::CompilationError;
 use std::str::FromStr;
 
 #[derive(Deserialize, JsonSchema)]
@@ -79,7 +80,9 @@ impl GameStarted {
         // 1/[a, b, c]     @ t = 2.5 * periods
         for parties in (1..=total).rev() {
             let v = vec![
-                RelHeight::from(next_trigger_at).into(),
+                // only allow spending from confirmed txns via degrade.
+                // also fixes ZeroTime issue with Clause
+                RelHeight::from(next_trigger_at.max(1)).into(),
                 Clause::Threshold(parties, keys.clone()),
                 Clause::Key(self.kernel.game_host.0),
             ];
@@ -106,7 +109,7 @@ impl GameStarted {
                 if k.0.x_only_public_key(&secp).0 == self.kernel.game_host.0 {
                     let mut tmpl = ctx.template();
                     for (player, balance) in &self.kernel.players {
-                        tmpl = tmpl.add_output(balance.clone().into(), &player.0, None)?
+                        tmpl = tmpl.add_output((*balance).into(), &player.0, None)?
                     }
                     tmpl.into()
                 } else {
@@ -127,7 +130,7 @@ impl GameStarted {
     )]
     fn host_cheat_censor(self, _ctx: Context, proof: Option<CensorshipProof>) {
         if let Some(proof) = proof {
-            todo!()
+            Err(CompilationError::TerminateWith("Not Yet Supported".into()))
         } else {
             empty()
         }
@@ -257,7 +260,7 @@ impl GameStarted {
             Some(_) => {
                 let mut tmpl = ctx.template();
                 for (k, v) in self.kernel.players.iter() {
-                    tmpl = tmpl.add_output(v.clone().into(), &k.0, None)?;
+                    tmpl = tmpl.add_output((*v).into(), &k.0, None)?;
                 }
                 tmpl.into()
             }
