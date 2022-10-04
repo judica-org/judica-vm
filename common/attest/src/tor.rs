@@ -1,7 +1,7 @@
 use crate::{configuration::TorConfig, globals::Globals};
 use attest_util::{ensure_dir, get_hidden_service_hostname, CrossPlatformPermissions, INFER_UNIT};
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
-use std::{error::Error, fmt::Display, fs::Permissions, path::PathBuf, sync::Arc};
+use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc};
 use tokio::{spawn, sync::Notify, task::JoinHandle};
 
 #[derive(Debug)]

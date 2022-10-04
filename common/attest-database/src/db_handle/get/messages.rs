@@ -2,11 +2,13 @@ use super::super::handle_type;
 use super::super::MsgDBHandle;
 use crate::db_handle::sql::get::messages::*;
 use crate::db_handle::MessageID;
+use crate::sql_serializers::PK;
 use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 
 use attest_messages::GenericEnvelope;
+
 use fallible_iterator::FallibleIterator;
 use rusqlite::named_params;
 use rusqlite::params;
@@ -18,6 +20,7 @@ use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::HashMap;
 use tracing::debug;
+
 use tracing::trace;
 
 impl<'a, T> MsgDBHandle<'a, T>
@@ -57,8 +60,10 @@ where
         M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGES_BY_HEIGHT_AND_USER)?;
-        stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
-            .optional()
+        stmt.query_row(named_params![":key": PK(key), ":height": height], |r| {
+            r.get::<_, Authenticated<GenericEnvelope<M>>>(0)
+        })
+        .optional()
     }
 
     /// finds the most recent message for a user by their key
@@ -214,18 +219,19 @@ where
     }
 
     /// loads all the messages from a given user
-    pub fn load_all_messages_for_user_by_key_connected<M>(
+    pub fn load_all_messages_for_user_by_key_connected<M, E>(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
+    ) -> Result<Vec<E>, rusqlite::Error>
     where
         M: AttestEnvelopable,
+        E: AsRef<GenericEnvelope<M>> + FromSql,
     {
         let mut stmt = self
             .0
             .prepare_cached(SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED)?;
         let rows = stmt.query(params![key.to_hex()])?;
-        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows.map(|r| r.get(0)).collect()?;
+        let vs: Vec<E> = rows.map(|r| r.get(0)).collect()?;
         Ok(vs)
     }
 

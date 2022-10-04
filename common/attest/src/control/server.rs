@@ -75,10 +75,10 @@ async fn chain_commit_groups(
     Json(key): Json<CanonicalEnvelopeHash>,
     db: Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<ChainCommitGroupInfo>), (StatusCode, String)> {
-    let (resp) = async {
+    let resp = async {
         let handle = db.0.get_handle().await;
         let genesis = &handle.messages_by_hash::<_, Envelope, _>(std::iter::once(&key))?[0];
-        let groups = handle.get_all_chain_commit_groups_for_chain(key)?;
+        let _groups = handle.get_all_chain_commit_groups_for_chain(key)?;
         let group_members = handle.get_all_chain_commit_group_members_for_chain(key)?;
         let group_tips = handle.messages_by_ids::<_, Envelope, _>(group_members.iter())?;
         let mut map = Default::default();

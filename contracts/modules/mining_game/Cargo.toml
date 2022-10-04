@@ -58,6 +58,10 @@ features = []
 default-features = false
 
 
+[dependencies.simps]
+path = "../../../common/simps"
+version = "0.1.0"
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 path = "src/mining_game.rs"

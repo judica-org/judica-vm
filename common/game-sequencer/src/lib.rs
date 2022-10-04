@@ -46,8 +46,8 @@ pub struct UnauthenticatedRawSequencer<M>
 where
     M: AttestEnvelopable,
 {
-    sequencer_envelopes: Vec<GenericEnvelope<Channelized<BroadcastByHost>>>,
-    msg_cache: HashMap<CanonicalEnvelopeHash, GenericEnvelope<M>>,
+    pub sequencer_envelopes: Vec<GenericEnvelope<Channelized<BroadcastByHost>>>,
+    pub msg_cache: HashMap<CanonicalEnvelopeHash, GenericEnvelope<M>>,
 }
 impl<M: AttestEnvelopable> TryFrom<UnauthenticatedRawSequencer<M>> for RawSequencer<M> {
     type Error = AuthenticationError;
@@ -85,7 +85,7 @@ where
 pub enum SequencerError {
     BadMessageType,
     MessageFromWrongEntity,
-    MisingTip,
+    MissingTip,
     Gap,
     AuthenticationError,
 }
@@ -106,7 +106,7 @@ impl<M: AttestEnvelopable> TryFrom<RawSequencer<M>> for OfflineSequencer<M> {
             .first()
             .map(|v| v.header().height() == 0)
         {
-            return Err(SequencerError::MisingTip);
+            return Err(SequencerError::MissingTip);
         }
         if value
             .sequencer_envelopes

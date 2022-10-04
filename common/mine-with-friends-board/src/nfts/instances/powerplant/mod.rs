@@ -14,7 +14,6 @@ use crate::util::Price;
 use crate::{nfts::BaseNFT, nfts::NftPtr, tokens::TokenPointer};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tracing::info;
 
 pub(crate) type PowerPlantPrices = HashMap<PlantType, Vec<(Currency, Price)>>;
 

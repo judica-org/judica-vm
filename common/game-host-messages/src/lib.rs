@@ -42,9 +42,9 @@ impl<T> AsRef<Channelized<T>> for Channelized<T> {
     }
 }
 
-impl<T: Send + Sync + std::fmt::Debug + Clone + JsonSchema> AttestEnvelopable for Channelized<T>
+impl<T> AttestEnvelopable for Channelized<T>
 where
-    T: Serialize + for<'de> Deserialize<'de>,
+    T: Send + Sync + std::fmt::Debug + Clone + JsonSchema + Serialize + for<'de> Deserialize<'de>,
 {
     type Ref = Self;
 

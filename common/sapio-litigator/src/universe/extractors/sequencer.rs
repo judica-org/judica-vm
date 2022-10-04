@@ -1,13 +1,18 @@
+use crate::{Event, TaskSet, OK_T};
 use attest_database::connection::MsgDB;
+use attest_messages::GenericEnvelope;
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
-use bitcoincore_rpc_async::bitcoin::hashes::hex::ToHex;
 use event_log::{
     connection::EventLog,
     db_handle::accessors::{occurrence::ToOccurrence, occurrence_group::OccurrenceGroupID},
 };
 use game_host_messages::{BroadcastByHost, Channelized};
-use game_sequencer::OnlineDBFetcher;
-use mine_with_friends_board::{game::GameBoard, MoveEnvelope};
+use game_player_messages::ParticipantAction;
+use game_sequencer::{OnlineDBFetcher, UnauthenticatedRawSequencer};
+use mine_with_friends_board::{
+    game::{GameBoard, MoveRejectReason},
+    MoveEnvelope,
+};
 use std::{
     collections::BTreeMap,
     error::Error,
@@ -19,9 +24,7 @@ use tokio::{
     sync::{mpsc::UnboundedReceiver, Notify, OwnedMutexGuard},
     task::JoinHandle,
 };
-use tracing::info;
-
-use crate::Event;
+use tracing::{debug, info};
 
 pub async fn sequencer_extractor(
     oracle_key: XOnlyPublicKey,
@@ -29,6 +32,7 @@ pub async fn sequencer_extractor(
     evlog: EventLog,
     evlog_group_id: OccurrenceGroupID,
     new_synthetic_event: Arc<Notify>,
+    tasks: &TaskSet,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let shutdown: Arc<AtomicBool> = Default::default();
     let db_fetcher = OnlineDBFetcher::new(
@@ -39,6 +43,56 @@ pub async fn sequencer_extractor(
         msg_db.clone(),
     );
 
+    let game_setup = get_game_setup(&msg_db, oracle_key).await?;
+
+    let new_game = GameBoard::new(&game_setup);
+
+    let game_sequencer =
+        game_sequencer::DemuxedSequencer::new(shutdown.clone(), db_fetcher.clone());
+    tasks.push(spawn(async move {
+        db_fetcher.run().await;
+        OK_T
+    }));
+    tasks.push(spawn({
+        let game_sequencer = game_sequencer.clone();
+        async move {
+            game_sequencer.run().await;
+            OK_T
+        }
+    }));
+
+    tasks.push({
+        start_game(
+            shutdown.clone(),
+            evlog.clone(),
+            msg_db.clone(),
+            oracle_key,
+            evlog_group_id,
+            new_game,
+            game_sequencer.recieve_move.lock_owned().await,
+        )
+    });
+    tasks.push(spawn({
+        let recieved_psbt = game_sequencer.recieve_psbt.lock_owned().await;
+        async move {
+            handle_psbts(
+                shutdown.clone(),
+                evlog.clone(),
+                evlog_group_id,
+                recieved_psbt,
+                new_synthetic_event,
+            )
+            .await?;
+            OK_T
+        }
+    }));
+    Ok(())
+}
+
+pub async fn get_game_setup(
+    msg_db: &MsgDB,
+    oracle_key: XOnlyPublicKey,
+) -> Result<mine_with_friends_board::game::GameSetup, &'static str> {
     let genesis = {
         let handle = msg_db.get_handle().await;
         handle
@@ -47,40 +101,16 @@ pub async fn sequencer_extractor(
             .ok_or("No Genesis found for selected Key")?
     };
     let game_setup = {
-        let m: &Channelized<BroadcastByHost> = genesis.msg();
-        match &m.data {
+        let m: Channelized<BroadcastByHost> = genesis.inner().into_msg();
+        match m.data {
             BroadcastByHost::GameSetup(g) => g,
-            _ => return Err("First Message was not a GameSetup".into()),
+            _ => {
+                debug!(?m.data, "Startup Data Was");
+                return Err("First Message was not a GameSetup");
+            }
         }
     };
-
-    let new_game = GameBoard::new(game_setup);
-
-    let game_sequencer =
-        game_sequencer::DemuxedSequencer::new(shutdown.clone(), db_fetcher.clone());
-    spawn(db_fetcher.run());
-    spawn({
-        let game_sequencer = game_sequencer.clone();
-        game_sequencer.run()
-    });
-
-    let _game_task = {
-        start_game(
-            shutdown.clone(),
-            new_game,
-            game_sequencer.recieve_move.lock_owned().await,
-        )
-    };
-    let _psbt_task = {
-        handle_psbts(
-            shutdown.clone(),
-            evlog.clone(),
-            evlog_group_id,
-            game_sequencer.recieve_psbt.lock_owned().await,
-            new_synthetic_event,
-        )
-    };
-    Ok(())
+    Ok(game_setup)
 }
 
 pub fn handle_psbts(
@@ -128,14 +158,87 @@ pub fn handle_psbts(
 // Play the moves one by one
 pub fn start_game(
     _shutdown: Arc<AtomicBool>,
+    evlog: EventLog,
+    msg_db: MsgDB,
+    oracle_key: XOnlyPublicKey,
+    evlog_group_id: OccurrenceGroupID,
     mut game: GameBoard,
     mut moves: OwnedMutexGuard<UnboundedReceiver<(MoveEnvelope, XOnlyPublicKey)>>,
-) -> JoinHandle<()> {
+) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
     spawn(async move {
         // TODO: Check which game the move is for?
-        while let Some((game_move, s)) = moves.recv().await {
-            info!(move_ = ?game_move, "New Move Recieved");
-            game.play(game_move, s.to_hex());
+        let mut move_count = 0;
+        while let Some((next_move, signed_by)) = moves.recv().await {
+            info!(move_ = ?next_move, "New Move Recieved");
+
+            move_count += 1;
+            if let Err(MoveRejectReason::GameIsFinished(_)) =
+                game.play(next_move, signed_by.to_string())
+            {
+                // todo: get a real one derived only from data we've seen up to the point we've executed.
+                // for now, a fresh expensive copy will have to do until we can refactor this.
+                make_snapshot(
+                    move_count,
+                    evlog.clone(),
+                    msg_db.clone(),
+                    oracle_key,
+                    evlog_group_id,
+                );
+
+                // contract specific, game will not change hereafter
+                break;
+            }
         }
+        Ok(())
+    })
+}
+
+type HostEnvelope = GenericEnvelope<Channelized<BroadcastByHost>>;
+fn make_snapshot(
+    move_count: usize,
+    evlog: EventLog,
+    msg_db: MsgDB,
+    oracle_key: XOnlyPublicKey,
+    evlog_group_id: OccurrenceGroupID,
+) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
+    spawn(async move {
+        let handle = msg_db.get_handle().await;
+
+        let sequencer_envelopes = handle
+            .load_all_messages_for_user_by_key_connected::<_, HostEnvelope>(&oracle_key)
+            .map_err(|_| "Database Fetch Error")?;
+        let mut m = Default::default();
+        handle
+            .get_all_messages_collect_into_inconsistent_skip_invalid(&mut None, &mut m, true)
+            .map_err(|_| "Database Fetch Error")?;
+        drop(handle);
+
+        // todo handle channels...
+        let def = Default::default();
+        // takes only the first move_count moves, and whittles down the messages to just the ones mentioned.
+        let msg_cache = sequencer_envelopes
+            .iter()
+            .flat_map(|m| match &m.msg().data {
+                BroadcastByHost::Sequence(d) => d,
+                _ => &def,
+            })
+            .take(move_count)
+            .flat_map(|k| Some((*k, m.remove(k)?)))
+            .collect();
+
+        let v = UnauthenticatedRawSequencer::<ParticipantAction> {
+            sequencer_envelopes,
+            msg_cache,
+        };
+        if let Ok(v) = serde_json::to_value(v) {
+            let accessor = evlog.get_accessor().await;
+            accessor
+                .insert_new_occurrence_now_from(
+                    evlog_group_id,
+                    &Event::NewRecompileTriggeringObservation(v),
+                )
+                .ok();
+        }
+        OK_T
     })
 }
