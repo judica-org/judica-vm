@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use rusqlite::{named_params, ErrorCode};
+use rusqlite::{named_params, ErrorCode, Transaction};
 
 use crate::{
     db_handle::{
@@ -58,6 +58,51 @@ where
                 ) => Ok(Err(Idempotent::AlreadyExists)),
                 e => Err(e),
             },
+        }
+    }
+
+    pub fn insert_new_occurrence_now_from_txn<'c, I>(
+        &'c mut self,
+        group_id: OccurrenceGroupID,
+        data: &I,
+    ) -> Result<Result<(OccurrenceID, Transaction<'c>), Idempotent>, rusqlite::Error>
+    where
+        I: ToOccurrence,
+    {
+        let txn = self.0.transaction()?;
+        let occurrence = Occurrence::from(data);
+        insert_occurrence_txn(txn, group_id, &occurrence)
+    }
+}
+
+pub fn insert_occurrence_txn<'conn>(
+    txn: Transaction<'conn>,
+    group_id: OccurrenceGroupID,
+    occurrence: &Occurrence,
+) -> Result<Result<(OccurrenceID, Transaction<'conn>), Idempotent>, rusqlite::Error> {
+    let mut stmt = txn.prepare_cached(SQL_NEW_OCCURRENCE)?;
+    match stmt.insert(named_params! {
+        ":data": SqlJsonRef(&occurrence.data),
+        ":time": occurrence.time,
+        ":typeid": occurrence.typeid,
+        ":group_id": group_id
+    }) {
+        Ok(q) => {
+            drop(stmt);
+            Ok(Ok((OccurrenceID(q), txn)))
+        },
+        Err(e) => {
+            drop(stmt);
+            match e {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error {
+                        code: ErrorCode::ConstraintViolation,
+                        extended_code: crate::sql_error::SQLITE_CONSTRAINT_UNIQUE,
+                    },
+                    _,
+                ) => Ok(Err(Idempotent::AlreadyExists)),
+                e => Err(e),
+            }
         }
     }
 }

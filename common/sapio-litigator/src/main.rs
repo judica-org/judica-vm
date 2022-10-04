@@ -1,15 +1,18 @@
 use attest_database::db_handle::create::TipControl;
 use attest_messages::{Authenticated, GenericEnvelope};
 use bitcoin::blockdata::script::Script;
-use bitcoin::hashes::{sha512, Hash, Hmac, HmacEngine};
+use bitcoin::hashes::{sha256, sha512, Hash, Hmac, HmacEngine};
 use bitcoin::psbt::PartiallySignedTransaction;
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint};
 use bitcoin::{Amount, KeyPair, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
+use event_log::connection::EventLog;
+use event_log::db_handle::accessors::occurrence::sql::Idempotent;
 use event_log::db_handle::accessors::occurrence::{
     ApplicationTypeID, Occurrence, OccurrenceConversionError, ToOccurrence,
 };
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID;
 use ext::CompiledExt;
 use futures::stream::FuturesUnordered;
 use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
@@ -50,6 +53,8 @@ pub enum Event {
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
     NewRecompileTriggeringObservation(Value, SArc<EventKey>),
+    // strictly speaking we don't need this to be an event with any information.
+    EmittedPSBTVia(PsbtString, XOnlyPublicKey),
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -180,7 +185,7 @@ async fn insert_init(
     location: &str,
     _config: &config::Config,
     accessor: &event_log::db_handle::EventLogAccessor<'_>,
-    gid: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
+    gid: OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error>> {
     let ev = Event::ModuleBytes(tokio::fs::read(&location).await?);
     accessor.insert_new_occurrence_now_from(gid, &TaggedEvent(ev, Some(Tag::InitModule)))?;
@@ -243,7 +248,15 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
     };
 
     let evl = spawn(event_loop(
-        rx, state, emulator, data_dir, msg_db, config, root,
+        rx,
+        state,
+        emulator,
+        data_dir,
+        msg_db,
+        config,
+        root,
+        evlog_group_id,
+        evlog.clone(),
     ));
 
     tasks.push(evl);
@@ -268,7 +281,7 @@ pub type TaskSet = FuturesUnordered<
 >;
 async fn start_extractors(
     evlog: event_log::connection::EventLog,
-    evlog_group_id: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
+    evlog_group_id: OccurrenceGroupID,
     tx: tokio::sync::mpsc::Sender<Event>,
     new_synthetic_event: Arc<Notify>,
     config: Arc<config::Config>,
@@ -314,10 +327,13 @@ async fn event_loop(
     msg_db: attest_database::connection::MsgDB,
     config: Arc<config::Config>,
     root: sapio_base::reverse_path::ReversePath<PathFragment>,
+    evlog_group_id: OccurrenceGroupID,
+    evlog: EventLog,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let secp = Arc::new(Secp256k1::new());
     loop {
         match rx.recv().await {
+            Some(Event::EmittedPSBTVia(a, b)) => {}
             Some(Event::TransactionFinalized(_s, _tx)) => {
                 info!("Transaction Finalized");
             }
@@ -346,7 +362,14 @@ async fn event_loop(
                                 let msg_db = msg_db.clone();
                                 // put this in an async block to simplify error handling
                                 let r = process_psbt_fail_ok(
-                                    keys, config, psbt, metadata, secp, msg_db,
+                                    keys,
+                                    config,
+                                    psbt,
+                                    metadata,
+                                    secp,
+                                    msg_db,
+                                    evlog_group_id,
+                                    evlog.clone(),
                                 )
                                 .await;
                                 if let Err(r) = r {
@@ -427,6 +450,8 @@ async fn event_loop(
                 state.bound_to.insert(o);
             }
             Some(Event::NewRecompileTriggeringObservation(new_info_as_v, filter)) => {
+                // TODO: New Observations should somehow be cached and made available on recompile?
+
                 info!("NewRecompileTriggeringObservation");
                 let idx_str = SArc(Arc::new(format!("event-{}", state.event_counter)));
                 // work on a clone so as to not have an effect if failed
@@ -522,6 +547,8 @@ async fn process_psbt_fail_ok(
     metadata: sapio::template::TemplateMetadata,
     secp: Arc<Secp256k1<bitcoin::secp256k1::All>>,
     msg_db: attest_database::connection::MsgDB,
+    evlog_group_id: OccurrenceGroupID,
+    evlog: EventLog,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let broadcast_key = keys
         .get(&config.psbt_broadcast_key)
@@ -561,18 +588,49 @@ async fn process_psbt_fail_ok(
     if signed == psbt {
         return OK_T;
     }
-    let mut handle = msg_db.get_handle().await;
     let keypair = KeyPair::from_secret_key(&secp, broadcast_key);
-    handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
-        ParticipantAction::PsbtSigningCoordination(Multiplexed {
-            channel: signed.clone().extract_tx().txid().to_string(),
-            data: PsbtString(signed),
-        }),
-        &keypair,
-        &secp,
-        None,
-        TipControl::NoTips,
-    )
+
+    let tx = signed.clone().extract_tx();
+    let txid = tx.txid();
+    let txid_s = txid.to_string();
+
+    let emitter = keypair.x_only_public_key().0;
+    // TODO: confirm serialization is deterministic?
+    let psbt_hash = sha256::Hash::hash(&signed.to_string().as_bytes());
+    let o = TaggedEvent(
+        Event::EmittedPSBTVia(PsbtString(signed.clone()), emitter),
+        Some(Tag::ScopedValue(
+            "signed_psbt".into(),
+            format!("emit_by:{}:psbt_hash:{}", emitter, psbt_hash),
+        )),
+    );
+    let mut accessor = evlog.get_accessor().await;
+    let mut handle = msg_db.get_handle().await;
+    let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
+    let v2 = v?;
+    match v2 {
+        Err(Idempotent::AlreadyExists) => Ok(()),
+        Ok((oid, txn)) => {
+            handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
+                ParticipantAction::PsbtSigningCoordination(Multiplexed {
+                    channel: txid_s,
+                    data: PsbtString(signed),
+                }),
+                &keypair,
+                &secp,
+                None,
+                TipControl::NoTips,
+            )?;
+            // Technically there is a tiny risk that we succeed at inserting the
+            // Signed PSBT but do not succeed at committing the event log entry.
+            // In this case, we will see a second entry for the same psbt, which
+            // is still not a logic error, fortunately.
+            //
+            // This could be fixed with some more clever logic in both DBs.
+            txn.commit()?;
+            Ok(())
+        }
+    }
 }
 
 fn bind_psbt(
