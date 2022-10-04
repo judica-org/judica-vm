@@ -14,9 +14,9 @@ const { useState, useEffect } = React;
 
 type Plant = (UserPowerPlant & { text: string });
 const stub_plant_data: Plant[] = [{
-    coordinates: [46.818188, 8.227512],
+    coordinates: [46818188, 8227512],
     for_sale: false,
-    hashrate: 90,
+    hashrate: 90000,
     id: "45637",
     miners: 32,
     owner: "12345566",
@@ -24,9 +24,9 @@ const stub_plant_data: Plant[] = [{
     text: "Flare Plant",
     watts: 345634,
 }, {
-    coordinates: [49.817492, 15.472962],
+    coordinates: [49817492, 15472962],
     for_sale: false,
-    hashrate: 327,
+    hashrate: 32700,
     id: "13436",
     miners: 206,
     owner: "9494384",
@@ -34,9 +34,9 @@ const stub_plant_data: Plant[] = [{
     text: "Hydroelectric Plant",
     watts: 67897,
 }, {
-    coordinates: [9.145, 40.489673],
+    coordinates: [9145125, 40489673],
     for_sale: true,
-    hashrate: 141,
+    hashrate: 14100,
     id: "95944",
     miners: 30,
     owner: "12345566",
@@ -54,10 +54,29 @@ function memoized_color(name: string) {
         memo_colors[name] = `#${Math.round(Math.random() * Math.pow(2, 24)).toString(16).padStart(6, '0')}`;
     return memo_colors[name];
 }
+
+type BarData = { coordinates: number[], hashrate?: number, watts?: number, id: string };
+
+function getBarData(plants: (UserPowerPlant & { text: string })[]) {
+    return plants.reduce<BarData[]>((acc, { coordinates, hashrate, watts, id }) => {
+        return [...acc, { id, coordinates, hashrate }, { id, coordinates: [coordinates[0] + 100000, coordinates[1] + 100000], watts }];
+    }, []);
+}
+
+const chose_color = (d: BarData): string => {
+    console.log(["picking-color"], d);
+    if (d.hashrate && d.hashrate > 0) {
+        return 'orange'
+    } else {
+        return 'green'
+    }
+}
+
 export default () => {
     const [power_plants, set_power_plants] = useState<(UserPowerPlant & { text: string })[]>([]); // use empty list for now so it will render
     const [owners, setOwners] = useState<EntityID[]>([]);
     const [selectedPlantOwners, setSelectedPlantOwners] = useState<EntityID[]>([]); // default to all owners
+    const [output_bars, set_output_bars] = useState<BarData[]>([]);
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [plantTypes, setPlantTypes] = React.useState({
         'Hydro': true,
@@ -78,7 +97,6 @@ export default () => {
         if (selectedPlantOwners.includes(picked_owner)) {
             setSelectedPlantOwners(selectedPlantOwners.filter((owner) => owner !== picked_owner));
         } else {
-
             setSelectedPlantOwners([...selectedPlantOwners, picked_owner]);
         }
     }
@@ -86,7 +104,7 @@ export default () => {
     useEffect(() => {
         const unlisten_power_plants = appWindow.listen("power-plants", (ev: Event<(UserPowerPlant & { text: string })[]>) => {
             console.log(['power-plants-received'], ev);
-            let plant_owners: EntityID[] = [];
+            let plant_owners: string[] = [];
             ev.payload.forEach((plant) => {
                 if (!plant_owners.includes(plant.owner)) {
                     plant_owners.push(plant.owner)
@@ -95,6 +113,7 @@ export default () => {
             setOwners(plant_owners);
             setSelectedPlantOwners(plant_owners)
             set_power_plants(ev.payload);
+            set_output_bars(getBarData(ev.payload));
         });
 
         return () => {
@@ -102,7 +121,7 @@ export default () => {
                 (await unlisten_power_plants)();
             })();
         }
-    }, [power_plants, location]);
+    }, [power_plants, owners, location]);
 
     const selectedPlantTypes = Object.entries(plantTypes).filter(([_type, selected]) => selected === true).map(([type, _selected]) => type);
     const plants_by_type = power_plants.filter(({ plant_type, owner }) => selectedPlantTypes.includes(plant_type) && selectedPlantOwners.includes(owner));
@@ -140,6 +159,7 @@ export default () => {
                                 <b>ID: ${d.id}</b> <br />
                                 Owner: <i>${d.owner}</i> <br />
                                 Watts: <i>${d.watts}</i> <br />
+                                Hashrate: <i>${d.hashrate}</i> <br />
                                 ${d.for_sale ? 'For Sale' : ''}
                                 `
                             }
@@ -161,6 +181,42 @@ export default () => {
                             console.log(['globe-click'], { lat, lng });
                             emit('globe-click', [lat, lng]);
                         }}
+                        pointsData={output_bars}
+                        pointLabel={(d: object) => {
+                            const p = d as BarData;
+                            let label = `<></>`;
+                            if (p.hashrate) {
+                                label = `
+                                <b>ID: ${p.id}</b> <br />
+                                Hashrate: <i>${p.hashrate}</i> <br />
+                                `
+                            }
+                            if (p.watts) {
+                                label = `
+                                <b>ID: ${p.id}</b> <br />
+                                Watts: <i>${p.watts}</i> <br />
+                                `
+                            }
+                            return label;
+                        }}
+                        pointLat={(d: object) => (d as BarData).coordinates[0] / COORDINATE_PRECISION}
+                        pointLng={(d: object) => (d as BarData).coordinates[1] / COORDINATE_PRECISION}
+                        pointAltitude={(d: object) => {
+                            const p = d as BarData;
+                            let alt = 1
+                            console.log(["data-looks-like"], d);
+                            if (p.hashrate) {
+                                alt = p.hashrate! * 6e-6
+                            }
+                            if (p.watts) {
+                                alt = p.watts! * 6e-6
+                            }
+                            return alt
+                        }}
+                        pointRadius={0.25}
+                        pointColor={(d: object) => chose_color(d as BarData)}
+                        pointResolution={12}
+                        pointsMerge={true}
                     />
                 </div>
                 <Divider />
@@ -170,3 +226,4 @@ export default () => {
         </Card>
     </div>;
 };
+

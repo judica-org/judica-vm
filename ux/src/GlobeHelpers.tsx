@@ -47,7 +47,7 @@ export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwner
               '&.Mui-checked': {
                 color: lightGreen[600],
               },
-            }} />} label={owner} />
+            }} />} label={owner} key={owner} />
           })
         }
       </FormGroup>
