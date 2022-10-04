@@ -150,7 +150,7 @@ async fn handle_envelope(
                         }
                     }
                 } else {
-                    match handle.try_insert_authenticated_envelope(authentic.clone())? {
+                    match handle.try_insert_authenticated_envelope(authentic.clone(), false)? {
                         Ok(()) => {}
                         // This means that a conststraint, most likely that the
                         // genesis header must be known, was not allowed

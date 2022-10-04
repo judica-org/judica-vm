@@ -224,38 +224,17 @@ async fn push_message_dangerous(
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
     let tips = bitcoin_tipcache.0.read_cache().await;
     let env = handle
-        .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
+        .retry_insert_authenticated_envelope_atomic::<WrappedJson, _, _>(
             msg,
             &kp,
             &secp.0,
             Some(tips),
-            None,
             TipControl::AllTips,
         )
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Wrapping Message failed: {}", e),
-            )
-        })?
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Signing Message failed: {}", e),
-            )
-        })?;
-    handle
-        .try_insert_authenticated_envelope(env.self_authenticate(&secp.0).unwrap())
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Inserting Message failed: {}", e),
-            )
-        })?
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Inserting Message failed, No Corresponding Key: {:?}", e),
+                format!("Wrapping Message and Inserting failed: {}", e),
             )
         })?;
     Ok((

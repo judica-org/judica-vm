@@ -287,37 +287,14 @@ async fn game(
             // TODO: Run a tipcache
 
             // try to insert and handle
-            let _: () = retry_insert_authenticated_envelope_atomic(handle, msg, keypair, &secp)??;
-        }
-    }
-}
-
-fn retry_insert_authenticated_envelope_atomic(
-    mut handle: attest_database::db_handle::MsgDBHandle,
-    msg: Channelized<BroadcastByHost>,
-    keypair: KeyPair,
-    secp: &Arc<Secp256k1<All>>,
-) -> Result<(), SqliteFail> {
-    loop {
-        let wrapped = handle
-            .wrap_message_in_envelope_for_user_by_key::<_, Channelized<BroadcastByHost>, _>(
-                msg.clone(),
-                &keypair,
-                secp,
-                None,
-                None,
-                TipControl::GroupsOnly,
-            )??
-            .self_authenticate(secp)?;
-        match handle
-            .try_insert_authenticated_envelope(wrapped, true)?
-            .map_err(|(a, sqlite_error_extra)| {
-                warn!(?sqlite_error_extra, "Failed to Insert");
-                a
-            }) {
-            Ok(()) => break Ok(()),
-            Err(SqliteFail::SqliteConstraintUnique) => {}
-            Err(e) => break Err(e),
+            handle
+                .retry_insert_authenticated_envelope_atomic::<Channelized<BroadcastByHost>, _, _>(
+                    msg,
+                    &keypair,
+                    &secp,
+                    None,
+                    TipControl::GroupsOnly,
+                )?;
         }
     }
 }
