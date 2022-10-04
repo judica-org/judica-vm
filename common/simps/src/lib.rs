@@ -20,7 +20,6 @@ pub struct AutBroadcastOptions {
     pub finalize: bool,
 }
 
-
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct AutoBroadcast {
     pub signer_roles: Vec<(PK, AutBroadcastOptions)>,

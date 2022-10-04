@@ -1,4 +1,5 @@
 use attest_database::setup_db;
+use attest_database::sql_error::SqliteFail;
 use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_messages::{
     Authenticated, CanonicalEnvelopeHash, Envelope, GenericEnvelope, WrappedJson,
@@ -284,22 +285,39 @@ async fn game(
             };
             let mut handle = db.get_handle().await;
             // TODO: Run a tipcache
-            let wrapped = handle
-                .wrap_message_in_envelope_for_user_by_key::<_, Channelized<BroadcastByHost>, _>(
-                    msg,
-                    &keypair,
-                    &secp,
-                    None,
-                    None,
-                    TipControl::GroupsOnly,
-                )??
-                .self_authenticate(&secp)?;
-            handle.try_insert_authenticated_envelope(wrapped)?.map_err(
-                |(a, sqlite_error_extra)| {
-                    warn!(?sqlite_error_extra, "Failed to Insert");
-                    a
-                },
-            )?;
+
+            // try to insert and handle
+            let _: () = retry_insert_authenticated_envelope_atomic(handle, msg, keypair, &secp)??;
+        }
+    }
+}
+
+fn retry_insert_authenticated_envelope_atomic(
+    mut handle: attest_database::db_handle::MsgDBHandle,
+    msg: Channelized<BroadcastByHost>,
+    keypair: KeyPair,
+    secp: &Arc<Secp256k1<All>>,
+) -> Result<(), SqliteFail> {
+    loop {
+        let wrapped = handle
+            .wrap_message_in_envelope_for_user_by_key::<_, Channelized<BroadcastByHost>, _>(
+                msg.clone(),
+                &keypair,
+                secp,
+                None,
+                None,
+                TipControl::GroupsOnly,
+            )??
+            .self_authenticate(secp)?;
+        match handle
+            .try_insert_authenticated_envelope(wrapped, true)?
+            .map_err(|(a, sqlite_error_extra)| {
+                warn!(?sqlite_error_extra, "Failed to Insert");
+                a
+            }) {
+            Ok(()) => break Ok(()),
+            Err(SqliteFail::SqliteConstraintUnique) => {}
+            Err(e) => break Err(e),
         }
     }
 }

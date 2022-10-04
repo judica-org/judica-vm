@@ -1,12 +1,16 @@
+use attest_database::db_handle::create::TipControl;
 use attest_messages::{Authenticated, GenericEnvelope};
 use bitcoin::blockdata::script::Script;
+use bitcoin::hashes::{sha512, Hash, Hmac, HmacEngine};
 use bitcoin::psbt::PartiallySignedTransaction;
-use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
+use bitcoin::secp256k1::Secp256k1;
+use bitcoin::util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint};
+use bitcoin::{Amount, KeyPair, OutPoint, Transaction, Txid, XOnlyPublicKey};
 use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
 use ext::CompiledExt;
 use futures::stream::FuturesUnordered;
-use game_player_messages::ParticipantAction;
+use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
 use sapio::contract::object::SapioStudioFormat;
@@ -16,6 +20,7 @@ use sapio_base::effects::{EditableMapEffectDB, PathFragment};
 use sapio_base::serialization_helpers::SArc;
 use sapio_base::simp::{by_simp, SIMP};
 use sapio_base::txindex::TxIndexLogger;
+use sapio_psbt::SigningKey;
 use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
 use sapio_wasm_plugin::plugin_handle::PluginHandle;
 use sapio_wasm_plugin::{ContextualArguments, CreateArgs};
@@ -268,7 +273,8 @@ async fn event_loop(
     config: Arc<config::Config>,
     root: sapio_base::reverse_path::ReversePath<PathFragment>,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    Ok(loop {
+    let secp = Arc::new(Secp256k1::new());
+    loop {
         match rx.recv().await {
             Some(Event::TransactionFinalized(_s, _tx)) => {
                 info!("Transaction Finalized");
@@ -277,26 +283,32 @@ async fn event_loop(
                 info!(time, "SyntehticPeriodicActions");
                 if let Some(out) = state.bound_to.as_ref() {
                     let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
-                    if let Ok(program) = c.bind_psbt(
-                        *out,
-                        Default::default(),
-                        Rc::new(TxIndexLogger::new()),
-                        emulator.as_ref(),
-                    ) {
-                        for obj in program.program.values() {
-                            for tx in obj.txs.iter() {
+                    if let Ok(program) = bind_psbt(c, out, &emulator) {
+                        // TODO learn available keys through an extractor...
+                        let keys = Arc::new({
+                            let handle = msg_db.get_handle().await;
+                            handle.get_keymap().map_err(|e| e.to_string())
+                        }?);
+                        for obj in program.program.into_values() {
+                            for tx in obj.txs.into_iter() {
                                 let SapioStudioFormat::LinkedPSBT {
-                                    psbt: _,
+                                    psbt,
                                     hex: _,
                                     metadata,
                                     output_metadata: _,
                                     added_output_metadata: _,
                                 } = tx;
-                                if let Some(_data) =
-                                    metadata.simp.get(&AutoBroadcast::get_protocol_number())
-                                {
-                                    // TODO:
-                                    // - Send PSBT out for signatures?
+                                let keys = keys.clone();
+                                let secp = secp.clone();
+                                let config = config.clone();
+                                let msg_db = msg_db.clone();
+                                // put this in an async block to simplify error handling
+                                let r = process_psbt_fail_ok(
+                                    keys, config, psbt, metadata, secp, msg_db,
+                                )
+                                .await;
+                                if let Err(r) = r {
+                                    debug!(error=?r, "Failed PSBT Signing for this PSBT")
                                 }
                             }
                         }
@@ -457,7 +469,82 @@ async fn event_loop(
         // Post Event:
 
         state.event_counter += 1;
-    })
+    }
+    OK_T
+}
+
+async fn process_psbt_fail_ok(
+    keys: Arc<BTreeMap<XOnlyPublicKey, bitcoin::secp256k1::SecretKey>>,
+    config: Arc<config::Config>,
+    psbt: String,
+    metadata: sapio::template::TemplateMetadata,
+    secp: Arc<Secp256k1<bitcoin::secp256k1::All>>,
+    msg_db: attest_database::connection::MsgDB,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let broadcast_key = keys
+        .get(&config.psbt_broadcast_key)
+        .ok_or("Broadcast Key Unknown")?;
+    let psbt = PartiallySignedTransaction::from_str(&psbt)?;
+    let auto = (&metadata.simp >> by_simp::<simps::AutoBroadcast>()).ok_or("No AutoBroadcast")?;
+    let auto = simps::AutoBroadcast::from_json(auto.clone())?;
+    let mut skeys = vec![];
+    for (private_key) in auto
+        .signer_roles
+        .iter()
+        .filter(|(_, o)| o.sign && o.sign_all)
+        .filter_map(|(PK(pk), _)| keys.get(&pk).cloned())
+    {
+        let hmac_engine: HmacEngine<sha512::Hash> = HmacEngine::new(&private_key[..]);
+        let hmac_result: Hmac<sha512::Hash> = Hmac::from_engine(hmac_engine);
+        skeys.push(ExtendedPrivKey {
+            // todo: other networks
+            network: bitcoin::Network::Signet,
+            depth: 0,
+            parent_fingerprint: Fingerprint::default(),
+            child_number: ChildNumber::from(0),
+            private_key,
+            // Garbage Chaincode, but secure to work in theory.
+            // TODO: store EPKs in DB?
+            chain_code: ChainCode::from(&hmac_result[32..]),
+        });
+    }
+    let signing_key = SigningKey(skeys);
+    let signed = signing_key
+        .sign_psbt(
+            psbt.clone(),
+            &secp,
+            bitcoin::SchnorrSighashType::AllPlusAnyoneCanPay,
+        )
+        .map_err(|(old, e)| e)?;
+    if signed == psbt {
+        return OK_T;
+    }
+    let mut handle = msg_db.get_handle().await;
+    let keypair = KeyPair::from_secret_key(&secp, broadcast_key);
+    handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
+        ParticipantAction::PsbtSigningCoordination(Multiplexed {
+            channel: signed.clone().extract_tx().txid().to_string(),
+            data: PsbtString(signed),
+        }),
+        &keypair,
+        &secp,
+        None,
+        TipControl::NoTips,
+    )
+}
+
+fn bind_psbt(
+    c: &&Compiled,
+    out: &OutPoint,
+    emulator: &Arc<dyn CTVEmulator>,
+) -> Result<sapio::contract::object::Program, Box<dyn Error + Send + Sync + 'static>> {
+    Ok(c.bind_psbt(
+        *out,
+        Default::default(),
+        Rc::new(TxIndexLogger::new()),
+        emulator.as_ref(),
+    )
+    .map_err(|e| e.to_string())?)
 }
 
 const OK_T: Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> = Ok(());

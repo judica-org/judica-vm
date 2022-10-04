@@ -1,3 +1,5 @@
+use crate::sql_error::SqliteFail;
+
 use super::handle_type;
 
 use super::MsgDBHandle;
@@ -12,17 +14,20 @@ use attest_messages::SigningError;
 use attest_messages::Unsigned;
 use attest_messages::WrappedJson;
 
+use sapio_bitcoin::secp256k1::Verification;
 use sapio_bitcoin::{
     secp256k1::{Secp256k1, Signing},
     KeyPair, XOnlyPublicKey,
 };
 
+#[derive(Clone, Copy)]
 pub enum TipControl {
     GroupsOnly,
     NoTips,
     AllTips,
 }
 use tracing::debug;
+use tracing::warn;
 impl<'a, T> MsgDBHandle<'a, T>
 where
     T: handle_type::Get + handle_type::Insert,
@@ -95,5 +100,42 @@ where
             msg.into(),
         );
         Ok(msg.sign_with(keypair, secp, secret).map(move |_| msg))
+    }
+
+    pub fn retry_insert_authenticated_envelope_atomic<M, C, Im>(
+        &mut self,
+        msg: Im,
+        keypair: &KeyPair,
+        secp: &Secp256k1<C>,
+        bitcoin_tipcache: Option<BitcoinCheckPoints>,
+        tip_groups: TipControl,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>>
+    where
+        M: AttestEnvelopable,
+        C: Signing + Verification,
+        Im: Into<M> + Clone,
+    {
+        loop {
+            let wrapped = self
+                .wrap_message_in_envelope_for_user_by_key::<_, M, Im>(
+                    msg.clone(),
+                    keypair,
+                    secp,
+                    bitcoin_tipcache.clone(),
+                    None,
+                    tip_groups,
+                )??
+                .self_authenticate(secp)?;
+            match self
+                .try_insert_authenticated_envelope(wrapped, true)?
+                .map_err(|(a, sqlite_error_extra)| {
+                    warn!(?sqlite_error_extra, "Failed to Insert");
+                    a
+                }) {
+                Ok(()) => break Ok(()),
+                Err(SqliteFail::SqliteConstraintUnique) => {}
+                Err(e) => break Err(e)?,
+            }
+        }
     }
 }
