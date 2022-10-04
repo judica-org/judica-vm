@@ -5,6 +5,7 @@ use bitcoin::{secp256k1::SecretKey, XOnlyPublicKey};
 use event_log::{connection::EventLog, db_handle::accessors::occurrence_group::OccurrenceGroupID};
 use simps::{DLogDiscovered, EK_NEW_DLOG};
 use tokio::{spawn, time};
+use tracing::{debug, info, trace};
 
 use crate::{Event, OK_T};
 
@@ -40,6 +41,11 @@ pub async fn dlog_extractor(
                 .pop()
                 .ok_or("Invariant Broken in Database, reused nonce returned fewer than two")?;
             if let Some(dlog_discovered) = extract_sk_from_envelopes(e1, e2) {
+                info!(
+                    ?k,
+                    ?dlog_discovered,
+                    "Learned DLog of an Attestation Chain, Evidence of Equivocation Acquired!"
+                );
                 known.insert(k);
                 // break if error, since this serialization should never fail.
                 let msg = serde_json::to_value(DLogDiscovered { dlog_discovered })?;
@@ -48,6 +54,8 @@ pub async fn dlog_extractor(
                     evlog_group_id,
                     &Event::NewRecompileTriggeringObservation(msg, EK_NEW_DLOG.clone()),
                 )?;
+            } else {
+                debug!(?k, "Expected to learn DLog, but it failed. Try manually inspecting the envelopes for k.");
             }
         }
     }
