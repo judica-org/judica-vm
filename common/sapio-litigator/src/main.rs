@@ -6,7 +6,6 @@ use emulator_connect::{CTVAvailable, CTVEmulator};
 use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
 use ext::CompiledExt;
 use futures::stream::FuturesUnordered;
-
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
 use ruma_serde::CanonicalJsonValue;
@@ -15,7 +14,7 @@ use sapio::contract::Compiled;
 use sapio::util::amountrange::AmountF64;
 use sapio_base::effects::{EditableMapEffectDB, PathFragment};
 use sapio_base::serialization_helpers::SArc;
-use sapio_base::simp::SIMP;
+use sapio_base::simp::{by_simp, SIMP};
 use sapio_base::txindex::TxIndexLogger;
 use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
 use sapio_wasm_plugin::plugin_handle::PluginHandle;
@@ -29,6 +28,7 @@ use std::error::Error;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
@@ -42,7 +42,7 @@ pub enum Event {
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
-    NewRecompileTriggeringObservation(Value),
+    NewRecompileTriggeringObservation(Value, SArc<EventKey>),
 }
 
 impl ToOccurrence for Event {
@@ -195,16 +195,8 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         event_counter: 0,
     };
 
-    let game_action = EventKey("action_in_game".into());
     let evl = spawn(event_loop(
-        rx,
-        state,
-        emulator,
-        data_dir,
-        msg_db,
-        config,
-        root,
-        game_action,
+        rx, state, emulator, data_dir, msg_db, config, root,
     ));
 
     tasks.push(evl);
@@ -258,6 +250,13 @@ async fn start_extractors(
         tasks,
     )
     .await;
+
+    tasks.push(tokio::spawn(universe::extractors::dlog::dlog_extractor(
+        msg_db.clone(),
+        evlog.clone(),
+        evlog_group_id,
+        Duration::from_secs(10),
+    )));
 }
 
 async fn event_loop(
@@ -268,7 +267,6 @@ async fn event_loop(
     msg_db: attest_database::connection::MsgDB,
     config: Arc<config::Config>,
     root: sapio_base::reverse_path::ReversePath<PathFragment>,
-    game_action: EventKey,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     Ok(loop {
         match rx.recv().await {
@@ -374,7 +372,7 @@ async fn event_loop(
                 info!(output=?o, "Rebind");
                 state.bound_to.insert(o);
             }
-            Some(Event::NewRecompileTriggeringObservation(new_info_as_v)) => {
+            Some(Event::NewRecompileTriggeringObservation(new_info_as_v, filter)) => {
                 info!("NewRecompileTriggeringObservation");
                 let idx_str = SArc(Arc::new(format!("event-{}", state.event_counter)));
                 // work on a clone so as to not have an effect if failed
@@ -388,33 +386,25 @@ async fn event_loop(
                     .map_err(|e| e.as_str())?
                     .continuation_points()
                     .filter(|api| {
-                        if let Some(recompiler) =
-                            api.simp.get(&simps::EventRecompiler::get_protocol_number())
-                        {
-                            if let Ok(recompiler) =
-                                simps::EventRecompiler::from_json(recompiler.clone())
-                            {
-                                // Only pay attention to events that we are filtering for
-                                if recompiler.filter == game_action {
-                                    return true;
-                                }
-                            }
-                        }
-                        false
+                        (&api.simp >> by_simp::<simps::EventRecompiler>())
+                            .and_then(|j| simps::EventRecompiler::from_json(j.clone()).ok())
+                            .map(|j| j.filter == *filter.0)
+                            .unwrap_or(false)
                     })
                     .filter(|api| {
-                        if let Some(schema) = &api.schema {
-                            // todo: cache?
-                            jsonschema_valid::Config::from_schema(
-                                // since schema is a RootSchema, cannot throw here
-                                &schema.0,
-                                Some(jsonschema_valid::schemas::Draft::Draft6),
-                            )
+                        api.schema
+                            .as_ref()
+                            .and_then(|schema| {
+                                // todo: cache?
+                                jsonschema_valid::Config::from_schema(
+                                    // since schema is a RootSchema, cannot throw here
+                                    &schema.0,
+                                    Some(jsonschema_valid::schemas::Draft::Draft6),
+                                )
+                                .ok()
+                            })
                             .map(|validator| validator.validate(&new_info_as_v).is_ok())
                             .unwrap_or(false)
-                        } else {
-                            false
-                        }
                     })
                 {
                     any_edits = true;

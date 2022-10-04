@@ -2710,6 +2710,7 @@ dependencies = [
 name = "simps"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "sapio",
  "sapio-base",
  "sapio-bitcoin",
