@@ -4,6 +4,7 @@ import { appWindow } from '@tauri-apps/api/window';
 import { useEffect, useState } from 'react';
 import { PowerPlant, UserInventory } from '../App';
 import FormModal from '../form-modal/FormModal';
+import { COORDINATE_PRECISION } from '../mint-power-plant/MintingForm';
 import { plant_type_color_map } from '../util';
 
 
@@ -38,7 +39,7 @@ export const Inventory = ({ userInventory }: { userInventory: UserInventory | nu
                       <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[plant.plant_type] }} /><p>{plant.plant_type}</p>
                     </TableCell>
                     <TableCell component="th" scope="row">
-                      {plant.coordinates}
+                      {`${plant.coordinates[0] / COORDINATE_PRECISION}, ${plant.coordinates[1] / COORDINATE_PRECISION}`}
                     </TableCell>
                     <TableCell align="right">{plant.hashrate}</TableCell>
                     <TableCell align="right">{plant.miners}</TableCell>

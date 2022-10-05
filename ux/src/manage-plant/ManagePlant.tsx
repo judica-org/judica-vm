@@ -6,6 +6,7 @@ import FormModal from "../form-modal/FormModal";
 import { plant_type_color_map } from "../util";
 import { MoveHashboards } from "../move-hashboards/MoveHashboards";
 import { EntityID } from "../Types/GameMove";
+import { COORDINATE_PRECISION } from "../mint-power-plant/MintingForm";
 
 export type PlantLabel = { readonly id: EntityID, readonly owner: EntityID, readonly watts: string, readonly for_sale: boolean };
 
@@ -46,14 +47,14 @@ export const ManagePlant = ({ asic_token_id, selected_plant, power_plants, user_
           </TableRow>
           <TableCell>Location</TableCell>
           <TableCell >
-            {plantDetail.coordinates}
+            {`${plantDetail.coordinates[0] / COORDINATE_PRECISION}, ${plantDetail.coordinates[1] / COORDINATE_PRECISION}`}
           </TableCell>
           <TableRow>
             <TableCell >Hashrate</TableCell>
             <TableCell >{plantDetail.hashrate}</TableCell>
           </TableRow>
           <TableCell >Miners Allocated</TableCell>
-          <TableCell align="right">{plantDetail.miners}</TableCell>
+          <TableCell >{plantDetail.miners}</TableCell>
 
           <TableRow>
             <TableCell >More Actions</TableCell>

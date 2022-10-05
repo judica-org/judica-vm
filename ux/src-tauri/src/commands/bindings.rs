@@ -1,5 +1,5 @@
 use std::sync::Arc;
-
+use mine_with_friends_board::game::game_move::ListNFTForSale;
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
@@ -12,6 +12,7 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     game_synchronizer,
     get_move_schema,
     get_materials_schema,
+    get_listing_schema,
     get_purchase_schema,
     make_move_inner,
     switch_to_game,
@@ -108,6 +109,11 @@ pub(crate) fn get_purchase_schema() -> RootSchema {
 #[tauri::command]
 pub(crate) fn get_materials_schema() -> RootSchema {
     schema_for!(Trade)
+}
+
+#[tauri::command]
+pub(crate) fn get_listing_schema() -> RootSchema {
+    schema_for!(ListNFTForSale)
 }
 
 #[tauri::command]

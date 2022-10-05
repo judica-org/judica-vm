@@ -9,13 +9,14 @@ const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
 
   useEffect(() => {
     (async () => {
+      tauri_host.get_material_schema
       setSchema(await invoke("get_listing_schema"));
     })()
   }, []);
   console.log("listing schema:", schema);
 
   const handle_submit = (data: FormSubmit) => {
-    tauri_host.make_move_inner(data.formData)
+    tauri_host.make_move_inner({ list_n_f_t_for_sale: data.formData })
   };
 
   // form creater should be extracted out into a form util

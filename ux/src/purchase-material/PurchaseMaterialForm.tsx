@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardContent, FormControl, TextField, Button, Typography, ToggleButtonGroup, ToggleButton } from "@mui/material";
 import Form, { FormSubmit } from "@rjsf/core";
 import React from "react";
-import { MaterialPriceDisplay} from "../App";
+import { MaterialPriceDisplay } from "../App";
 import { SuccessfulTradeOutcome, tauri_host, UnsuccessfulTradeOutcome } from "../tauri_host";
 import { RawMaterialsActions } from "../util";
 
@@ -12,7 +12,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
   const [action, set_action] = React.useState<RawMaterialsActions>(action_in);
   const [market_flipped, set_market_flipped] = React.useState<boolean>(false);
   const [trade_amt, set_trade_amt] = React.useState<number>(0);
-  const [limit_pct, set_limit_pct] = React.useState<number | undefined>(undefined);
+  const [limit_pct, set_limit_pct] = React.useState<number>(0);
   const [formula_result, set_formula_result] = React.useState("");
   const handle_error = (e: UnsuccessfulTradeOutcome) => {
     switch (typeof e) {
@@ -104,7 +104,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
   };
   const parse_limit_pct = (ev: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
     let f = parseFloat(ev.target.value);
-    set_limit_pct(isNaN(f) ? undefined : f);
+    set_limit_pct(isNaN(f) ? 0 : f);
   };
   // for creater should be extracted out into a form util
   return <Card>

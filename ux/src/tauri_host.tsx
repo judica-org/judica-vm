@@ -34,6 +34,9 @@ export const tauri_host = {
   get_material_schema: async () => {
     return invoke("get_materials_schema");
   },
+  get_listing_schema: async () => {
+    return invoke("get_listing_schema");
+  },
   switch_to_game: async (key: string) => {
     return invoke("switch_to_game", { key });
   },
