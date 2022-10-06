@@ -1,12 +1,15 @@
+use super::get::messages::message_exists_children;
 use super::handle_type;
 use super::ChainCommitGroupID;
 use super::MsgDBHandle;
 use crate::db_handle::sql::insert::*;
 use crate::sql_error;
+use crate::sql_error::SqliteFail;
 use crate::sql_serializers::PK;
 use crate::sql_serializers::SK;
 use attest_messages::nonce::PrecomittedNonce;
 use attest_messages::nonce::PrecomittedPublicNonce;
+use attest_messages::Ancestors;
 use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
@@ -19,6 +22,7 @@ use rusqlite::ErrorCode;
 use rusqlite::Transaction;
 use sapio_bitcoin::secp256k1::rand::thread_rng;
 use sapio_bitcoin::secp256k1::rand::Rng;
+
 use sapio_bitcoin::{
     hashes::hex::ToHex,
     secp256k1::{Secp256k1, Signing},
@@ -140,11 +144,27 @@ where
     pub fn try_insert_authenticated_envelope<M>(
         &mut self,
         data: Authenticated<GenericEnvelope<M>>,
+        reuse_safe: bool,
     ) -> Result<Result<(), (sql_error::SqliteFail, Option<String>)>, rusqlite::Error>
     where
         M: AttestEnvelopable,
     {
         let tx = self.0.transaction()?;
+        if reuse_safe {
+            if let Some(prev) = data.header().ancestors().map(Ancestors::prev_msg) {
+                if message_exists_children(&tx, &prev)? {
+                    // just for clarity, drop the txn here and log any error
+                    // (which should never error)
+                    if let Err(e) = tx.rollback() {
+                        debug!(error=?e, "Error Rolling Back Transaction");
+                    }
+                    return Ok(Err((
+                        SqliteFail::SqliteConstraintUnique,
+                        Some("Uniqueness Check: Nonce Already Used".into()),
+                    )));
+                }
+            }
+        }
         let res = try_insert_authenticated_envelope_with_txn(data, &tx);
         tx.commit()?;
         res

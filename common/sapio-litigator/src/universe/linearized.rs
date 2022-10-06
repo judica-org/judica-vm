@@ -10,7 +10,7 @@ use event_log::{
 use tokio::sync::{mpsc::Sender, Notify};
 use tracing::{trace, warn};
 
-use crate::Event;
+use crate::events::{self, TaggedEvent};
 
 // About 25 steps, 1.5 mins, max wait 30s
 const MAX_WAIT_TO_CHECK_LOG: Duration = Duration::from_secs(30);
@@ -19,7 +19,7 @@ const LOG_CHECK_START: Duration = Duration::from_millis(1);
 pub async fn event_log_processor(
     evlog: EventLog,
     evlog_group_id: OccurrenceGroupID,
-    tx: Sender<Event>,
+    tx: Sender<events::Event>,
     new_events_in_evlog: Arc<Notify>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut last = OccurrenceID::before_first_row();
@@ -59,7 +59,7 @@ pub async fn event_log_processor(
             // iterate over all the Ocurrences in the DB.
             // If any Occurrence can't be processed as an Event, return.
             for (occurrence_id, occurrence) in to_process {
-                let ev = Event::from_occurrence(occurrence)?;
+                let TaggedEvent(ev, _) = TaggedEvent::from_occurrence(occurrence)?;
                 if tx.send(ev).await.is_err() {
                     // the reciever has been dropped
                     return Ok(());

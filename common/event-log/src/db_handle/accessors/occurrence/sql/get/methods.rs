@@ -24,10 +24,12 @@ where
             let data: SqlJson = row.get(0)?;
             let time: i64 = row.get(1)?;
             let typeid: ApplicationTypeID = row.get(2)?;
+            let unique_tag: Option<String> = row.get(3)?;
             Ok(Occurrence {
                 data: data.0,
                 time,
                 typeid,
+                unique_tag,
             })
         })?;
         Ok(q)
@@ -42,12 +44,14 @@ where
             let data: SqlJson = row.get(1)?;
             let time: i64 = row.get(2)?;
             let typeid: ApplicationTypeID = row.get(3)?;
+            let unique_tag: Option<String> = row.get(4)?;
             Ok((
                 row_id,
                 Occurrence {
                     data: data.0,
                     time,
                     typeid,
+                    unique_tag,
                 },
             ))
         })?;
@@ -67,12 +71,14 @@ where
                 let data: SqlJson = row.get(1)?;
                 let time: i64 = row.get(2)?;
                 let typeid: ApplicationTypeID = row.get(3)?;
+                let unique_tag: Option<String> = row.get(4)?;
                 Ok((
                     row_id,
                     Occurrence {
                         data: data.0,
                         time,
                         typeid,
+                        unique_tag,
                     },
                 ))
             },

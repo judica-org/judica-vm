@@ -273,6 +273,7 @@ where
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_EXISTS)?;
         stmt.exists([hash.to_hex()])
     }
+
     pub fn message_not_exists_it<'i, I>(
         &self,
         hashes: I,
@@ -289,4 +290,12 @@ where
             })
             .collect()
     }
+}
+
+pub fn message_exists_children<'conn>(
+    tx: &rusqlite::Transaction<'conn>,
+    hash: &CanonicalEnvelopeHash,
+) -> Result<bool, rusqlite::Error> {
+    let mut stmt = tx.prepare_cached(SQL_GET_MESSAGE_EXISTS_CHILDREN)?;
+    stmt.exists(named_params! {":prev_msg": hash})
 }
