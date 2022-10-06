@@ -1,3 +1,17 @@
+//! Module Game Init defineds HTTP Handlers for registering and creating a new game.
+//!
+//! It contains hacks nescessary for an MVP.
+//!
+//! Basic Flow is:
+//!
+//! create_new_game_instance() -> NewGame{password: JoinCode, join: JoinCode}
+//!
+//! for each player:
+//!     add_player(join, genesis envelope) -> ()
+//!
+//! finish_setup(password, join, ... params) -> CreatedNewChain {genesis: Envelope, name: String}
+
+use crate::app::{create_new_attestation_chain, CreatedNewChain};
 use attest_database::connection::MsgDB;
 use attest_messages::{AuthenticationError, GenericEnvelope};
 use axum::{
@@ -25,8 +39,6 @@ use std::{
     sync::{Arc, Weak},
 };
 use tokio::sync::Mutex;
-
-use crate::app::{create_new_attestation_chain, CreatedNewChain};
 
 #[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Copy)]
 #[serde(into = "String")]
@@ -259,7 +271,7 @@ pub async fn finish_setup(
                         let mut handle = msgdb.get_handle().await;
                         for env in authed {
                             handle
-                                .try_insert_authenticated_envelope(env)
+                                .try_insert_authenticated_envelope(env, false)
                                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()))?
                                 // These errors are OK here
                                 .ok();

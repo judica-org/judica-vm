@@ -1,4 +1,7 @@
-use crate::{app::routes::game_init::{NewGameDB, create_new_game_instance, add_player, finish_setup}, Config};
+use crate::{
+    app::routes::game_init::{add_player, create_new_game_instance, finish_setup, NewGameDB},
+    Config,
+};
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
 use attest_messages::CanonicalEnvelopeHash;
 use axum::{
@@ -17,8 +20,8 @@ use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
-use tokio::sync::Mutex;
 use std::{error::Error, net::SocketAddr, sync::Arc};
+use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
 mod routes;
 
