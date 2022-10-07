@@ -64,5 +64,16 @@ export const tauri_host = {
   },
   set_game_host: async (g: { url: string, port: number }): Promise<void> => {
     return invoke("set_game_host", { g });
+  },
+  finalize_game: async (args: FinishArgs): Promise<void> => {
+    return invoke("finalize_game", { args });
   }
 };
+
+export type FinishArgs = {
+  passcode: string,
+  code: string,
+  finish_time: number,
+  start_amount: number,
+
+}

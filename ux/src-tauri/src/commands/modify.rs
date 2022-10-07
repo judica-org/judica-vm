@@ -27,11 +27,13 @@ use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
+use tracing::debug;
 use std::sync::Arc;
 use tauri::async_runtime::Mutex;
 use tauri::State;
 use tokio::spawn;
 use tokio::sync::Notify;
+use tracing::info;
 
 pub(crate) trait ErrToString<E> {
     fn err_to_string(self) -> Result<E, String>;
@@ -67,13 +69,17 @@ pub(crate) async fn make_new_game(
         .create_new_game_instance(&game_host)
         .await
         .map_err(|e| e.to_string())?;
+    info!(?new_game, "New Game Set Up");
     let new_chain = make_new_chain_genesis(nickname, secp, db).await?;
     client
         .add_player(&game_host, (new_game.join, new_chain))
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            debug!(error=?e, "Adding Player Failed");
+            e.to_string()
+        })?;
 
-    tracing::info!("Setting GameInitState to Pending");
+    info!("Setting GameInitState to Pending");
     *game = GameInitState::Pending(Pending {
         join_code: new_game.join,
         password: Some(new_game.password),
@@ -184,10 +190,10 @@ pub(crate) async fn switch_to_game_inner(
     game: GameState<'_>,
     key: XOnlyPublicKey,
 ) -> Result<(), ()> {
-    tracing::info!(?key, "Switching to Sequencer Key");
+    info!(?key, "Switching to Sequencer Key");
     let game = game.inner().clone();
     spawn(async move {
-        tracing::info!("Spawned Game switching Task");
+        info!("Spawned Game switching Task");
         let genesis = {
             let db = db.state.lock().await;
             let db: &DatabaseInner = db.as_ref().ok_or("No Database Set Up")?;
@@ -233,7 +239,7 @@ pub(crate) async fn set_signing_key_inner(
     selected: Option<XOnlyPublicKey>,
     sk: State<'_, SigningKeyInner>,
 ) -> Result<(), ()> {
-    tracing::info!(?selected, "Selecting Key");
+    info!(?selected, "Selecting Key");
     {
         let mut l = sk.inner().lock().await;
         *l = selected;

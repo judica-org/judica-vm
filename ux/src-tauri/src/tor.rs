@@ -1,12 +1,17 @@
-use attest_messages::{GenericEnvelope, Authenticated};
+use crate::config::Globals;
+use attest_messages::{Authenticated, GenericEnvelope};
 use attest_util::{ensure_dir, CrossPlatformPermissions};
-use game_host_messages::{JoinCode, NewGame, FinishArgs, CreatedNewChain};
+use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode, NewGame};
 use game_player_messages::ParticipantAction;
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Display, path::PathBuf, sync::Arc};
+use std::{
+    error::Error,
+    fmt::{Debug, Display},
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::task::JoinHandle;
-use crate::config::Globals;
 
 use crate::{Config, Game};
 
@@ -40,8 +45,8 @@ impl TorConfig {
     }
 }
 
-pub async fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
-    let root_dir = config.tor.root_dir().await;
+pub async fn start(globals: Arc<Globals>) -> JoinHandle<Result<(), Box<dyn Error + Send + Sync>>> {
+    let root_dir = globals.config.tor.root_dir().await;
     tokio::task::spawn_blocking(move || {
         let mut tor = Tor::new();
 
@@ -49,7 +54,7 @@ pub async fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error +
             .flag(TorFlag::DataDirectory(
                 root_dir?.to_str().unwrap().to_owned(),
             ))
-            .flag(TorFlag::SocksPort(config.tor.socks_port))
+            .flag(TorFlag::SocksPort(globals.config.tor.socks_port))
             .start_background()
             .join()
             .map_err(|_| "Join Error at Thread Level")?
@@ -73,6 +78,22 @@ pub struct GameHost {
 const GAME_NEW: &str = "game/new";
 const GAME_ADD_PLAYER: &str = "game/player/new";
 const GAME_FINISH_SETUP: &str = "game/finish";
+
+trait DebugErr<R, E> {
+    fn debug_err(self) -> Result<R, E>;
+}
+impl<R, E> DebugErr<R, E> for Result<R, E>
+where
+    E: Debug,
+{
+    fn debug_err(self) -> Result<R, E> {
+        if let Err(e) = self.as_ref() {
+            tracing::debug!(error=?e, "Request Failed");
+        }
+        self
+    }
+}
+
 impl TorClient {
     pub async fn create_new_game_instance(
         &self,
@@ -81,9 +102,11 @@ impl TorClient {
         self.client
             .post(format!("http://{}:{}/{}", url, port, GAME_NEW))
             .send()
-            .await?
+            .await
+            .debug_err()?
             .json()
             .await
+            .debug_err()
     }
 
     pub async fn add_player(
@@ -95,9 +118,11 @@ impl TorClient {
             .post(format!("http://{}:{}/{}", url, port, GAME_ADD_PLAYER))
             .json(&args)
             .send()
-            .await?
+            .await
+            .debug_err()?
             .json()
             .await
+            .debug_err()
     }
 
     pub async fn finish_setup(
@@ -109,35 +134,35 @@ impl TorClient {
             .post(format!("http://{}:{}/{}", url, port, GAME_FINISH_SETUP))
             .json(&f)
             .send()
-            .await?
+            .await
+            .debug_err()?
             .json()
             .await
+            .debug_err()
     }
 }
 
 impl Globals {
     pub async fn get_client(self: &Arc<Globals>) -> Result<TorClient, reqwest::Error> {
-            self.client
-                .get_or_try_init(|| async {
+        self.client
+            .get_or_try_init(|| async {
                 let mut bld = reqwest::Client::builder();
-            let tor_config = self.config.tor.clone();
-                    // Local Pass if in test mode
-                    // TODO: make this programmatic?
-                    #[cfg(test)]
-                    {
-                        bld = bld.proxy(reqwest::Proxy::custom(move |url| {
-                            if url.host_str() == Some("127.0.0.1") {
-                                Some("127.0.0.1")
-                            } else {
-                                None
-                            }
-                        }));
-                    }
-                    let proxy = reqwest::Proxy::all(format!(
-                        "socks5h://127.0.0.1:{}",
-                        tor_config.socks_port
-                    ))?;
-                    bld = bld.proxy(proxy);
+                let tor_config = self.config.tor.clone();
+                // Local Pass if in test mode
+                // TODO: make this programmatic?
+                #[cfg(test)]
+                {
+                    bld = bld.proxy(reqwest::Proxy::custom(move |url| {
+                        if url.host_str() == Some("127.0.0.1") {
+                            Some("127.0.0.1")
+                        } else {
+                            None
+                        }
+                    }));
+                }
+                let proxy =
+                    reqwest::Proxy::all(format!("socks5h://127.0.0.1:{}", tor_config.socks_port))?;
+                bld = bld.proxy(proxy);
                 let inner_client = bld.build()?;
                 let client = TorClient {
                     client: inner_client,

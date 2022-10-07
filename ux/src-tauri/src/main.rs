@@ -11,6 +11,7 @@ use mine_with_friends_board::game::GameBoard;
 use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
 use serde::Deserialize;
 use serde::Serialize;
+use tor::start;
 use std::{error::Error, path::PathBuf, sync::Arc};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, window, Manager, State};
@@ -146,6 +147,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .connect_to_db_if_set(db_for_setup.clone())
                     .await
                     .map_err(|_| "Failed to Connect to provided DB");
+                start(globals.clone()).await;
                 let client: TorClient = globals.get_client().await.map_err(|e| e.to_string())?;
                 Ok::<(), Box<dyn Error + Sync + Send + 'static>>(())
             });

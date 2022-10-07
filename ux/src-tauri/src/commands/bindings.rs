@@ -3,6 +3,7 @@ use super::{view::SyncError, *};
 use crate::config::Globals;
 use crate::tor::{GameHost, TorClient};
 use crate::Game;
+use game_host_messages::{FinishArgs, CreatedNewChain};
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
@@ -28,6 +29,7 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     super_mint,
     simulate_trade,
     set_game_host,
+    finalize_game,
 ];
 #[tauri::command]
 pub async fn simulate_trade(
@@ -150,6 +152,20 @@ pub(crate) async fn make_new_game(
     game: GameState<'_>,
 ) -> Result<(), String> {
     modify::make_new_game(nickname, secp, db, client, game_host, game).await
+}
+
+#[tauri::command]
+pub(crate) async fn finalize_game(
+    args: FinishArgs,
+    globals: State<'_, Arc<Globals>>,
+    game_host_s: State<'_, Arc<Mutex<Option<GameHost>>>>,
+) -> Result<CreatedNewChain,  String> {
+    let client = globals.get_client().await.map_err(|e| e.to_string())?;
+    let game_host = game_host_s.lock().await.clone().ok_or("No Host")?;
+    client
+        .finish_setup(&game_host, args)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -16,7 +16,7 @@ pub struct FinishArgs {
     pub finish_time: u64,
     pub start_amount: u64,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NewGame {
     pub password: JoinCode,
     pub join: JoinCode,
