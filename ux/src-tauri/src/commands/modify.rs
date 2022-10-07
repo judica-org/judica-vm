@@ -87,7 +87,7 @@ pub(crate) async fn make_new_game(
         join_code: new_game.join,
         password: Some(new_game.password),
     });
-    trigger.should_notify.notify_one();
+    trigger.notify();
     Ok(())
 }
 pub(crate) async fn make_new_chain_genesis(
@@ -147,7 +147,7 @@ pub(crate) async fn make_new_chain_inner(
         join_code: code,
         password: None,
     });
-    trigger.should_notify.notify_one();
+    trigger.notify().map_err(|e| "Hung Up")?;
     Ok(())
 }
 
@@ -276,7 +276,7 @@ pub(crate) async fn set_signing_key_inner(
         *l = selected;
     }
     {
-        trigger.should_notify.notify_one()
+        trigger.notify().map_err(|e| ())?;
     }
 
     Ok(())

@@ -72,9 +72,12 @@ pub(crate) async fn game_synchronizer_inner(
                     }
                     SyncError::KeyUnknownByGame | SyncError::DatabaseError => return Err(e),
                     SyncError::NoGameHost => {}
+                    SyncError::HungUp => return Err(SyncError::HungUp),
                 }
             }
         }
+
+        trigger.take().await.recv().await.ok_or(SyncError::HungUp)?;
     }
 }
 
@@ -95,6 +98,7 @@ async fn in_joining_mode(
 
 #[derive(Serialize, Debug, Clone)]
 pub enum SyncError {
+    HungUp,
     NoGameHost,
     NoSigningKey,
     NoGame,
@@ -193,23 +197,13 @@ async fn game_synchronizer_inner_loop(
         .and_then(|()| emit(window, "user-keys", user_keys))
         .expect("All window emits should succeed");
 
-    let (
-        gamestring,
-        wait_on,
-        key,
-        chat_log,
-        user_inventory,
-        raw_price_data,
-        power_plants,
-        listings,
-    ) = {
+    let (gamestring, key, chat_log, user_inventory, raw_price_data, power_plants, listings) = {
         let mut game = s.lock().await;
         let game = game.game_mut().ok_or(SyncError::NoGame)?;
         let s = serde_json::to_value(&game.board).unwrap_or_else(|e| {
             tracing::warn!(error=?e, "Failed to Serialized Game Board");
             serde_json::Value::Null
         });
-        let w: Notified = trigger.should_notify.notified();
         let chat_log = game.board.get_ux_chat_log();
         let user_inventory = signing_key
             .as_ref()
@@ -230,7 +224,6 @@ async fn game_synchronizer_inner_loop(
 
         (
             s,
-            w,
             game.host_key,
             chat_log,
             user_inventory,
@@ -254,7 +247,6 @@ async fn game_synchronizer_inner_loop(
             Ok(())
         })
         .expect("All window emits should succeed");
-    wait_on.await;
     Ok(())
 }
 

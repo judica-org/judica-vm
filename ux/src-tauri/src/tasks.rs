@@ -151,7 +151,9 @@ pub(crate) fn start_game(
                     debug!(reason=?err, "Rejected Move");
                 } else {
                     // TODO: Maybe notify less often?
-                    trigger.should_notify.notify_waiters();
+                    if trigger.notify().is_err() {
+                        return;
+                    }
                     info!("NOTIFYING Waiters of New State");
                 }
             }

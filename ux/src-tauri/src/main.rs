@@ -11,10 +11,13 @@ use mine_with_friends_board::game::GameBoard;
 use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
 use serde::Deserialize;
 use serde::Serialize;
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::error::TrySendError;
 use std::{error::Error, path::PathBuf, sync::Arc};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, window, Manager, State};
 use tokio::sync::Notify;
+use tokio::sync::OwnedMutexGuard;
 use tor::start;
 use tor::GameHost;
 use tor::TorClient;
@@ -47,8 +50,31 @@ pub struct Pending {
 
 #[derive(Clone)]
 pub struct TriggerRerender {
-    should_notify: Arc<Notify>,
+    notify: tokio::sync::mpsc::Sender<()>,
+    get_notif: Arc<Mutex<Receiver<()>>>,
 }
+
+impl TriggerRerender {
+    fn new() -> TriggerRerender {
+        let (tx, rx) = tokio::sync::mpsc::channel(1);
+        Self {
+            notify: tx,
+            get_notif: Arc::new(Mutex::new(rx)),
+        }
+    }
+    fn notify(&self) -> Result<(), TrySendError<()>> {
+        let e = self.notify.try_send(());
+        if let Err(TrySendError::Full(())) = e {
+            Ok(())
+        } else {
+            e
+        }
+    }
+    async fn take(&self) -> OwnedMutexGuard<Receiver<()>> {
+        self.get_notif.clone().lock_owned().await
+    }
+}
+
 pub enum GameInitState {
     Game(Game),
     Pending(Pending),
@@ -130,9 +156,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("No Config")?;
     };
     tauri::Builder::default()
-        .manage(TriggerRerender {
-            should_notify: Arc::new(Default::default()),
-        })
+        .manage(TriggerRerender::new())
         .manage(Arc::new(Secp256k1::new()))
         .manage(game)
         .manage(db)
