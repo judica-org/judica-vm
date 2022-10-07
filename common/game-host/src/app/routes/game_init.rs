@@ -18,6 +18,7 @@ use axum::{
     http::{Response, StatusCode},
     Extension, Json,
 };
+use game_host_messages::{JoinCode, FinishArgs, NewGame, AddPlayerError};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
     game::{game_move::GameMove, GameSetup},
@@ -40,33 +41,6 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-#[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Copy)]
-#[serde(into = "String")]
-#[serde(try_from = "String")]
-pub struct JoinCode([u8; 16]);
-impl TryFrom<String> for JoinCode {
-    type Error = sapio_bitcoin::hashes::hex::Error;
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        FromHex::from_hex(&value).map(JoinCode)
-    }
-}
-impl From<JoinCode> for String {
-    fn from(s: JoinCode) -> Self {
-        s.0.to_hex()
-    }
-}
-impl JoinCode {
-    fn new() -> Self {
-        let mut rng = thread_rng();
-        JoinCode(rng.gen())
-    }
-}
-
-impl Default for JoinCode {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 struct Metadata {
     state: Mutex<GameStartingState>,
@@ -119,19 +93,6 @@ impl NewGameDB {
 }
 const MAX_PLAYERS: usize = 10;
 
-#[derive(Debug, Serialize, Deserialize)]
-enum AddPlayerError {
-    AlreadySetup,
-    NoMorePlayers,
-    NotGenesisEnvelope,
-    WrongFirstMessage,
-}
-impl Display for AddPlayerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(self, f)
-    }
-}
-impl Error for AddPlayerError {}
 impl GameStartingState {
     fn new() -> GameStartingState {
         GameStartingState::AddingPlayers(vec![])
@@ -188,11 +149,6 @@ impl GameStartingState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct NewGame {
-    password: JoinCode,
-    join: JoinCode,
-}
 pub async fn create_new_game_instance(
     Extension(db): Extension<Arc<Mutex<NewGameDB>>>,
 ) -> Result<(Response<()>, Json<NewGame>), (StatusCode, &'static str)> {
@@ -233,13 +189,6 @@ pub async fn add_player(
     ))
 }
 
-#[derive(Deserialize)]
-pub struct FinishArgs {
-    passcode: JoinCode,
-    code: JoinCode,
-    finish_time: u64,
-    start_amount: u64,
-}
 
 pub async fn finish_setup(
     msgdb: Extension<MsgDB>,

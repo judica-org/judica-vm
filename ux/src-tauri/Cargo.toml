@@ -56,6 +56,15 @@ features = ["database_access"]
 version = "0.28.1"
 features= ['use-serde', 'rand']
 
+[dependencies.libtor]
+version = "47.7.0+0.4.7.x"
+
+[dependencies.openssl-sys]
+features = ["vendored"]
+[dependencies.reqwest]
+version="=0.11.10"
+features= ["socks", "json"]
+
 [features]
 # by default Tauri runs in production mode
 # when `tauri dev` runs it is executed with `cargo run --no-default-features` if `devPath` is an URL

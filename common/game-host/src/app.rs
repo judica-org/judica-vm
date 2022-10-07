@@ -13,7 +13,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use game_host_messages::{BroadcastByHost, Channelized, Peer};
+use game_host_messages::{BroadcastByHost, Channelized, CreatedNewChain, Peer};
 use mine_with_friends_board::game::GameSetup;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
@@ -82,12 +82,6 @@ pub async fn add_new_peer(
             .expect("Response<()> should always be valid"),
         Json(json!("Success")),
     ))
-}
-
-#[derive(Serialize)]
-pub struct CreatedNewChain {
-    pub genesis_hash: CanonicalEnvelopeHash,
-    pub group_name: String,
 }
 
 fn flip<T, E1, E2>(r: Result<Result<T, E1>, E2>) -> Result<Result<T, E2>, E1> {

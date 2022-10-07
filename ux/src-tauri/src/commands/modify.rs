@@ -1,11 +1,18 @@
+use crate::config::Globals;
 use crate::tasks::GameServer;
+use crate::tor::GameHost;
+use crate::tor::TorClient;
 use crate::Database;
 use crate::DatabaseInner;
 use crate::Game;
+use crate::GameInitState;
 use crate::GameState;
+use crate::Pending;
 use crate::SigningKeyInner;
 use attest_database::db_handle::create::TipControl;
 use attest_database::generate_new_user;
+use attest_messages::Authenticated;
+use attest_messages::GenericEnvelope;
 use game_host_messages::BroadcastByHost;
 use game_host_messages::Channelized;
 use game_player_messages::ParticipantAction;
@@ -35,11 +42,45 @@ impl<E, T: std::fmt::Debug> ErrToString<E> for Result<E, T> {
     }
 }
 
-pub(crate) async fn make_new_chain_inner(
+pub(crate) async fn make_new_game(
     nickname: String,
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
-) -> Result<String, String> {
+    globals: State<'_, Arc<Globals>>,
+    game_host: State<'_, GameHost>,
+    game: GameState<'_>,
+) -> Result<(), String> {
+    let mut game = game.lock().await;
+    if game.is_none() {
+        let client = globals
+            .inner()
+            .get_client()
+            .await
+            .map_err(|e| e.to_string())?;
+        let new_game = client
+            .create_new_game_instance(game_host.inner())
+            .await
+            .map_err(|e| e.to_string())?;
+        let new_chain = make_new_chain_genesis(nickname, secp, db).await?;
+        client
+            .add_player(game_host.inner(), (new_game.join, new_chain))
+            .await
+            .map_err(|e| e.to_string())?;
+
+        *game = GameInitState::Pending(Pending {
+            join_code: new_game.join,
+            password: Some(new_game.password),
+        });
+        Ok(())
+    } else {
+        Err("Game State Not Null".into())
+    }
+}
+pub(crate) async fn make_new_chain_genesis(
+    nickname: String,
+    secp: State<'_, Arc<Secp256k1<All>>>,
+    db: State<'_, Database>,
+) -> Result<Authenticated<GenericEnvelope<ParticipantAction>>, String> {
     let (kp, next_nonce, genesis) = generate_new_user::<_, ParticipantAction, _>(
         secp.inner(),
         MoveEnvelope {
@@ -56,11 +97,18 @@ pub(crate) async fn make_new_chain_inner(
     handle.save_keypair(kp).err_to_string()?;
     let k = kp.public_key().x_only_public_key().0;
     handle.save_nonce_for_user_by_key(next_nonce, secp.inner(), k);
-    handle.insert_user_by_genesis_envelope(
-        nickname,
-        genesis.self_authenticate(secp.inner()).err_to_string()?,
-    );
-    Ok(k.to_hex())
+
+    let envelope = genesis.self_authenticate(secp.inner()).err_to_string()?;
+    handle.insert_user_by_genesis_envelope(nickname, envelope.clone());
+    Ok(envelope)
+}
+pub(crate) async fn make_new_chain_inner(
+    nickname: String,
+    secp: State<'_, Arc<Secp256k1<All>>>,
+    db: State<'_, Database>,
+) -> Result<String, String> {
+    let k = make_new_chain_genesis(nickname, secp, db).await?;
+    Ok(k.header().key().to_hex())
 }
 
 pub(crate) async fn make_move_inner_inner(
@@ -157,15 +205,19 @@ pub(crate) async fn switch_to_game_inner(
 
         let game2 = game.clone();
         let mut g = game2.lock().await;
-        g.as_mut()
-            .map(|game| game.server.as_ref().map(|s| s.shutdown()));
+        match &*g {
+            GameInitState::Game(g) => {
+                g.server.as_ref().map(|s| s.shutdown());
+            }
+            GameInitState::Pending(_) | GameInitState::None => {}
+        }
         let new_game = Game {
             board: GameBoard::new(game_setup),
             should_notify: Arc::new(Notify::new()),
             host_key: key,
             server: None,
         };
-        *g = Some(new_game);
+        *g = GameInitState::Game(new_game);
         GameServer::start(secp, singing_key, db, g, game).await?;
         Ok::<(), &'static str>(())
     });
@@ -184,7 +236,7 @@ pub(crate) async fn set_signing_key_inner(
     }
     {
         let l = s.lock().await;
-        if let Some(g) = l.as_ref() {
+        if let GameInitState::Game(g) = &*l {
             g.should_notify.notify_one()
         }
     }

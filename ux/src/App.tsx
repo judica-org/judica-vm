@@ -168,8 +168,17 @@ function App() {
   const [available_sequencers, set_available_sequencers] = React.useState<Array<[string, string]>>([]);
   const [signing_key, set_signing_key] = useState<string | null>(null);
   const [available_keys, set_available_keys] = useState<string[]>([]);
+  const [join_code, set_join_code] = useState<string|null>(null);
+  const [join_password, set_join_password] = useState<string|null>(null);
   useEffect(() => {
 
+    type JoinGame = { join_code: string, password: string | null };
+    const unlisten_game_init_admin = appWindow.listen("game-init-admin", (ev) => {
+      const { join_code, password }: JoinGame = ev.payload as JoinGame;
+      console.log(["Pending Game"], join_code, password);
+      set_join_code(join_code);
+      set_join_password(password);
+    })
 
     const unlisten_user_keys = appWindow.listen("user-keys", (ev) => {
       console.log(["available keys"], ev.payload);
@@ -239,6 +248,7 @@ function App() {
       (async () => {
         const unlisten_all = await Promise.all([
           unlisten_signing_key,
+          unlisten_game_init_admin,
           unlisten_user_keys,
           unlisten_chat_log,
           unlisten_energy_exchange,
@@ -274,7 +284,7 @@ function App() {
   return (
     <div>
       <div className="App">
-        <DrawerAppBar {...{ db_name_loaded, available_sequencers, which_game_loaded, signing_key, available_keys }}></DrawerAppBar>
+        <DrawerAppBar {...{ db_name_loaded, available_sequencers, which_game_loaded, signing_key, available_keys, join_code, join_password }}></DrawerAppBar>
         <div className="Content">
           <WorkingGlobe></WorkingGlobe>
           <Box className="DataDisplay">

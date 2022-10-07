@@ -1,13 +1,14 @@
-use std::sync::Arc;
-
+use super::view::TradeType;
+use super::{view::SyncError, *};
+use crate::config::Globals;
+use crate::tor::{GameHost, TorClient};
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
+use std::sync::Arc;
 use tauri::{generate_handler, Invoke};
 
-use super::view::TradeType;
-use super::{view::SyncError, *};
 pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     game_synchronizer,
     get_move_schema,
@@ -124,6 +125,18 @@ pub(crate) async fn make_new_chain(
     db: State<'_, Database>,
 ) -> Result<String, String> {
     modify::make_new_chain_inner(nickname, secp, db).await
+}
+
+#[tauri::command]
+pub(crate) async fn make_new_game(
+    nickname: String,
+    secp: State<'_, Arc<Secp256k1<All>>>,
+    db: State<'_, Database>,
+    client: State<'_, Arc<Globals>>,
+    game_host: State<'_, GameHost>,
+    game: GameState<'_>,
+) -> Result<(), String> {
+    modify::make_new_game(nickname, secp, db, client, game_host, game).await
 }
 
 #[tauri::command]

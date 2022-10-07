@@ -1,14 +1,14 @@
-use std::sync::Arc;
-
-use crate::{Database, Game, GameState, PrintOnDrop, SigningKeyInner};
-
+use crate::{
+    Database, Game, GameInitState, GameState, GameStateInner, Pending, PrintOnDrop, SigningKeyInner,
+};
 use mine_with_friends_board::{
     nfts::{instances::powerplant::PlantType, sale::UXForSaleList, NftPtr, UXPlantData},
     tokens::token_swap::{TradeError, TradeOutcome, TradingPairID},
 };
 use sapio_bitcoin::XOnlyPublicKey;
-
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::sync::futures::Notified;
 use tracing::info;
@@ -21,6 +21,23 @@ pub(crate) async fn game_synchronizer_inner(
 ) -> Result<(), SyncError> {
     info!("Registering Window for State Updates");
     let _p = PrintOnDrop("Registration Canceled".into());
+    tokio::spawn({
+        let s = s.inner().clone();
+        let window = window.clone();
+        async move {
+            loop {
+                if in_joining_mode(&s, &window, true).await? {
+                    // wait till not pending
+                    while in_joining_mode(&s, &window, false).await? {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                } else {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                };
+            }
+            Some(())
+        }
+    });
     loop {
         match game_synchronizer_inner_loop(signing_key.inner(), s.inner(), d.inner(), &window).await
         {
@@ -37,6 +54,21 @@ pub(crate) async fn game_synchronizer_inner(
             }
         }
     }
+}
+
+async fn in_joining_mode(
+    s: &Arc<Mutex<GameInitState>>,
+    window: &Window,
+    should_emit: bool,
+) -> Option<bool> {
+    Some(if let GameInitState::Pending(p) = &*s.lock().await {
+        if should_emit {
+            emit(window, "game-init-admin", &p).ok()?;
+        }
+        true
+    } else {
+        false
+    })
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -71,7 +103,7 @@ impl<T, E1, E2> ResultFlipExt for Result<Result<T, E1>, E2> {
 
 async fn game_synchronizer_inner_loop(
     signing_key: &Arc<Mutex<Option<XOnlyPublicKey>>>,
-    s: &Arc<Mutex<Option<Game>>>,
+    s: &Arc<Mutex<GameInitState>>,
     d: &Database,
     window: &Window,
 ) -> Result<(), SyncError> {
@@ -128,7 +160,7 @@ async fn game_synchronizer_inner_loop(
         listings,
     ) = {
         let mut game = s.lock().await;
-        let game = game.as_mut().ok_or(SyncError::NoGame)?;
+        let game = game.game_mut().ok_or(SyncError::NoGame)?;
         let s = serde_json::to_value(&game.board).unwrap_or_else(|e| {
             tracing::warn!(error=?e, "Failed to Serialized Game Board");
             serde_json::Value::Null
@@ -246,7 +278,7 @@ pub(crate) async fn mint_power_plant_cost(
         .await
         .ok_or(SyncError::NoSigningKey)?;
     let mut game = s.inner().lock().await;
-    let game = game.as_mut().ok_or(SyncError::NoGame)?;
+    let game = game.game_mut().ok_or(SyncError::NoGame)?;
     let current_prices =
         game.board
             .get_power_plant_cost(scale, location, plant_type, signing_key.to_string())?;
@@ -273,7 +305,7 @@ pub(crate) async fn simulate_trade(
     let sk = &sk.ok_or(SyncError::NoSigningKey)?;
     let sk = sk.to_string();
     let mut game = s.inner().lock().await;
-    let game = game.as_mut().ok_or(SyncError::NoGame)?;
+    let game = game.game_mut().ok_or(SyncError::NoGame)?;
     let sender = game
         .board
         .get_user_id(&sk)
