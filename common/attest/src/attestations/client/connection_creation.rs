@@ -73,8 +73,11 @@ impl AttestationClient {
                 let db = self.db.clone();
                 spawn(async move {
                     let socket = loop {
-                        if let Ok(socket) =
-                            tungstenite_client_adaptor::ClientWebSocket::connect(&g, svc_url.clone()).await
+                        if let Ok(socket) = tungstenite_client_adaptor::ClientWebSocket::connect(
+                            &g,
+                            svc_url.clone(),
+                        )
+                        .await
                         {
                             break socket;
                         }
