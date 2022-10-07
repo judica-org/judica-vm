@@ -9,12 +9,14 @@ use crate::GameInitState;
 use crate::GameState;
 use crate::Pending;
 use crate::SigningKeyInner;
+use crate::TriggerRerender;
 use attest_database::db_handle::create::TipControl;
 use attest_database::generate_new_user;
 use attest_messages::Authenticated;
 use attest_messages::GenericEnvelope;
 use game_host_messages::BroadcastByHost;
 use game_host_messages::Channelized;
+use game_host_messages::JoinCode;
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::entity::EntityID;
 use mine_with_friends_board::game::game_move::GameMove;
@@ -27,12 +29,12 @@ use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
-use tracing::debug;
 use std::sync::Arc;
 use tauri::async_runtime::Mutex;
 use tauri::State;
 use tokio::spawn;
 use tokio::sync::Notify;
+use tracing::debug;
 use tracing::info;
 
 pub(crate) trait ErrToString<E> {
@@ -52,6 +54,7 @@ pub(crate) async fn make_new_game(
     globals: State<'_, Arc<Globals>>,
     game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
+    trigger: TriggerRerender,
 ) -> Result<(), String> {
     let game_host = game_host_state.inner().lock().await.clone();
     let game_host = game_host.ok_or("Must be connected to some host")?;
@@ -84,6 +87,7 @@ pub(crate) async fn make_new_game(
         join_code: new_game.join,
         password: Some(new_game.password),
     });
+    trigger.should_notify.notify_one();
     Ok(())
 }
 pub(crate) async fn make_new_chain_genesis(
@@ -114,11 +118,37 @@ pub(crate) async fn make_new_chain_genesis(
 }
 pub(crate) async fn make_new_chain_inner(
     nickname: String,
+    code: JoinCode,
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
-) -> Result<String, String> {
+    globals: State<'_, Arc<Globals>>,
+    game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
+    game: GameState<'_>,
+    trigger: TriggerRerender,
+) -> Result<(), String> {
+    let game_host = game_host_state.inner().lock().await.clone();
+    let game_host = game_host.ok_or("Must be connected to some host")?;
     let k = make_new_chain_genesis(nickname, secp, db).await?;
-    Ok(k.header().key().to_hex())
+    let client = globals.get_client().await.map_err(|_| "No Client")?;
+    let mut game = game.lock().await;
+    if game.game_mut().is_some() {
+        Err("Must not be in Game State")?;
+    }
+    client
+        .add_player(&game_host, (code, k))
+        .await
+        .map_err(|e| {
+            debug!(error=?e, "Adding Player Failed");
+            e.to_string()
+        })?;
+
+    info!("Setting GameInitState to Pending");
+    *game = GameInitState::Pending(Pending {
+        join_code: code,
+        password: None,
+    });
+    trigger.should_notify.notify_one();
+    Ok(())
 }
 
 pub(crate) async fn make_move_inner_inner(
@@ -189,6 +219,7 @@ pub(crate) async fn switch_to_game_inner(
     db: Database,
     game: GameState<'_>,
     key: XOnlyPublicKey,
+    trigger: TriggerRerender,
 ) -> Result<(), ()> {
     info!(?key, "Switching to Sequencer Key");
     let game = game.inner().clone();
@@ -223,12 +254,11 @@ pub(crate) async fn switch_to_game_inner(
         }
         let new_game = Game {
             board: GameBoard::new(game_setup),
-            should_notify: Arc::new(Notify::new()),
             host_key: key,
             server: None,
         };
         *g = GameInitState::Game(new_game);
-        GameServer::start(secp, singing_key, db, g, game).await?;
+        GameServer::start(secp, singing_key, db, g, game, trigger).await?;
         Ok::<(), &'static str>(())
     });
     Ok(())
@@ -238,6 +268,7 @@ pub(crate) async fn set_signing_key_inner(
     s: GameState<'_>,
     selected: Option<XOnlyPublicKey>,
     sk: State<'_, SigningKeyInner>,
+    trigger: TriggerRerender,
 ) -> Result<(), ()> {
     info!(?selected, "Selecting Key");
     {
@@ -245,10 +276,7 @@ pub(crate) async fn set_signing_key_inner(
         *l = selected;
     }
     {
-        let l = s.lock().await;
-        if let GameInitState::Game(g) = &*l {
-            g.should_notify.notify_one()
-        }
+        trigger.should_notify.notify_one()
     }
 
     Ok(())

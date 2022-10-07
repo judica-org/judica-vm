@@ -46,8 +46,8 @@ export const tauri_host = {
   send_chat: async (chat: string) => {
     return invoke("send_chat", { chat })
   },
-  make_new_chain: async (nickname: string) => {
-    return invoke("make_new_chain", { nickname });
+  join_existing_game: async (nickname: string, code: string) => {
+    return invoke("make_new_chain", { nickname, code});
   },
   make_new_game: async (nickname: string) => {
     return invoke("make_new_game", { nickname });

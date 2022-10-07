@@ -1,8 +1,8 @@
 use crate::{
     tor::GameHost, Database, Game, GameInitState, GameState, GameStateInner, Pending, PrintOnDrop,
-    SigningKeyInner,
+    SigningKeyInner, TriggerRerender,
 };
-use game_host_messages::{BroadcastByHost, Channelized};
+use game_host_messages::{BroadcastByHost, Channelized, JoinCode};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
     game::GameSetup,
@@ -22,6 +22,7 @@ pub(crate) async fn game_synchronizer_inner(
     s: GameState<'_>,
     d: State<'_, Database>,
     g: State<'_, Arc<Mutex<Option<GameHost>>>>,
+    trigger: TriggerRerender,
     signing_key: State<'_, SigningKeyInner>,
 ) -> Result<(), SyncError> {
     info!("Registering Window for State Updates");
@@ -29,12 +30,19 @@ pub(crate) async fn game_synchronizer_inner(
     tokio::spawn({
         let s = s.inner().clone();
         let window = window.clone();
+        let trigger = trigger.clone();
         async move {
             loop {
-                if in_joining_mode(&s, &window, true).await? {
+                let mut last = in_joining_mode(&s, &window, None).await?;
+                if last.is_some() {
                     // wait till not pending
-                    while in_joining_mode(&s, &window, false).await? {
-                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    'in_mode: loop {
+                        last = in_joining_mode(&s, &window, last).await?;
+                        if last.is_some() {
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        } else {
+                            break 'in_mode;
+                        }
                     }
                 } else {
                     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -50,6 +58,7 @@ pub(crate) async fn game_synchronizer_inner(
             g.inner(),
             d.inner(),
             &window,
+            trigger.clone(),
         )
         .await
         {
@@ -72,15 +81,15 @@ pub(crate) async fn game_synchronizer_inner(
 async fn in_joining_mode(
     s: &Arc<Mutex<GameInitState>>,
     window: &Window,
-    should_emit: bool,
-) -> Option<bool> {
+    should_emit_on_change: Option<JoinCode>,
+) -> Option<Option<JoinCode>> {
     Some(if let GameInitState::Pending(p) = &*s.lock().await {
-        if should_emit {
+        if should_emit_on_change != Some(p.join_code) {
             emit(window, "game-init-admin", &p).ok()?;
         }
-        true
+        Some(p.join_code)
     } else {
-        false
+        None
     })
 }
 
@@ -121,6 +130,7 @@ async fn game_synchronizer_inner_loop(
     game_host: &Arc<Mutex<Option<GameHost>>>,
     d: &Database,
     window: &Window,
+    trigger: TriggerRerender,
 ) -> Result<(), SyncError> {
     let (db_connection, list_of_chains, user_keys) = {
         let l = d.state.lock().await;
@@ -183,12 +193,6 @@ async fn game_synchronizer_inner_loop(
         .and_then(|()| emit(window, "user-keys", user_keys))
         .expect("All window emits should succeed");
 
-    // No Idea why the borrow checker likes this, but it seems to be the case
-    // that because the notified needs to live inside the async state machine
-    // hapily, giving a stable reference to it tricks the compiler into thinking
-    // that the lifetime is 'static and we can successfully wait on it outside
-    // the lock.
-    let mut arc_cheat = None;
     let (
         gamestring,
         wait_on,
@@ -205,8 +209,7 @@ async fn game_synchronizer_inner_loop(
             tracing::warn!(error=?e, "Failed to Serialized Game Board");
             serde_json::Value::Null
         });
-        arc_cheat = Some(game.should_notify.clone());
-        let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
+        let w: Notified = trigger.should_notify.notified();
         let chat_log = game.board.get_ux_chat_log();
         let user_inventory = signing_key
             .as_ref()
@@ -251,11 +254,7 @@ async fn game_synchronizer_inner_loop(
             Ok(())
         })
         .expect("All window emits should succeed");
-    if let Some(w) = wait_on {
-        w.await;
-    } else {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    }
+    wait_on.await;
     Ok(())
 }
 

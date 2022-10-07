@@ -11,11 +11,11 @@ use mine_with_friends_board::game::GameBoard;
 use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
 use serde::Deserialize;
 use serde::Serialize;
-use tor::start;
 use std::{error::Error, path::PathBuf, sync::Arc};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, window, Manager, State};
 use tokio::sync::Notify;
+use tor::start;
 use tor::GameHost;
 use tor::TorClient;
 use tracing::info;
@@ -35,7 +35,6 @@ impl Drop for PrintOnDrop {
 
 pub struct Game {
     board: GameBoard,
-    should_notify: Arc<Notify>,
     host_key: XOnlyPublicKey,
     server: Option<Arc<GameServer>>,
 }
@@ -46,6 +45,10 @@ pub struct Pending {
     pub password: Option<JoinCode>,
 }
 
+#[derive(Clone)]
+pub struct TriggerRerender {
+    should_notify: Arc<Notify>,
+}
 pub enum GameInitState {
     Game(Game),
     Pending(Pending),
@@ -127,6 +130,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("No Config")?;
     };
     tauri::Builder::default()
+        .manage(TriggerRerender {
+            should_notify: Arc::new(Default::default()),
+        })
         .manage(Arc::new(Secp256k1::new()))
         .manage(game)
         .manage(db)

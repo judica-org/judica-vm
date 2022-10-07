@@ -9,6 +9,7 @@ export interface NewGameProps {
 };
 export function NewGame({ join_code, join_password }: NewGameProps) {
   const [nick, set_nick] = React.useState<null | string>(null);
+  const [join_code_form, set_join_code_form] = React.useState<null | string>(null);
 
   const [join_or_new, set_join_or_new] = React.useState(false);
   const [is_finalizing, set_is_finalizing] = React.useState(false);
@@ -18,7 +19,7 @@ export function NewGame({ join_code, join_password }: NewGameProps) {
     ev.preventDefault();
     set_is_creating(true);
     if (join_or_new) {
-      nick && await tauri_host.make_new_chain(nick);
+      nick && join_code_form && await tauri_host.join_existing_game(nick, join_code_form);
     } else {
       nick && await tauri_host.make_new_game(nick);
     }
@@ -47,7 +48,7 @@ export function NewGame({ join_code, join_password }: NewGameProps) {
 
       <TextField label='Chain Nickname' onChange={(ev) => set_nick(ev.target.value)}></TextField>
       {
-        join_or_new && <TextField label='Join Code' onChange={(ev) => set_nick(ev.target.value)}></TextField>
+        join_or_new && <TextField label='Join Code' onChange={(ev) => set_join_code_form(ev.target.value)}></TextField>
       }
       <Button variant="contained" type="submit" onClick={handle_click} disabled={is_creating}>
         {action} {is_creating? "Pending...":"Game"}

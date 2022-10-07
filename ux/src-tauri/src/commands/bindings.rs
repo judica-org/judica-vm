@@ -2,8 +2,8 @@ use super::view::TradeType;
 use super::{view::SyncError, *};
 use crate::config::Globals;
 use crate::tor::{GameHost, TorClient};
-use crate::Game;
-use game_host_messages::{FinishArgs, CreatedNewChain};
+use crate::{Game, TriggerRerender};
+use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode};
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
@@ -48,8 +48,17 @@ pub async fn game_synchronizer(
     d: State<'_, Database>,
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
+    trigger: State<'_, TriggerRerender>,
 ) -> Result<(), SyncError> {
-    view::game_synchronizer_inner(window, s, d, game_host, signing_key).await
+    view::game_synchronizer_inner(
+        window,
+        s,
+        d,
+        game_host,
+        trigger.inner().clone(),
+        signing_key,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -99,8 +108,9 @@ pub(crate) async fn set_signing_key(
     s: GameState<'_>,
     selected: Option<XOnlyPublicKey>,
     sk: State<'_, SigningKeyInner>,
+    trigger: State<'_, TriggerRerender>,
 ) -> Result<(), ()> {
-    modify::set_signing_key_inner(s, selected, sk).await
+    modify::set_signing_key_inner(s, selected, sk, trigger.inner().clone()).await
 }
 
 #[tauri::command]
@@ -128,10 +138,25 @@ pub(crate) async fn list_my_users(
 #[tauri::command]
 pub(crate) async fn make_new_chain(
     nickname: String,
+    code: JoinCode,
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
-) -> Result<String, String> {
-    modify::make_new_chain_inner(nickname, secp, db).await
+    globals: State<'_, Arc<Globals>>,
+    game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
+    game: GameState<'_>,
+    trigger: State<'_, TriggerRerender>,
+) -> Result<(), String> {
+    modify::make_new_chain_inner(
+        nickname,
+        code,
+        secp,
+        db,
+        globals,
+        game_host_state,
+        game,
+        trigger.inner().clone(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -150,8 +175,18 @@ pub(crate) async fn make_new_game(
     client: State<'_, Arc<Globals>>,
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
+    trigger: State<'_, TriggerRerender>,
 ) -> Result<(), String> {
-    modify::make_new_game(nickname, secp, db, client, game_host, game).await
+    modify::make_new_game(
+        nickname,
+        secp,
+        db,
+        client,
+        game_host,
+        game,
+        trigger.inner().clone(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -159,7 +194,7 @@ pub(crate) async fn finalize_game(
     args: FinishArgs,
     globals: State<'_, Arc<Globals>>,
     game_host_s: State<'_, Arc<Mutex<Option<GameHost>>>>,
-) -> Result<CreatedNewChain,  String> {
+) -> Result<CreatedNewChain, String> {
     let client = globals.get_client().await.map_err(|e| e.to_string())?;
     let game_host = game_host_s.lock().await.clone().ok_or("No Host")?;
     client
@@ -188,6 +223,7 @@ pub(crate) async fn switch_to_game(
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
     sk: State<'_, SigningKeyInner>,
+    trigger: State<'_, TriggerRerender>,
     game: GameState<'_>,
     key: XOnlyPublicKey,
 ) -> Result<(), ()> {
@@ -197,6 +233,7 @@ pub(crate) async fn switch_to_game(
         db.inner().clone(),
         game,
         key,
+        trigger.inner().clone(),
     )
     .await
 }

@@ -1,7 +1,6 @@
 import { SwitchToDB } from './SwitchToDB';
 import { SwitchToGame, SwitchToGameProps } from './SwitchToGame';
 import { KeySelector, KeySelectorProps } from './KeySelector';
-import { MakeNewChain } from './MakeNewChain';
 import "./AppHeader.css";
 import React from 'react';
 import { FormControl, FormControlLabel, Switch, Typography } from '@mui/material';
@@ -19,8 +18,8 @@ export function AppHeader({ db_name_loaded, which_game_loaded,
   return <div className="App-header">
     <Typography variant='h2'>1</Typography>
     <SwitchToDB {...{ db_name_loaded }}></SwitchToDB>
-    <SwitchToHost {...{game_host_service}}></SwitchToHost>
-    {db_name_loaded &&
+    <SwitchToHost {...{ game_host_service }}></SwitchToHost>
+    {db_name_loaded && game_host_service &&
       <>
         <FormControl>
 
