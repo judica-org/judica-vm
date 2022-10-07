@@ -2,12 +2,13 @@ use super::view::TradeType;
 use super::{view::SyncError, *};
 use crate::config::Globals;
 use crate::tor::{GameHost, TorClient};
+use crate::Game;
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
-use tauri::async_runtime::Mutex;
 use std::sync::Arc;
+use tauri::async_runtime::Mutex;
 use tauri::{generate_handler, Invoke};
 
 pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
@@ -25,7 +26,8 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     list_my_users,
     mint_power_plant_cost,
     super_mint,
-    simulate_trade
+    simulate_trade,
+    set_game_host,
 ];
 #[tauri::command]
 pub async fn simulate_trade(
@@ -42,9 +44,10 @@ pub async fn game_synchronizer(
     window: Window,
     s: GameState<'_>,
     d: State<'_, Database>,
+    game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
 ) -> Result<(), SyncError> {
-    view::game_synchronizer_inner(window, s, d, signing_key).await
+    view::game_synchronizer_inner(window, s, d, game_host, signing_key).await
 }
 
 #[tauri::command]
@@ -129,6 +132,14 @@ pub(crate) async fn make_new_chain(
     modify::make_new_chain_inner(nickname, secp, db).await
 }
 
+#[tauri::command]
+pub(crate) async fn set_game_host(
+    g: GameHost,
+    game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
+) -> Result<(), ()> {
+    game_host.inner().lock().await.replace(g);
+    Ok(())
+}
 #[tauri::command]
 pub(crate) async fn make_new_game(
     nickname: String,

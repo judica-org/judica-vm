@@ -61,5 +61,8 @@ export const tauri_host = {
 
   simulate_trade: async (pair: string, amounts: [number, number], trade: "buy" | "sell"): Promise<TradeSimulation> => {
     return invoke("simulate_trade", { pair, amounts, trade });
+  },
+  set_game_host: async (g: { url: string, port: number }): Promise<void> => {
+    return invoke("set_game_host", { g });
   }
 };

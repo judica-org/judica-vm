@@ -1,5 +1,5 @@
 use crate::{
-    Database, Game, GameInitState, GameState, GameStateInner, Pending, PrintOnDrop, SigningKeyInner,
+    Database, Game, GameInitState, GameState, GameStateInner, Pending, PrintOnDrop, SigningKeyInner, tor::GameHost,
 };
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
@@ -19,6 +19,7 @@ pub(crate) async fn game_synchronizer_inner(
     window: Window,
     s: GameState<'_>,
     d: State<'_, Database>,
+    g: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
 ) -> Result<(), SyncError> {
     info!("Registering Window for State Updates");
@@ -41,7 +42,7 @@ pub(crate) async fn game_synchronizer_inner(
         }
     });
     loop {
-        match game_synchronizer_inner_loop(signing_key.inner(), s.inner(), d.inner(), &window).await
+        match game_synchronizer_inner_loop(signing_key.inner(), s.inner(), g.inner(), d.inner(), &window).await
         {
             Ok(()) => {}
             Err(e) => {
@@ -106,6 +107,7 @@ impl<T, E1, E2> ResultFlipExt for Result<Result<T, E1>, E2> {
 async fn game_synchronizer_inner_loop(
     signing_key: &Arc<Mutex<Option<XOnlyPublicKey>>>,
     s: &Arc<Mutex<GameInitState>>,
+    game_host: &Arc<Mutex<Option<GameHost>>>,
     d: &Database,
     window: &Window,
 ) -> Result<(), SyncError> {
@@ -143,6 +145,9 @@ async fn game_synchronizer_inner_loop(
     };
     let signing_key = *signing_key.lock().await;
     let signing_key = signing_key.as_ref().ok_or(SyncError::NoSigningKey);
+
+    let game_host_service = 
+    
 
     info!("Emitting Basic Info Updates");
     Ok(())

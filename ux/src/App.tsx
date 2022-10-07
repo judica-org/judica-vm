@@ -168,8 +168,9 @@ function App() {
   const [available_sequencers, set_available_sequencers] = React.useState<Array<[string, string]>>([]);
   const [signing_key, set_signing_key] = useState<string | null>(null);
   const [available_keys, set_available_keys] = useState<string[]>([]);
-  const [join_code, set_join_code] = useState<string|null>(null);
-  const [join_password, set_join_password] = useState<string|null>(null);
+  const [join_code, set_join_code] = useState<string | null>(null);
+  const [join_password, set_join_password] = useState<string | null>(null);
+  const [game_host_service, set_game_host_service] = useState<{ url: string, port: number } | null>(null);
   useEffect(() => {
 
     type JoinGame = { join_code: string, password: string | null };
@@ -192,6 +193,11 @@ function App() {
     const unlisten_game_board = appWindow.listen("game-board", (ev) => {
       console.log(['game-board-event'], ev);
       set_game_board(ev.payload as game_board)
+    });
+
+    const unlisten_game_host_service = appWindow.listen("game-host-service", (ev) => {
+      console.log(['game-host-service-event'], ev);
+      set_game_host_service(ev.payload as { url: string, port: number })
     });
 
     const unlisten_db_name_loaded = appWindow.listen("db-connection", (ev) => {
@@ -284,7 +290,13 @@ function App() {
   return (
     <div>
       <div className="App">
-        <DrawerAppBar {...{ db_name_loaded, available_sequencers, which_game_loaded, signing_key, available_keys, join_code, join_password }}></DrawerAppBar>
+        <DrawerAppBar {...{
+          db_name_loaded,
+          available_sequencers, which_game_loaded,
+          signing_key, available_keys,
+          join_code, join_password,
+          game_host_service
+        }}></DrawerAppBar>
         <div className="Content">
           <WorkingGlobe></WorkingGlobe>
           <Box className="DataDisplay">

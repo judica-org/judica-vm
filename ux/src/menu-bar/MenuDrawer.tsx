@@ -15,8 +15,9 @@ import { Bolt, Handyman, Sell, Send, ShoppingCart } from '@mui/icons-material';
 import { SwitchToGameProps } from '../header/SwitchToGame';
 import { KeySelectorProps } from '../header/KeySelector';
 import { NewGameProps } from '../header/NewGame';
+import { SwitchToHostProps } from '../header/SwitchToHost';
 
-interface Props extends SwitchToGameProps, KeySelectorProps, NewGameProps {
+interface Props extends SwitchToGameProps, KeySelectorProps, NewGameProps, SwitchToHostProps {
   db_name_loaded: [string, string | null] | null;
 };
 
@@ -29,7 +30,9 @@ export default function DrawerAppBar({ db_name_loaded,
   signing_key,
   available_keys,
   join_code,
-  join_password }:
+  join_password,
+  game_host_service
+}:
   Props) {
   const gameMoves = false;
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -70,7 +73,8 @@ export default function DrawerAppBar({ db_name_loaded,
       <AppHeader {...{
         available_sequencers, which_game_loaded,
         db_name_loaded, signing_key,
-        available_keys, join_code, join_password
+        available_keys, join_code, join_password,
+        game_host_service
       }}></AppHeader>
     </Box>
   );
