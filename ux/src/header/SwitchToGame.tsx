@@ -4,8 +4,10 @@ import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
 
+export type GameSetup = {}
+
 export interface SwitchToGameProps {
-  available_sequencers: [string, string][];
+  available_sequencers: [string, GameSetup ][];
   which_game_loaded: null | string;
 };
 
@@ -14,7 +16,7 @@ export function SwitchToGame({ available_sequencers, which_game_loaded }: Switch
 
   let options = available_sequencers.map(([pkey, name]) => {
     return <MenuItem value={pkey} key={pkey}>
-      {name} -- {pkey.substring(0, 16)}...
+      {pkey} 
     </MenuItem>;
   });
   const handle_submit = (ev: React.FormEvent<HTMLButtonElement>): void => {

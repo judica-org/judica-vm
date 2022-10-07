@@ -1,9 +1,11 @@
 use crate::{
     Database, Game, GameInitState, GameState, GameStateInner, Pending, PrintOnDrop, SigningKeyInner,
 };
+use game_host_messages::{BroadcastByHost, Channelized};
+use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
     nfts::{instances::powerplant::PlantType, sale::UXForSaleList, NftPtr, UXPlantData},
-    tokens::token_swap::{TradeError, TradeOutcome, TradingPairID},
+    tokens::token_swap::{TradeError, TradeOutcome, TradingPairID}, game::GameSetup,
 };
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
@@ -111,15 +113,30 @@ async fn game_synchronizer_inner_loop(
         let l = d.state.lock().await;
         if let Some(g) = l.as_ref() {
             let handle = g.db.get_handle().await;
-            let v = handle
-                .get_all_users()
-                .map_err(|_| SyncError::DatabaseError)?;
-            let keys: Vec<XOnlyPublicKey> = handle
-                .get_keymap()
+            let sequencer_keys: Vec<(XOnlyPublicKey, GameSetup)> = handle
+                .get_all_genesis::<Channelized<BroadcastByHost>>()
                 .map_err(|_| SyncError::DatabaseError)?
-                .into_keys()
+                .iter()
+                .filter_map(|e| match &e.msg().data {
+                    BroadcastByHost::GameSetup(g) => Some((e.header().key(), g.clone())),
+                    BroadcastByHost::Sequence(_)
+                    | BroadcastByHost::NewPeer(_)
+                    | BroadcastByHost::Heartbeat => None,
+                })
                 .collect();
-            (Some((g.name.clone(), g.prefix.clone())), v, keys)
+            let v = handle.get_keymap().map_err(|_| SyncError::DatabaseError)?;
+            let user_keys: Vec<XOnlyPublicKey> = handle
+                .get_all_genesis::<ParticipantAction>()
+                .map_err(|_| SyncError::DatabaseError)?
+                .iter()
+                .map(|e| e.header().key())
+                .filter(|k| v.contains_key(k))
+                .collect();
+            (
+                Some((g.name.clone(), g.prefix.clone())),
+                sequencer_keys,
+                user_keys,
+            )
         } else {
             (None, vec![], vec![])
         }
