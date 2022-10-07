@@ -15,6 +15,7 @@ use std::{error::Error, path::PathBuf, sync::Arc};
 use tasks::GameServer;
 use tauri::{async_runtime::Mutex, window, Manager, State};
 use tokio::sync::Notify;
+use tor::GameHost;
 use tor::TorClient;
 use tracing::info;
 use tracing::warn;
@@ -130,6 +131,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .manage(db)
         .manage(sk)
         .manage(globals.clone())
+        .manage(Arc::new(Mutex::new(None::<GameHost>)))
         .setup(move |app| {
             let app_handle = app.app_handle();
             app.listen_global("globe-click", move |e| {

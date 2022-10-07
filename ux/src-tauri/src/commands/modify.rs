@@ -28,6 +28,7 @@ use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::sync::Arc;
+use tauri::async_runtime::Mutex;
 use tauri::State;
 use tokio::spawn;
 use tokio::sync::Notify;
@@ -47,34 +48,37 @@ pub(crate) async fn make_new_game(
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
     globals: State<'_, Arc<Globals>>,
-    game_host: State<'_, GameHost>,
+    game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
 ) -> Result<(), String> {
+    let game_host = game_host_state.inner().lock().await.clone();
+    let game_host = game_host.ok_or("Must be connected to some host")?;
     let mut game = game.lock().await;
-    if game.is_none() {
-        let client = globals
-            .inner()
-            .get_client()
-            .await
-            .map_err(|e| e.to_string())?;
-        let new_game = client
-            .create_new_game_instance(game_host.inner())
-            .await
-            .map_err(|e| e.to_string())?;
-        let new_chain = make_new_chain_genesis(nickname, secp, db).await?;
-        client
-            .add_player(game_host.inner(), (new_game.join, new_chain))
-            .await
-            .map_err(|e| e.to_string())?;
-
-        *game = GameInitState::Pending(Pending {
-            join_code: new_game.join,
-            password: Some(new_game.password),
-        });
-        Ok(())
-    } else {
-        Err("Game State Not Null".into())
+    if game.game_mut().is_some() {
+        Err("Must not be in Game State")?;
     }
+    let client = globals
+        .inner()
+        .get_client()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let new_game = client
+        .create_new_game_instance(&game_host)
+        .await
+        .map_err(|e| e.to_string())?;
+    let new_chain = make_new_chain_genesis(nickname, secp, db).await?;
+    client
+        .add_player(&game_host, (new_game.join, new_chain))
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tracing::info!("Setting GameInitState to Pending");
+    *game = GameInitState::Pending(Pending {
+        join_code: new_game.join,
+        password: Some(new_game.password),
+    });
+    Ok(())
 }
 pub(crate) async fn make_new_chain_genesis(
     nickname: String,

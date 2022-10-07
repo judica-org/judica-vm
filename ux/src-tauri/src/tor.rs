@@ -65,9 +65,10 @@ pub async fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error +
 pub struct TorClient {
     client: reqwest::Client,
 }
+#[derive(Clone)]
 pub struct GameHost {
-    url: String,
-    port: u16,
+    pub url: String,
+    pub port: u16,
 }
 const GAME_NEW: &str = "game/new";
 const GAME_ADD_PLAYER: &str = "game/player/new";

@@ -6,6 +6,7 @@ use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
+use tauri::async_runtime::Mutex;
 use std::sync::Arc;
 use tauri::{generate_handler, Invoke};
 
@@ -134,7 +135,7 @@ pub(crate) async fn make_new_game(
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
     client: State<'_, Arc<Globals>>,
-    game_host: State<'_, GameHost>,
+    game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
 ) -> Result<(), String> {
     modify::make_new_game(nickname, secp, db, client, game_host, game).await
