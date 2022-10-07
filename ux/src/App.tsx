@@ -123,7 +123,7 @@ export type MaterialPriceData = {
 }
 
 export type MaterialPriceDisplay = {
-  trading_pair: string,
+  readonly trading_pair: string,
   asset_a: string;
   asset_b: string;
   display_asset: string,

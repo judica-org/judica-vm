@@ -154,16 +154,6 @@ export default () => {
                             el.style.cursor = 'pointer';
                             // set to 
                             el.onclick = () => PlantSelected(d.id);
-                            el.onmouseover = () => {
-                                el.innerHTML = `
-                                <b>ID: ${d.id}</b> <br />
-                                Owner: <i>${d.owner}</i> <br />
-                                Watts: <i>${d.watts}</i> <br />
-                                Hashrate: <i>${d.hashrate}</i> <br />
-                                ${d.for_sale ? 'For Sale' : ''}
-                                `
-                            }
-                            el.onmouseleave = () => el.innerHTML = svg;
                             return el;
                         }}
 
@@ -204,7 +194,6 @@ export default () => {
                         pointAltitude={(d: object) => {
                             const p = d as BarData;
                             let alt = 1
-                            console.log(["data-looks-like"], d);
                             if (p.hashrate) {
                                 alt = p.hashrate! * 6e-6
                             }

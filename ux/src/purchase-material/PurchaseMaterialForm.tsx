@@ -12,7 +12,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
   const [action, set_action] = React.useState<RawMaterialsActions>(action_in);
   const [market_flipped, set_market_flipped] = React.useState<boolean>(false);
   const [trade_amt, set_trade_amt] = React.useState<number>(0);
-  const [limit_pct, set_limit_pct] = React.useState<number>(0);
+  const [limit_pct, set_limit_pct] = React.useState<number|null>(null);
   const [formula_result, set_formula_result] = React.useState("");
   const handle_error = (e: UnsuccessfulTradeOutcome) => {
     switch (typeof e) {
@@ -89,7 +89,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
       let ok = outcome.Ok;
       if (ok) {
         // TODO: Add a flexible Cap for Limit Orders, fixed to +/- 10%.
-        let cap = limit_pct === undefined ? undefined :
+        let cap = limit_pct === null ? null :
           Math.round(action === "SELL" ? (ok.amount_player_purchased * (1 - limit_pct)) : (ok.amount_player_sold * (1 + limit_pct)));
         if (confirm((action === "SELL" ?
           `Sell Will trade ${ok.amount_player_sold} ${ok.asset_player_sold} for at least ${cap} ${ok.asset_player_purchased}` :
@@ -97,6 +97,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
           + `\n Slip tolerance ${limit_pct ?? 0 * 100}% from expected`
         ))
           tauri_host.make_move_inner({ trade: { amount_a: trade[0], amount_b: trade[1], pair: market.trading_pair, sell: action === "SELL", cap } });
+        console.log(["trade-submitted"], { trade: { amount_a: trade[0], amount_b: trade[1], pair: market.trading_pair, sell: action === "SELL", cap } })
       } else {
         alert("Trade will not succeed, " + JSON.stringify(outcome.Err!))
       }
