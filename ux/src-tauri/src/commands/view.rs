@@ -76,8 +76,7 @@ pub(crate) async fn game_synchronizer_inner(
                 }
             }
         }
-
-        trigger.take().await.recv().await.ok_or(SyncError::HungUp)?;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
