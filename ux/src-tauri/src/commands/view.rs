@@ -1,16 +1,18 @@
 use crate::{
-    Database, Game, GameInitState, GameState, GameStateInner, Pending, PrintOnDrop, SigningKeyInner, tor::GameHost,
+    tor::GameHost, Database, Game, GameInitState, GameState, GameStateInner, Pending, PrintOnDrop,
+    SigningKeyInner,
 };
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
+    game::GameSetup,
     nfts::{instances::powerplant::PlantType, sale::UXForSaleList, NftPtr, UXPlantData},
-    tokens::token_swap::{TradeError, TradeOutcome, TradingPairID}, game::GameSetup,
+    tokens::token_swap::{TradeError, TradeOutcome, TradingPairID},
 };
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
+use std::{ops::Deref, sync::Arc};
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::sync::futures::Notified;
 use tracing::info;
@@ -42,7 +44,14 @@ pub(crate) async fn game_synchronizer_inner(
         }
     });
     loop {
-        match game_synchronizer_inner_loop(signing_key.inner(), s.inner(), g.inner(), d.inner(), &window).await
+        match game_synchronizer_inner_loop(
+            signing_key.inner(),
+            s.inner(),
+            g.inner(),
+            d.inner(),
+            &window,
+        )
+        .await
         {
             Ok(()) => {}
             Err(e) => {
@@ -53,6 +62,7 @@ pub(crate) async fn game_synchronizer_inner(
                         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     }
                     SyncError::KeyUnknownByGame | SyncError::DatabaseError => return Err(e),
+                    SyncError::NoGameHost => {}
                 }
             }
         }
@@ -76,6 +86,7 @@ async fn in_joining_mode(
 
 #[derive(Serialize, Debug, Clone)]
 pub enum SyncError {
+    NoGameHost,
     NoSigningKey,
     NoGame,
     KeyUnknownByGame,
@@ -145,9 +156,8 @@ async fn game_synchronizer_inner_loop(
     };
     let signing_key = *signing_key.lock().await;
     let signing_key = signing_key.as_ref().ok_or(SyncError::NoSigningKey);
-
-    let game_host_service = 
-    
+    let game_host_service = game_host.lock().await.clone();
+    let game_host_service = game_host_service.as_ref().ok_or(SyncError::NoGameHost);
 
     info!("Emitting Basic Info Updates");
     Ok(())
@@ -157,6 +167,14 @@ async fn game_synchronizer_inner_loop(
             |()| {
                 signing_key
                     .map(|key| emit(window, "signing-key", key))
+                    .flip()?;
+                Ok(())
+            }
+        })
+        .and_then({
+            |()| {
+                game_host_service
+                    .map(|g| emit(window, "game-host-service", g))
                     .flip()?;
                 Ok(())
             }
