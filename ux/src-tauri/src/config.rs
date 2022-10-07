@@ -1,8 +1,8 @@
+use crate::tor::TorClient;
 use crate::{tor::TorConfig, DBSelector, Database};
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use crate::tor::TorClient;
+use std::sync::Arc;
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -25,8 +25,10 @@ pub struct Globals {
     pub client: tokio::sync::OnceCell<TorClient>,
 }
 impl Globals {
-pub    fn new(config: Config) -> Arc<Self> {
-    Arc::new(Self {config, client:Default::default()})
+    pub fn new(config: Config) -> Arc<Self> {
+        Arc::new(Self {
+            config,
+            client: Default::default(),
+        })
+    }
 }
-}
-

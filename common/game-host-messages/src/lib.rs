@@ -7,7 +7,11 @@ use sapio_bitcoin::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, error::Error, fmt::{Display, Debug}};
+use std::{
+    collections::VecDeque,
+    error::Error,
+    fmt::{Debug, Display},
+};
 
 #[derive(Deserialize, Serialize)]
 pub struct FinishArgs {

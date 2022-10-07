@@ -197,7 +197,7 @@ where
         let mut stmt = self.0.prepare_cached(SQL_GET_ALL_TIPS_FOR_ALL_USERS)?;
         let mut rows = stmt.query([])?;
         let mut vs = vec![];
-        while let Some(r) =  rows.next()? {
+        while let Some(r) = rows.next()? {
             if let Ok(e) = r.get::<_, E>(0) {
                 vs.push(e);
             }
@@ -216,7 +216,7 @@ where
         let mut stmt = self.0.prepare_cached(SQL_GET_ALL_GENESIS)?;
         let mut rows = stmt.query([])?;
         let mut vs = vec![];
-        while let Some(r) =  rows.next()? {
+        while let Some(r) = rows.next()? {
             if let Ok(e) = r.get::<_, Authenticated<GenericEnvelope<M>>>(0) {
                 vs.push(e);
             }

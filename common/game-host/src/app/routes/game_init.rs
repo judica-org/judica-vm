@@ -18,7 +18,7 @@ use axum::{
     http::{Response, StatusCode},
     Extension, Json,
 };
-use game_host_messages::{JoinCode, FinishArgs, NewGame, AddPlayerError};
+use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
     game::{game_move::GameMove, GameSetup},
@@ -40,7 +40,6 @@ use std::{
     sync::{Arc, Weak},
 };
 use tokio::sync::Mutex;
-
 
 struct Metadata {
     state: Mutex<GameStartingState>,
@@ -188,7 +187,6 @@ pub async fn add_player(
         Json(()),
     ))
 }
-
 
 pub async fn finish_setup(
     msgdb: Extension<MsgDB>,
