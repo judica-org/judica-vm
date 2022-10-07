@@ -7,16 +7,12 @@
     "distDir": "../build"
   },
   "package": {
-    "productName": "master-mine",
+    "productName": "mastermine",
     "version": "0.1.0"
   },
   "tauri": {
     "allowlist": {
       "all": true
-    },
-    "package": {
-      "productName": "mine-with-friends",
-      "version": "0.1.0"
     },
     "bundle": {
       "active": true,
