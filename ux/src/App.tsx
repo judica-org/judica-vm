@@ -16,6 +16,7 @@ import DrawerAppBar from './menu-bar/MenuDrawer';
 import { EntityID, TradingPairID } from './Types/GameMove';
 import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
 import MoveForm from './move-form/MoveForm';
+import { GameSetup } from './header/SwitchToGame';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export const PLANT_SELECTED_EVENT = "PlantSelected";
@@ -165,7 +166,7 @@ function App() {
   const [listings, setListings] = useState<NFTSale[]>([]);
   const [db_name_loaded, set_db_name_loaded] = React.useState<[string, string | null] | null>(null);
   const [which_game_loaded, set_which_game_loaded] = React.useState<string | null>(null);
-  const [available_sequencers, set_available_sequencers] = React.useState<Array<[string, string]>>([]);
+  const [available_sequencers, set_available_sequencers] = React.useState<Array<[string, GameSetup]>>([]);
   const [signing_key, set_signing_key] = useState<string | null>(null);
   const [available_keys, set_available_keys] = useState<string[]>([]);
   const [join_code, set_join_code] = useState<string | null>(null);

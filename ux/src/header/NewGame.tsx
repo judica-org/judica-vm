@@ -8,7 +8,11 @@ export interface NewGameProps {
   join_code: string | null,
   join_password: string | null
 };
-export function NewGame({ join_code, join_password }: NewGameProps) {
+
+export interface NewGameDirectProps {
+  ext_disabled: boolean,
+}
+export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps & NewGameDirectProps) {
   const [nick, set_nick] = React.useState<null | string>(null);
   const [join_code_form, set_join_code_form] = React.useState<null | string>(null);
 
@@ -45,8 +49,9 @@ export function NewGame({ join_code, join_password }: NewGameProps) {
       <span style={{ fontWeight: join_or_new ? "bold" : "normal" }}>Join </span>
       or
       <span style={{ fontWeight: !join_or_new ? "bold" : "normal" }}> Create </span>
-      New Game</FormLabel>
-    <FormGroup >
+      New Game
+    </FormLabel>
+    <FormGroup  >
       <ToggleButtonGroup value={join_or_new}
         exclusive
         onChange={(a, newValue) => {
@@ -67,7 +72,7 @@ export function NewGame({ join_code, join_password }: NewGameProps) {
       {
         join_or_new && <TextField label='Join Code' onChange={(ev) => set_join_code_form(ev.target.value)}></TextField>
       }
-      <Button variant="contained" type="submit" onClick={handle_click} disabled={is_creating}>
+      <Button variant="contained" type="submit" onClick={handle_click} disabled={is_creating || ext_disabled}>
         {action} {is_creating ? "Pending..." : "Game"}
       </Button>
       {
@@ -75,7 +80,7 @@ export function NewGame({ join_code, join_password }: NewGameProps) {
       }
       {
         join_password &&
-        <Button variant="contained" type="submit" onClick={handle_finalize_click} disabled={is_finalizing}>
+        <Button variant="contained" type="submit" onClick={handle_finalize_click} disabled={is_finalizing || ext_disabled}>
           {is_finalizing ? "Finalizing..." : "Finalize Game"}
         </Button>
       }

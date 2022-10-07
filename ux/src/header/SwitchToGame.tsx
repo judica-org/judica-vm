@@ -4,7 +4,11 @@ import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
 
-export type GameSetup = {}
+export type GameSetup = {
+  players: Array<string>,
+  start_amount: number,
+  finish_time: number,
+}
 
 export interface SwitchToGameProps {
   available_sequencers: [string, GameSetup][];
@@ -12,22 +16,31 @@ export interface SwitchToGameProps {
 };
 
 export function SwitchToGame({ available_sequencers, which_game_loaded }: SwitchToGameProps) {
-  const [which_game, set_which_game] = React.useState<string>(which_game_loaded ?? "");
+  const [which_game, set_which_game] = React.useState<string | 0>(which_game_loaded ?? 0);
 
   let options = available_sequencers.map(([pkey, name]) => {
+    console.log("OPT", pkey, which_game_loaded);
     return <MenuItem value={pkey} key={pkey}>
       {pkey}
     </MenuItem>;
   });
-  const handle_submit = (ev: React.FormEvent<HTMLButtonElement>): void => {
+  const handle_submit = async (ev: React.FormEvent<HTMLButtonElement>): Promise<void> => {
     ev.preventDefault();
-    which_game && tauri_host.switch_to_game(which_game);
+    if (which_game !== 0) {
+      console.log("SWITCHING TO", which_game);
+      await tauri_host.switch_to_game(which_game);
+      console.log("DONE SWITCHING");
+    }
   };
-  return <div>
+  return <div >
     <FormLabel>Existing Game</FormLabel>
     <FormGroup>
-      <Select label="Game Key" onChange={(ev) => set_which_game(ev.target.value as string)} value={which_game} renderValue={(v) => `${v.substring(0, 16)}...`}>
-        <MenuItem value={""} selected={which_game == ""}>No Key</MenuItem>
+      <Select label="Game Key"
+        onChange={(ev) => set_which_game(ev.target.value as string)}
+        value={which_game}
+        renderValue={(v) => `${(v && v || null)?.substring(0, 16) ?? "None"}...`}
+      >
+        <MenuItem value={0} selected={which_game === 0}></MenuItem>
         {options}
       </Select>
       <Button type="submit" variant="contained"

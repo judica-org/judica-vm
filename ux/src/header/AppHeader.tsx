@@ -19,7 +19,7 @@ export function AppHeader({ db_name_loaded, which_game_loaded,
   return <div className="App-header">
     <SwitchToDB {...{ db_name_loaded }}></SwitchToDB>
     <SwitchToHost {...{ game_host_service }}></SwitchToHost>
-    <FormControl disabled={!(db_name_loaded && game_host_service)} >
+    <FormControl disabled={!(db_name_loaded )} >
       <FormGroup>
         <FormLabel>
           <span style={{ fontWeight: new_or_old ? "bold" : "normal" }}>New </span>
@@ -37,8 +37,9 @@ export function AppHeader({ db_name_loaded, which_game_loaded,
         </ToggleButtonGroup>
       </FormGroup>
       {new_or_old ?
-        <NewGame {...{ join_code, join_password }}></NewGame> :
+        <NewGame ext_disabled={!game_host_service} {...{ join_code, join_password }}></NewGame> :
         <SwitchToGame {...{ available_sequencers, which_game_loaded }} ></SwitchToGame>}
     </FormControl>
+    <KeySelector {...{ available_sequencers, which_game_loaded, signing_key, available_keys }} disabled={which_game_loaded === null}></KeySelector>
   </div >;
 }
