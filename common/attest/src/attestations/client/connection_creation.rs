@@ -8,6 +8,7 @@ use super::ServiceUrl;
 use crate::globals::Globals;
 use reqwest::Client;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::spawn;
 
 use tokio_tungstenite::tungstenite::protocol::Role;
@@ -71,8 +72,14 @@ impl AttestationClient {
                 let gss = self.gss.clone();
                 let db = self.db.clone();
                 spawn(async move {
-                    let socket =
-                        tungstenite_client_adaptor::ClientWebSocket::connect(&g, svc_url).await;
+                    let socket = loop {
+                        if let Ok(socket) =
+                            tungstenite_client_adaptor::ClientWebSocket::connect(&g, svc_url.clone()).await
+                        {
+                            break socket;
+                        }
+                        tokio::time::sleep(Duration::from_secs(1));
+                    };
                     let res =
                         protocol::run_protocol(g, socket, gss, db, Role::Client, Some(rx)).await;
                     trace!(?res, role=?Role::Server,"socket quit");
