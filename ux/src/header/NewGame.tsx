@@ -1,4 +1,5 @@
-import { Button, FormControl, FormControlLabel, Slider, Switch, TextField, ToggleButton, Typography } from '@mui/material';
+import { Key, Add } from '@mui/icons-material';
+import { Button, FormControl, FormControlLabel, FormGroup, FormLabel, Slider, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
@@ -40,18 +41,34 @@ export function NewGame({ join_code, join_password }: NewGameProps) {
     set_is_finalizing(false);
   };
   return <div>
-    <Typography variant='h6'>New Game</Typography>
-    <FormControl >
-      <FormControlLabel control={
-        <Switch value={join_or_new} onClick={(a) => { set_join_or_new(!join_or_new) }}></Switch>
-      } label={`${action} Game`} />
+    <FormLabel>
+      <span style={{ fontWeight: join_or_new ? "bold" : "normal" }}>Join </span>
+      or
+      <span style={{ fontWeight: !join_or_new ? "bold" : "normal" }}> Create </span>
+      New Game</FormLabel>
+    <FormGroup >
+      <ToggleButtonGroup value={join_or_new}
+        exclusive
+        onChange={(a, newValue) => {
+          newValue !== null && set_join_or_new(newValue)
+        }}
+      >
+        <ToggleButton
+          value={true}>
+          <Key></Key>
+        </ToggleButton>
+
+        <ToggleButton value={false}>
+          <Add></Add>
+        </ToggleButton>
+      </ToggleButtonGroup>
 
       <TextField label='Chain Nickname' onChange={(ev) => set_nick(ev.target.value)}></TextField>
       {
         join_or_new && <TextField label='Join Code' onChange={(ev) => set_join_code_form(ev.target.value)}></TextField>
       }
       <Button variant="contained" type="submit" onClick={handle_click} disabled={is_creating}>
-        {action} {is_creating? "Pending...":"Game"}
+        {action} {is_creating ? "Pending..." : "Game"}
       </Button>
       {
         join_code && <Typography>Invite: {join_code}</Typography>
@@ -62,6 +79,6 @@ export function NewGame({ join_code, join_password }: NewGameProps) {
           {is_finalizing ? "Finalizing..." : "Finalize Game"}
         </Button>
       }
-    </FormControl>
+    </FormGroup>
   </div>;
 }
