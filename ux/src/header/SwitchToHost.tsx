@@ -1,4 +1,4 @@
-import { Button, FormControl, FormGroup, InputLabel, TextField } from '@mui/material';
+import { Button, FormControl, FormGroup, FormLabel, InputLabel, TextField } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
@@ -14,8 +14,12 @@ export function SwitchToHost(props: SwitchToHostProps) {
     port && url && tauri_host.set_game_host({ url, port });
   };
   return <div>
-    <h6>Game Host:{props.game_host_service && `${props.game_host_service.url}:${props.game_host_service.port}`}</h6>
     <FormControl>
+      <FormLabel>Game Host:</FormLabel>
+      <FormLabel sx={{ wordBreak: "break-word" }} component="code">
+        {props.game_host_service &&
+          `${props.game_host_service.url}:${props.game_host_service.port}`
+        }</FormLabel>
       <TextField label="Host Name" required={false} onChange={(ev) => set_url(ev.target.value)}></TextField>
       <TextField label="Port" required={true} type="number" onChange={(ev) => set_port(parseInt(ev.target.value))}></TextField>
       <Button variant="contained" type="submit"
