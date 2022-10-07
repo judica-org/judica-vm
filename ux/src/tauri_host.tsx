@@ -49,6 +49,9 @@ export const tauri_host = {
   make_new_chain: async (nickname: string) => {
     return invoke("make_new_chain", { nickname });
   },
+  make_new_game: async (nickname: string) => {
+    return invoke("make_new_game", { nickname });
+  },
   mint_power_plant_cost: async (scale: number, location: [number, number], plantType: PlantType) => {
     return invoke("mint_power_plant_cost", { scale, location, plantType });
   },

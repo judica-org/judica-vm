@@ -7,11 +7,19 @@ export interface NewGameProps {
   join_code: string | null,
   join_password: string | null
 };
-export function NewGame(props: NewGameProps) {
+export function NewGame({ join_code, join_password }: NewGameProps) {
   const [nick, set_nick] = React.useState<null | string>(null);
 
   const [join_or_new, set_join_or_new] = React.useState(false);
   const action = join_or_new ? "Join" : "New";
+  const handle_click = (ev: React.MouseEvent<HTMLButtonElement, MouseEvent>): void => {
+    ev.preventDefault();
+    if (join_or_new) {
+      nick && tauri_host.make_new_game(nick);
+    } else {
+      nick && tauri_host.make_new_chain(nick);
+    }
+  };
   return <div>
     <Typography variant='h6'>New Game</Typography>
     <FormControl >
@@ -23,11 +31,15 @@ export function NewGame(props: NewGameProps) {
       {
         join_or_new && <TextField label='Join Code' onChange={(ev) => set_nick(ev.target.value)}></TextField>
       }
-      <Button variant="contained" type="submit" onClick={(ev) => { ev.preventDefault(); nick && tauri_host.make_new_chain(nick) }}>
-
+      <Button variant="contained" type="submit" onClick={handle_click}>
         {action} Game
-
       </Button>
+      {
+        join_code && <Typography>{join_code}</Typography>
+      }
+      {
+        join_password && <Typography>{join_password}</Typography>
+      }
     </FormControl>
   </div>;
 }

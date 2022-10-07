@@ -20,6 +20,7 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     set_signing_key,
     send_chat,
     make_new_chain,
+    make_new_game,
     list_my_users,
     mint_power_plant_cost,
     super_mint,
