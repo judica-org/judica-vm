@@ -1,5 +1,5 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "$schema": "../../node_modules/@tauri-apps/cli/schema.json",
   "build": {
     "beforeBuildCommand": "yarn build",
     "beforeDevCommand": "yarn start",
@@ -13,6 +13,10 @@
   "tauri": {
     "allowlist": {
       "all": true
+    },
+    "package": {
+      "productName": "mine-with-friends",
+      "version": "0.1.0"
     },
     "bundle": {
       "active": true,
@@ -29,7 +33,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "org.judica.mine-game",
+      "identifier": "org.judica.mastermine",
       "longDescription": "",
       "macOS": {
         "entitlements": null,
@@ -53,14 +57,12 @@
     "updater": {
       "active": false
     },
-    "windows": [
-      {
-        "fullscreen": false,
-        "height": 600,
-        "resizable": true,
-        "title": "Master Mine",
-        "width": 1000
-      }
-    ]
+    "windows": [{
+      "fullscreen": false,
+      "height": 600,
+      "resizable": true,
+      "title": "Master Mine",
+      "width": 1000
+    }]
   }
 }
