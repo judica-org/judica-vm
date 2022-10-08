@@ -29,10 +29,12 @@ use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::sync::Arc;
+use tauri::async_runtime::spawn_blocking;
 use tauri::async_runtime::Mutex;
 use tauri::State;
 use tokio::spawn;
 use tokio::sync::Notify;
+use tokio::task::spawn_blocking;
 use tracing::debug;
 use tracing::info;
 
@@ -103,15 +105,19 @@ pub(crate) async fn make_new_chain_genesis(
     )
     .err_to_string()?;
     let msgdb = db.get().await.err_to_string()?;
-    let mut handle = msgdb.get_handle().await;
-    // TODO: Transaction?
-    handle.save_keypair(kp).err_to_string()?;
-    let k = kp.public_key().x_only_public_key().0;
-    handle.save_nonce_for_user_by_key(next_nonce, secp.inner(), k);
+    let mut handle = msgdb.get_handle_all().await;
+    spawn_blocking(move || {
+        // TODO: Transaction?
+        handle.save_keypair(kp).err_to_string()?;
+        let k = kp.public_key().x_only_public_key().0;
+        handle.save_nonce_for_user_by_key(next_nonce, secp.inner(), k);
 
-    let envelope = genesis.self_authenticate(secp.inner()).err_to_string()?;
-    handle.insert_user_by_genesis_envelope(nickname, envelope.clone());
-    Ok(envelope)
+        let envelope = genesis.self_authenticate(secp.inner()).err_to_string()?;
+        handle.insert_user_by_genesis_envelope(nickname, envelope.clone());
+        envelope
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 pub(crate) async fn make_new_chain_inner(
     nickname: String,
@@ -154,58 +160,63 @@ pub(crate) async fn make_move_inner_inner(
 ) -> Result<(), &'static str> {
     let xpubkey = sk.lock().await.ok_or("No Key Selected")?;
     let msgdb = db.get().await.map_err(|_e| "No DB Available")?;
-    let mut handle = msgdb.get_handle().await;
-    // Seek the last game move -- in *most* cases should be the immediate prior
-    // message, but this isn't quite ideal.
-    let last = {
-        let mut h = None;
-        loop {
-            let tip = if let Some(prev) = h {
-                let mut v = handle
-                    .messages_by_hash::<_, _, ParticipantAction>([prev].iter())
-                    .map_err(|e| {
-                        tracing::trace!(error=?e, "Error Finding Predecessor");
-                        "No Tip Found"
-                    })?;
-                v.pop().unwrap()
-            } else {
-                handle
-                    .get_tip_for_user_by_key::<ParticipantAction>(xpubkey)
-                    .map_err(|e| {
-                        tracing::trace!(error=?e, "Error First Tip");
-                        "No Tip Found"
-                    })?
-            };
-            match tip.msg() {
-                ParticipantAction::MoveEnvelope(m) => break m.sequence,
-                ParticipantAction::PsbtSigningCoordination(_) | ParticipantAction::Custom(_) => {
-                    if tip.header().ancestors().is_none() {
-                        return Err("No MoveEnvelope Found");
+    let mut handle = msgdb.get_handle_all().await;
+    spawn_blocking(move || {
+        // Seek the last game move -- in *most* cases should be the immediate prior
+        // message, but this isn't quite ideal.
+        let last = {
+            let mut h = None;
+            loop {
+                let tip = if let Some(prev) = h {
+                    let mut v = handle
+                        .messages_by_hash::<_, _, ParticipantAction>([prev].iter())
+                        .map_err(|e| {
+                            tracing::trace!(error=?e, "Error Finding Predecessor");
+                            "No Tip Found"
+                        })?;
+                    v.pop().unwrap()
+                } else {
+                    handle
+                        .get_tip_for_user_by_key::<ParticipantAction>(xpubkey)
+                        .map_err(|e| {
+                            tracing::trace!(error=?e, "Error First Tip");
+                            "No Tip Found"
+                        })?
+                };
+                match tip.msg() {
+                    ParticipantAction::MoveEnvelope(m) => break m.sequence,
+                    ParticipantAction::PsbtSigningCoordination(_)
+                    | ParticipantAction::Custom(_) => {
+                        if tip.header().ancestors().is_none() {
+                            return Err("No MoveEnvelope Found");
+                        }
+                        h = tip.header().ancestors().map(|a| a.prev_msg())
                     }
-                    h = tip.header().ancestors().map(|a| a.prev_msg())
                 }
             }
-        }
-    };
-    let mve = MoveEnvelope {
-        d: Unsanitized(next_move),
-        sequence: last + 1,
-        time_millis: attest_util::now() as u64,
-    };
-    let keys = handle.get_keymap().or(Err("Could not get keys"))?;
-    let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;
-    let keypair = KeyPair::from_secret_key(&secp, sk);
-    // TODO: Runa tipcache
-    handle
-        .retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
-            mve,
-            &keypair,
-            &secp,
-            None,
-            TipControl::AllTips,
-        )
-        .or(Err("Could Not Wrap/Insert Message"))
-        .into()
+        };
+        let mve = MoveEnvelope {
+            d: Unsanitized(next_move),
+            sequence: last + 1,
+            time_millis: attest_util::now() as u64,
+        };
+        let keys = handle.get_keymap().or(Err("Could not get keys"))?;
+        let sk = keys.get(&xpubkey).ok_or("Unknown Secret Key for PK")?;
+        let keypair = KeyPair::from_secret_key(&secp, sk);
+        // TODO: Runa tipcache
+        handle
+            .retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
+                mve,
+                &keypair,
+                &secp,
+                None,
+                TipControl::AllTips,
+            )
+            .or(Err("Could Not Wrap/Insert Message"))
+            .into()
+    })
+    .await
+    .or(Err("DB Error"))?
 }
 
 pub(crate) async fn switch_to_game_inner(
@@ -222,11 +233,15 @@ pub(crate) async fn switch_to_game_inner(
         let genesis = {
             let db = db.state.lock().await;
             let db: &DatabaseInner = db.as_ref().ok_or("No Database Set Up")?;
-            let handle = db.db.get_handle().await;
-            handle
-                .get_message_at_height_for_user::<Channelized<BroadcastByHost>>(key, 0)
-                .map_err(|e| "Internal Databse Error")?
-                .ok_or("No Genesis found for selected Key")?
+            let handle = db.db.get_handle_read().await;
+            spawn_blocking(move || {
+                handle
+                    .get_message_at_height_for_user::<Channelized<BroadcastByHost>>(key, 0)
+                    .map_err(|e| "Internal Databse Error")?
+                    .ok_or("No Genesis found for selected Key")
+            })
+            .await
+            .or(Err("DB Panic"))?
         };
         tracing::trace!(?genesis, "Found Genesis");
         let game_setup = {
@@ -252,7 +267,7 @@ pub(crate) async fn switch_to_game_inner(
             server: None,
         };
         *g = GameInitState::Game(new_game);
-        GameServer::start(secp, singing_key, db, g, game, ).await?;
+        GameServer::start(secp, singing_key, db, g, game).await?;
         Ok::<(), &'static str>(())
     });
     Ok(())

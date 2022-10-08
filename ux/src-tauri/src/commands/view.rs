@@ -20,7 +20,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::VecDeque, ops::Deref, sync::Arc};
 use std::{path::PathBuf, time::Duration};
-use tauri::{async_runtime::Mutex, State, Window};
+use tauri::{
+    async_runtime::{spawn_blocking, Mutex},
+    State, Window,
+};
 use tokio::sync::futures::Notified;
 use tracing::info;
 
@@ -112,31 +115,35 @@ async fn game_synchronizer_inner_loop(
     let (db_connection, available_sequencers, user_keys) = {
         let l = d.state.lock().await;
         if let Some(g) = l.as_ref() {
-            let handle = g.db.get_handle().await;
-            let sequencer_keys: Vec<(XOnlyPublicKey, GameSetup)> = handle
-                .get_all_genesis::<Channelized<BroadcastByHost>>()
-                .map_err(|_| SyncError::DatabaseError)?
-                .iter()
-                .filter_map(|e| match &e.msg().data {
-                    BroadcastByHost::GameSetup(g) => Some((e.header().key(), g.clone())),
-                    BroadcastByHost::Sequence(_)
-                    | BroadcastByHost::NewPeer(_)
-                    | BroadcastByHost::Heartbeat => None,
-                })
-                .collect();
-            let v = handle.get_keymap().map_err(|_| SyncError::DatabaseError)?;
-            let user_keys: Vec<XOnlyPublicKey> = handle
-                .get_all_genesis::<ParticipantAction>()
-                .map_err(|_| SyncError::DatabaseError)?
-                .iter()
-                .map(|e| e.header().key())
-                .filter(|k| v.contains_key(k))
-                .collect();
-            (
-                Some((g.name.clone(), g.prefix.clone())),
-                sequencer_keys,
-                user_keys,
-            )
+            let handle = g.db.get_handle_read().await;
+            spawn_blocking(move || {
+                let sequencer_keys: Vec<(XOnlyPublicKey, GameSetup)> = handle
+                    .get_all_genesis::<Channelized<BroadcastByHost>>()
+                    .map_err(|_| SyncError::DatabaseError)?
+                    .iter()
+                    .filter_map(|e| match &e.msg().data {
+                        BroadcastByHost::GameSetup(g) => Some((e.header().key(), g.clone())),
+                        BroadcastByHost::Sequence(_)
+                        | BroadcastByHost::NewPeer(_)
+                        | BroadcastByHost::Heartbeat => None,
+                    })
+                    .collect();
+                let v = handle.get_keymap().map_err(|_| SyncError::DatabaseError)?;
+                let user_keys: Vec<XOnlyPublicKey> = handle
+                    .get_all_genesis::<ParticipantAction>()
+                    .map_err(|_| SyncError::DatabaseError)?
+                    .iter()
+                    .map(|e| e.header().key())
+                    .filter(|k| v.contains_key(k))
+                    .collect();
+                (
+                    Some((g.name.clone(), g.prefix.clone())),
+                    sequencer_keys,
+                    user_keys,
+                )
+            })
+            .await
+            .map_err(|_| SyncError::DatabaseError)?
         } else {
             (None, vec![], vec![])
         }
@@ -211,19 +218,23 @@ pub(crate) async fn list_my_users_inner(
     db: State<'_, Database>,
 ) -> Result<Vec<(XOnlyPublicKey, String)>, ()> {
     let msgdb = db.get().await.map_err(|_| ())?;
-    let handle = msgdb.get_handle().await;
-    let keys = handle.get_keymap().map_err(|_| ())?;
-    let users = keys
-        .keys()
-        .map(|key| handle.locate_user(key))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| ())?;
-    let ret: Vec<(XOnlyPublicKey, String)> = users
-        .iter()
-        .zip(keys.keys())
-        .map(|((_a, b), k)| (*k, b.clone()))
-        .collect();
-    Ok(ret)
+    let handle = msgdb.get_handle_read().await;
+    spawn_blocking(move || {
+        let keys = handle.get_keymap().map_err(|_| ())?;
+        let users = keys
+            .keys()
+            .map(|key| handle.locate_user(key))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| ())?;
+        let ret: Vec<(XOnlyPublicKey, String)> = users
+            .iter()
+            .zip(keys.keys())
+            .map(|((_a, b), k)| (*k, b.clone()))
+            .collect();
+        Ok(ret)
+    })
+    .await
+    .or(Err(()))?
 }
 
 /// returns qty BTC to purchase materials and mint plant of given type and size
