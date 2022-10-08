@@ -28,7 +28,7 @@ export const MoveHashboards = ({ action: initial_action, plant, user_hashboards,
 
   return <Card>
     <CardHeader
-      title={action}
+      title={`${action} Hashboards`}
       subheader={`${action === "ADD" ? user_hashboards : plant.miners} Hashboards Available`}
     >
     </CardHeader>
