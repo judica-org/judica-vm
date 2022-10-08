@@ -4,6 +4,7 @@ use attest_util::{ensure_dir, CrossPlatformPermissions};
 use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode, NewGame};
 use game_player_messages::ParticipantAction;
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
@@ -70,7 +71,7 @@ pub async fn start(globals: Arc<Globals>) -> JoinHandle<Result<(), Box<dyn Error
 pub struct TorClient {
     client: reqwest::Client,
 }
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct GameHost {
     pub url: String,
     pub port: u16,

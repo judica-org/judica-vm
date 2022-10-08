@@ -3,7 +3,7 @@ import { Button, FormControl, FormLabel, IconButton, MenuItem, Select } from '@m
 import { appWindow } from '@tauri-apps/api/window';
 import { FormEvent, useEffect, useState } from "react";
 import { tauri_host } from '../tauri_host';
-import { GameSetup } from './SwitchToGame';
+import { GameSetup } from '../Types/Gameboard';
 
 export interface KeySelectorProps {
   signing_key: string | null,

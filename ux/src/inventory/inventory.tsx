@@ -2,12 +2,13 @@ import FactoryIcon from '@mui/icons-material/Factory';
 import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Typography } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import { useEffect, useState } from 'react';
-import { PowerPlant, UserInventory } from '../App';
+import { UserInventory } from '../App';
 import FormModal from '../form-modal/FormModal';
+import { UXUserInventory } from '../Types/Gameboard';
 import { plant_type_color_map } from '../util';
 
 
-export const Inventory = ({ userInventory }: { userInventory: UserInventory | null }) => {
+export const Inventory = ({ userInventory }: { userInventory: UXUserInventory | null }) => {
 
   return (
     <div>

@@ -6,7 +6,7 @@ import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent, Icon, Divider } from '@mui/material';
 import { emit, Event } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
-import { PlantSelected, PowerPlant, UserPowerPlant } from './App';
+import { PlantSelected, UserPowerPlant } from './App';
 import { PlantOwnerSelect, PlantTypeSelect } from './GlobeHelpers';
 import { COORDINATE_PRECISION } from './mint-power-plant/MintingForm';
 import { EntityID } from './Types/GameMove';

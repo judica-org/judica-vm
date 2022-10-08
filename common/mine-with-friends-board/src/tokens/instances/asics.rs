@@ -1,6 +1,7 @@
 ///! Tokens which represent 1 unit of hashrate
 use std::cmp::min;
 
+use schemars::JsonSchema;
 use serde::Serialize;
 use tracing::{debug, trace};
 
@@ -13,7 +14,7 @@ use crate::tokens::token_swap::{ConstantFunctionMarketMaker, TradingPairID};
 use crate::util::Price;
 
 /// Parameters for a given HashBoard type
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct HashBoardData {
     pub hash_per_watt: u128,
     // out of 100, currently not used for anything.
@@ -26,7 +27,7 @@ pub struct HashBoardData {
 /// market condition with 10% of the hashrate available at a set price.
 ///
 /// If it were more clever, the algorithm could do some fancier things.
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct ASICProducer {
     pub id: EntityID,
     pub total_units: u128,

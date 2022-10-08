@@ -11,7 +11,7 @@ use crate::{
 use serde::Serialize;
 use std::cmp::min;
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct ConcreteMiller {
     pub id: EntityID,
     pub total_units: u128,

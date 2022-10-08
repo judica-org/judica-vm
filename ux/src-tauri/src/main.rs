@@ -9,6 +9,7 @@ use config::Config;
 use game_host_messages::JoinCode;
 use mine_with_friends_board::game::GameBoard;
 use sapio_bitcoin::{secp256k1::Secp256k1, XOnlyPublicKey};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::mpsc::Receiver;
@@ -42,7 +43,7 @@ pub struct Game {
     server: Option<Arc<GameServer>>,
 }
 
-#[derive(Serialize, Debug, Deserialize)]
+#[derive(Serialize, Debug, Deserialize, JsonSchema,Clone)]
 pub struct Pending {
     pub join_code: game_host_messages::JoinCode,
     pub password: Option<JoinCode>,
@@ -83,6 +84,12 @@ pub enum GameInitState {
 impl GameInitState {
     pub fn is_none(&self) -> bool {
         matches!(self, GameInitState::None)
+    }
+    pub fn pending_opt(&self) -> Option<&Pending> {
+        match self {
+            GameInitState::Pending(p) => Some(p),
+            _ => None
+        }
     }
     pub fn game_mut(&mut self) -> Option<&mut Game> {
         match self {
@@ -148,6 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let db = Database {
         state: Arc::new(Mutex::new(None)),
     };
+
     let db_for_setup = db.clone();
     let sk = SigningKeyInner::new(Mutex::new(None));
     let globals: Arc<Globals> = if let Ok(s) = std::env::var("MASTERMINE_CONFIG") {

@@ -3,12 +3,8 @@ import { Button, FormControl, FormGroup, FormLabel, IconButton, InputLabel, Menu
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
+import { GameSetup } from '../Types/Gameboard';
 
-export type GameSetup = {
-  players: Array<string>,
-  start_amount: number,
-  finish_time: number,
-}
 
 export interface SwitchToGameProps {
   available_sequencers: [string, GameSetup][];

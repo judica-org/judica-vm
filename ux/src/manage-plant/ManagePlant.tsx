@@ -6,11 +6,12 @@ import FormModal from "../form-modal/FormModal";
 import { plant_type_color_map } from "../util";
 import { MoveHashboards } from "../move-hashboards/MoveHashboards";
 import { EntityID } from "../Types/GameMove";
+import { UXUserInventory } from "../Types/Gameboard";
 
 export type PlantLabel = { readonly id: EntityID, readonly owner: EntityID, readonly watts: string, readonly for_sale: boolean };
 
 export const ManagePlant = ({ asic_token_id, selected_plant, power_plants, user_inventory }:
-  { asic_token_id: string | null, selected_plant: EntityID | null, power_plants: UserPowerPlant[] | null, user_inventory: UserInventory | null }) => {
+  { asic_token_id: string | null, selected_plant: EntityID | null, power_plants: UserPowerPlant[] | null, user_inventory: UXUserInventory | null }) => {
 
   // extracted from user_inventory
   const [userPowerPlants, setUserPowerPlants] = useState<Record<string, UserPowerPlant> | null>(null);

@@ -19,7 +19,7 @@ use tracing::trace;
 ///
 /// Pairs have a balance in Apples and Oranges, as well as a token that represents
 /// a fractional interest (unit / total) redemptive right of Apples : Oranges
-#[derive(Serialize, Clone, Copy)]
+#[derive(Serialize, Clone, Copy, JsonSchema, Debug)]
 pub(crate) struct ConstantFunctionMarketMakerPair {
     /// The trading pair, should be normalized here
     pub(crate) pair: TradingPairID,
@@ -158,7 +158,7 @@ impl TradingPairID {
 }
 
 /// Registry of all Market Pairs
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, JsonSchema, Debug)]
 pub(crate) struct ConstantFunctionMarketMaker {
     pub(crate) markets: BTreeMap<TradingPairID, ConstantFunctionMarketMakerPair>,
 }
@@ -621,7 +621,7 @@ impl ConstantFunctionMarketMaker {
 }
 
 /// A struct for passing token qty information to the UX for price calculation
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, JsonSchema)]
 pub struct UXMaterialsPriceData {
     pub trading_pair: TradingPairID,
     pub asset_a: String,
