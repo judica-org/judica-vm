@@ -216,9 +216,12 @@ pub async fn finish_setup(
                         .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
                     {
                         let mut handle = msgdb.get_handle().await;
-                        for env in authed {
+                        for (i, env) in authed.into_iter().enumerate() {
                             handle
-                                .try_insert_authenticated_envelope(env, false)
+                                .insert_user_by_genesis_envelope(
+                                    format!("{}::{}", String::from(code), i),
+                                    env,
+                                )
                                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()))?
                                 // These errors are OK here
                                 .ok();
