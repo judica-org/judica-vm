@@ -1,17 +1,18 @@
-import { Card, CardHeader, CardContent, Typography, Table, TableBody, TableCell, TableHead, TableRow } from "@mui/material";
+import { Card, CardHeader, CardContent, Typography, Table, TableBody, TableCell, TableHead, TableRow, Divider } from "@mui/material";
 import FactoryIcon from '@mui/icons-material/Factory';
 import { useEffect, useState } from "react"
 import { UserPowerPlant, UserInventory } from "../App";
-import FormModal from "../form-modal/FormModal";
 import { plant_type_color_map } from "../util";
 import { MoveHashboards } from "../move-hashboards/MoveHashboards";
 import { EntityID } from "../Types/GameMove";
+import SaleListingForm from "../sale-listing/SaleListingForm";
+import PurchaseOfferForm from "../purchase-offer/PurchaseOfferForm";
 import { UXUserInventory } from "../Types/Gameboard";
 
 export type PlantLabel = { readonly id: EntityID, readonly owner: EntityID, readonly watts: string, readonly for_sale: boolean };
 
-export const ManagePlant = ({ asic_token_id, selected_plant, power_plants, user_inventory }:
-  { asic_token_id: string | null, selected_plant: EntityID | null, power_plants: UserPowerPlant[] | null, user_inventory: UXUserInventory | null }) => {
+export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, power_plants, user_inventory }:
+  { asic_token_id: string | null, bitcoin_token_id: string | null, selected_plant: EntityID | null, power_plants: UserPowerPlant[] | null, user_inventory: UXUserInventory | null }) => {
 
   // extracted from user_inventory
   const [userPowerPlants, setUserPowerPlants] = useState<Record<string, UserPowerPlant> | null>(null);
@@ -64,15 +65,16 @@ export const ManagePlant = ({ asic_token_id, selected_plant, power_plants, user_
         </TableBody>
       </Table>}
       <div>
-        {selected_plant &&
-          (owner && plantDetail && userHashboards && asic_token_id ? <div className="PlantOwnerOptions">
+        {selected_plant && plantDetail &&
+          (owner && userHashboards && asic_token_id ? <div className="PlantOwnerOptions">
             <Typography variant="h6">Options</Typography>
             <MoveHashboards action={"ADD"} plant={plantDetail} user_hashboards={userHashboards} hashboard_pointer={asic_token_id} />
-            <FormModal action={"Sell Plant"} title={'Sell Plant'} nft_id={plantDetail.id} />
+            <Divider />
+            <SaleListingForm nft_id={plantDetail.id} currency={bitcoin_token_id} />
           </div> :
             <div className="NonOwnerOptions">
               <Typography variant="h6">Options</Typography>
-              <FormModal action="Purchase Plant" title={"Purchase Plant"} nft_id={selected_plant} />
+              {plantDetail.for_sale && <PurchaseOfferForm nft_id={plantDetail.id} currency={bitcoin_token_id} listing_price={null} />}
             </div>)
         }
       </div>

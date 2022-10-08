@@ -1,14 +1,16 @@
 import FactoryIcon from '@mui/icons-material/Factory';
-import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Typography } from '@mui/material';
-import { appWindow } from '@tauri-apps/api/window';
+import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Typography, Divider, Button } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { UserInventory } from '../App';
-import FormModal from '../form-modal/FormModal';
-import { UXUserInventory } from '../Types/Gameboard';
+import { PowerPlant, UserInventory } from '../App';
+import SaleListingForm from '../sale-listing/SaleListingForm';
+import { EntityID } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
+import { UXUserInventory } from '../Types/Gameboard';
 
 
-export const Inventory = ({ userInventory }: { userInventory: UXUserInventory | null }) => {
+export const Inventory = ({ userInventory, currency }: { userInventory: UXUserInventory | null, currency: EntityID | null }) => {
+  const [selected_plant_id, set_selected_plant_id] = useState<string | null>(null);
+
 
   return (
     <div>
@@ -19,7 +21,7 @@ export const Inventory = ({ userInventory }: { userInventory: UXUserInventory | 
             title={'Inventory'}
             subheader={'All assets owned'}
           />
-          <CardContent className={'content'}>
+          <CardContent >
             <Typography variant='h4'>Power Plants</Typography>
             <Table>
               <TableHead>
@@ -43,18 +45,21 @@ export const Inventory = ({ userInventory }: { userInventory: UXUserInventory | 
                     </TableCell>
                     <TableCell align="right">{plant.hashrate}</TableCell>
                     <TableCell align="right">{plant.miners}</TableCell>
-                    <TableCell align="right"><FormModal action={"Sell Plant"} title={'Sell Plant'}  nft_id={plant.id} /><div>Plant Detail</div></TableCell>
+                    <TableCell align="right"><Button onClick={() => {
+                      set_selected_plant_id(plant.id);
+                    }}>List For Sale</Button></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            {selected_plant_id && currency ? <SaleListingForm nft_id={selected_plant_id} currency={currency} /> : null}
+            <Divider />
             <Typography variant='h4'>Tokens</Typography>
             <Table>
               <TableHead>
                 <TableRow>
                   <TableCell>Asset</TableCell>
                   <TableCell align="right">Quantity</TableCell>
-
                 </TableRow>
               </TableHead>
               <TableBody>

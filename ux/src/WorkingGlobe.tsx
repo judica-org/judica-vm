@@ -162,16 +162,6 @@ export default (props: { power_plants: UXPlantData[] }) => {
                             el.style.cursor = 'pointer';
                             // set to 
                             el.onclick = () => PlantSelected(d.id);
-                            el.onmouseover = () => {
-                                el.innerHTML = `
-                                <b>ID: ${d.id}</b> <br />
-                                Owner: <i>${d.owner}</i> <br />
-                                Watts: <i>${d.watts}</i> <br />
-                                Hashrate: <i>${d.hashrate}</i> <br />
-                                ${d.for_sale ? 'For Sale' : ''}
-                                `
-                            }
-                            el.onmouseleave = () => el.innerHTML = svg;
                             return el;
                         }}
 

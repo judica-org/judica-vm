@@ -114,6 +114,9 @@ fn test_game_swaps() {
                 assert!(r.is_ok());
                 let id = game.get_user_id(ALICE).unwrap();
                 assert_eq!(game.tokens[game.asic_token_id].balance_check(&id), 1);
+                assert_eq!(game.tokens[game.steel_token_id].balance_check(&id), 0);
+                assert_eq!(game.tokens[game.silicon_token_id].balance_check(&id), 0);
+                assert_eq!(game.tokens[game.concrete_token_id].balance_check(&id), 0);
             },
         ),
         (
