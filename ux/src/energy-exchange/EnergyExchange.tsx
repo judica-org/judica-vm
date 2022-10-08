@@ -1,14 +1,13 @@
 import FactoryIcon from '@mui/icons-material/Factory';
-import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
-import { appWindow } from '@tauri-apps/api/window';
+import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Button, Divider } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { PlantType } from '../App';
-import FormModal from '../form-modal/FormModal';
+import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
 import { EntityID } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
 
 export type NFTSale = {
-  currency: any,
+  currency: EntityID,
   nft_id: EntityID,
   plant_type: PlantType
   price: number,
@@ -16,23 +15,9 @@ export type NFTSale = {
   transfer_count: number,
 }
 
-const stub_listings: NFTSale[] = [{
-  currency: 'donuts',
-  nft_id: "13134",
-  plant_type: 'Flare',
-  price: 937,
-  seller: "95720486",
-  transfer_count: 2,
-}, {
-  currency: 'cookies',
-  nft_id: "26783",
-  plant_type: 'Solar',
-  price: 424,
-  seller: "3058572037",
-  transfer_count: 1,
-}]
-
-export const EnergyExchange = ({listings}:{listings:NFTSale[]}) => {
+export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
+  const [selected_listing, set_selected_listing] = useState<NFTSale | null>(null);
+  const [currency, set_currency] = useState<string | null>(null);
   return (
     <div>
       <div className='energy-exchange-container'>
@@ -48,8 +33,8 @@ export const EnergyExchange = ({listings}:{listings:NFTSale[]}) => {
                 <TableRow>
                   <TableCell>Plant Type</TableCell>
                   <TableCell>Seller</TableCell>
-                  <TableCell align="right">Price ($)</TableCell>
-                  <TableCell align="right">Currency (token)</TableCell>
+                  <TableCell align="right">Plant ID</TableCell>
+                  <TableCell align="right">Price ($Virtual BTC)</TableCell>
                   <TableCell align="right">Transfer Count</TableCell>
                   <TableCell align="right"></TableCell>
                 </TableRow>
@@ -58,20 +43,25 @@ export const EnergyExchange = ({listings}:{listings:NFTSale[]}) => {
                 {listings && listings.map((listing, index) => (
                   <TableRow key={index}>
                     <TableCell>
-                      {/* color code these in the future */}
+                      {listing.plant_type}
                       <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[listing.plant_type] }} />
                     </TableCell>
                     <TableCell component="th" scope="row">
                       {listing.seller}
                     </TableCell>
+                    <TableCell align="right">{listing.nft_id}</TableCell>
                     <TableCell align="right">{listing.price}</TableCell>
-                    <TableCell align="right">{listing.currency}</TableCell>
                     <TableCell align="right">{listing.transfer_count}</TableCell>
-                    <TableCell align="right"><FormModal action="Purchase Plant" title={"Purchase Plant"} nft_id={listing.nft_id}  /></TableCell>
+                    <TableCell align="right"><Button onClick={() => {
+                      set_selected_listing(listing);
+                      set_currency(listing.currency);
+                    }}>Purchase This Plant</Button></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            <Divider />
+            {selected_listing && currency ? <PurchaseOfferForm nft_id={selected_listing.nft_id} currency={currency} listing_price={selected_listing.price} /> : null}
           </CardContent>
         </Card>
       </div>

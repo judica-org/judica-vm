@@ -2,9 +2,7 @@ import { useState } from 'react';
 import { Modal, Button, Paper, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import PurchaseMaterialForm from '../purchase-material/PurchaseMaterialForm';
-import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
 import { RawMaterialsActions } from '../util';
-import SaleListingForm from '../sale-listing/SaleListingForm';
 import { EntityID, TradingPairID } from '../Types/GameMove';
 import { MaterialPriceDisplay } from '../App';
 
@@ -15,10 +13,11 @@ type FormModalProps = ({
 } | {
   readonly action: NFTActions;
   readonly nft_id: EntityID;
+  readonly currency: EntityID | null;
 }) & { readonly title?: string };
 
 function FormModal(props: FormModalProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<boolean>(false);
 
   const pickForm = (props: FormModalProps) => {
     switch (props.action) {
@@ -26,10 +25,6 @@ function FormModal(props: FormModalProps) {
         return <PurchaseMaterialForm action={props.action} market={props.market}></PurchaseMaterialForm>
       case 'SELL':
         return <PurchaseMaterialForm action={props.action} market={props.market}></PurchaseMaterialForm>
-      case 'Purchase Plant':
-        return <PurchaseOfferForm subtitle={`Purchase plant ${props.nft_id}`} />;
-      case 'Sell Plant':
-        return <SaleListingForm subtitle={'Sell'} />
     }
   }
 

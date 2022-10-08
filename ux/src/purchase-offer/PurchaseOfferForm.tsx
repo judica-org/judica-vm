@@ -1,49 +1,32 @@
-import { Card, CardHeader, CardContent } from "@mui/material";
-import Form, { FormSubmit } from "@rjsf/core";
-import { invoke } from "@tauri-apps/api";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Card, CardHeader, CardContent, Typography, Button, TextField, FormControl } from "@mui/material";
+import { useEffect, useState } from "react";
 import { tauri_host } from "../tauri_host";
 
-const PurchaseOfferForm = ({ subtitle, nft_id }: { subtitle: string, nft_id?: number }) => {
-  const [schema, setSchema] = useState<null | any>(null);
-
+const PurchaseOfferForm = ({ nft_id, currency, listing_price }: { nft_id: string, currency: string | null, listing_price: number | null }) => {
+  const [limit_price, set_limit_price] = useState<number>(0);
   useEffect(() => {
-    (async () => {
-      setSchema(await invoke("get_purchase_schema"));
-    })()
-  }, []);
-  console.log("purchase schema:", schema);
+    set_limit_price(listing_price ?? 0);
+  }, [listing_price])
 
-  const handle_submit = (data: FormSubmit) => {
-    tauri_host.make_move_inner({ purchase_n_f_t: data.formData });
+  const handle_submit = () => {
+    if (limit_price && currency)
+      tauri_host.make_move_inner({ purchase_n_f_t: { currency, limit_price, nft_id } });
+    console.log(['purchase-nft'], { purchase_n_f_t: { currency, limit_price, nft_id } });
   };
 
-  const formData = {
-    nft_id: nft_id ?? null
-  }
-
-  // for creater should be extracted out into a form util
-  const schema_form = useMemo<JSX.Element>(() => {
-    const customFormats = { "uint128": (s: string) => { return true; } };
-    if (schema)
-      return <Form formData={formData} schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
-        <button type="submit">Submit</button>
-      </Form>;
-
-    else
-      return <div></div>
-  }
-    , [schema]
-  )
-  return schema && <Card>
+  return <Card>
     <CardHeader
       title={'Purchase?'}
-      subheader={subtitle}
+      subheader={`Make an offer to purchase Plant ${nft_id}`}
     >
     </CardHeader>
     <CardContent>
       <div className='MoveForm' >
-        {schema_form}
+        <FormControl>
+          <Typography variant="body2">Limit Price</Typography>
+          <TextField type="number" value={limit_price} onChange={(ev) => { set_limit_price(parseInt(ev.target.value)) }}></TextField>
+          <Button variant="contained" type="submit" onClick={handle_submit}>Make Purchase Offer</Button>
+        </FormControl>
       </div>
     </CardContent>
   </Card>;
