@@ -206,7 +206,7 @@ function App() {
               <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
             </Panel>
             <Panel index={4} current_index={current_tab}>
-              <Inventory userInventory={user_inventory}></Inventory>
+              <Inventory userInventory={user_inventory} currency={game_board?.bitcoin_token_id ?? null}></Inventory>
             </Panel>
             <Panel index={5} current_index={current_tab}>
               <MoveForm></MoveForm>
@@ -220,6 +220,7 @@ function App() {
             <Panel index={8} current_index={current_tab}>
               <ManagePlant
                 asic_token_id={game_board?.asic_token_id ?? null}
+                bitcoin_token_id={game_board?.bitcoin_token_id ?? null}
                 selected_plant={selected_plant}
                 power_plants={power_plants}
                 user_inventory={user_inventory}

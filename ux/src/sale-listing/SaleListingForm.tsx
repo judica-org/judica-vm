@@ -1,11 +1,9 @@
-import { Card, CardHeader, CardContent } from "@mui/material";
-import Form, { FormSubmit } from "@rjsf/core";
-import { invoke } from "@tauri-apps/api";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Card, CardHeader, CardContent, FormControl, TextField, Typography, Button } from "@mui/material";
+import { useState } from "react";
 import { tauri_host } from "../tauri_host";
 
-const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
-  const [schema, setSchema] = useState<null | any>(null);
+const SaleListingForm = ({ nft_id, currency }: { nft_id: string, currency: string | null }) => {
+  const [sale_price, set_sale_price] = useState<number>(0);
 
   useEffect(() => {
     (async () => {
@@ -19,33 +17,19 @@ const SaleListingForm = ({ subtitle }: { subtitle: string }) => {
     tauri_host.make_move_inner({ list_n_f_t_for_sale: data.formData })
   };
 
-  // form creater should be extracted out into a form util
-  const schema_form = useMemo<JSX.Element>(() => {
-    const customFormats = { "uint128": (s: string) => { return true; } };
-    if (schema)
-      return <Form schema={schema} noValidate={true} liveValidate={false} onSubmit={handle_submit} customFormats={customFormats}>
-        <button type="submit">Submit</button>
-      </Form>;
-
-    else
-      return <div></div>
-  }
-    , [schema]
-  )
-  const uid = useRef<null | HTMLInputElement>(null);
-  return schema && <Card>
+  return <Card>
     <CardHeader
       title={'Sell?'}
-      subheader={subtitle}
+      subheader={`List Plant ${nft_id} For Sale`}
     >
     </CardHeader>
     <CardContent>
       <div className='MoveForm' >
-        <div>
-          <label>Player ID:</label>
-          <input type={"number"} ref={uid}></input>
-        </div>
-        {schema_form}
+        <FormControl>
+          <Typography variant="body2">Sale Price in Virtual BTC</Typography>
+          <TextField type="number" value={sale_price} onChange={(ev) => { set_sale_price(parseInt(ev.target.value)) }}></TextField>
+          <Button variant="contained" type="submit" onClick={handle_submit}>Create Listing</Button>
+        </FormControl>
       </div>
     </CardContent>
   </Card>;
