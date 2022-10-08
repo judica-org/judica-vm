@@ -1,8 +1,8 @@
-use super::view::{TradeType, EmittedAppState};
+use super::view::{EmittedAppState, TradeType};
 use super::{view::SyncError, *};
 use crate::config::Globals;
 use crate::tor::{GameHost, TorClient};
-use crate::{Game, TriggerRerender};
+use crate::{Game, GameInitState, TriggerRerender};
 use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode};
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
@@ -30,6 +30,8 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     simulate_trade,
     set_game_host,
     finalize_game,
+    disconnect_game,
+    disconnect_game_host
 ];
 #[tauri::command]
 pub async fn simulate_trade(
@@ -49,14 +51,7 @@ pub async fn game_synchronizer(
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
 ) -> Result<EmittedAppState, SyncError> {
-    view::game_synchronizer_inner(
-        window,
-        s,
-        d,
-        game_host,
-        signing_key,
-    )
-    .await
+    view::game_synchronizer_inner(window, s, d, game_host, signing_key).await
 }
 
 #[tauri::command]
@@ -142,18 +137,16 @@ pub(crate) async fn make_new_chain(
     game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
 ) -> Result<(), String> {
-    modify::make_new_chain_inner(
-        nickname,
-        code,
-        secp,
-        db,
-        globals,
-        game_host_state,
-        game,
-    )
-    .await
+    modify::make_new_chain_inner(nickname, code, secp, db, globals, game_host_state, game).await
 }
 
+#[tauri::command]
+pub(crate) async fn disconnect_game_host(
+    game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
+) -> Result<(), ()> {
+    game_host.inner().lock().await.take();
+    Ok(())
+}
 #[tauri::command]
 pub(crate) async fn set_game_host(
     g: GameHost,
@@ -171,15 +164,7 @@ pub(crate) async fn make_new_game(
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
 ) -> Result<(), String> {
-    modify::make_new_game(
-        nickname,
-        secp,
-        db,
-        client,
-        game_host,
-        game,
-    )
-    .await
+    modify::make_new_game(nickname, secp, db, client, game_host, game).await
 }
 
 #[tauri::command]
@@ -211,6 +196,22 @@ pub(crate) async fn send_chat(
     )
     .await
 }
+
+#[tauri::command]
+pub(crate) async fn disconnect_game(
+    sk: State<'_, SigningKeyInner>,
+    game: GameState<'_>,
+) -> Result<(), ()> {
+    {
+        let mut g = game.lock().await;
+        *g = GameInitState::None;
+    }
+    {
+        sk.lock().await.take();
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) async fn switch_to_game(
     secp: State<'_, Arc<Secp256k1<All>>>,

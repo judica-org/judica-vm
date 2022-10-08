@@ -35,13 +35,12 @@ export function SwitchToGame({ available_sequencers, which_game_loaded }: Switch
         value={which_game}
         renderValue={(v) => `${(v && v || null)?.substring(0, 16) ?? "None"}...`}
       >
-        <MenuItem value={0} selected={which_game === 0}></MenuItem>
+        <MenuItem value={0} selected={which_game === 0}>None</MenuItem>
         {options}
       </Select>
       <Button type="submit" variant="contained"
         onClick={handle_submit}
       >Switch Game</Button>
-      {which_game_loaded && <IconButton onClick={() => window.navigator.clipboard.writeText(which_game_loaded)}><ContentCopy></ContentCopy></IconButton>}
     </FormGroup>
   </div>;
 }
