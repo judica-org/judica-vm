@@ -78,7 +78,7 @@ export default (props: { power_plants: UXPlantData[] }) => {
     })
     const owners = Array.from(plant_owners.entries()).map(([a, b]) => a);
     const output_bars = getBarData(props.power_plants);
-    const [selectedPlantOwners, setSelectedPlantOwners] = useState<Record<EntityID, null>>(Object.fromEntries(owners.map((a) => [a, null]))); // default to all owners
+    const [selectedPlantOwners, setSelectedPlantOwners] = useState<Record<EntityID, boolean>>(Object.fromEntries(owners.map((a) => [a, true]))); // default to all owners
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [plantTypes, setPlantTypes] = React.useState<Record<PlantType, boolean>>({
         'Hydro': true,
@@ -90,7 +90,7 @@ export default (props: { power_plants: UXPlantData[] }) => {
 
 
     React.useEffect(() => {
-        const plants_by_type = props.power_plants.filter(({ plant_type, owner }) => plantTypes[plant_type] && Object.hasOwn(selectedPlantOwners, owner));
+        const plants_by_type = props.power_plants.filter(({ plant_type, owner }) => plantTypes[plant_type] && selectedPlantOwners[owner]);
         set_selected_plants(plants_by_type);
     }, [plantTypes, selectedPlantOwners]);
 
@@ -105,14 +105,13 @@ export default (props: { power_plants: UXPlantData[] }) => {
     const handleOwnersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         console.log(['owners-change-event'], event)
         const picked_owner = event.target.name;
-        if (Object.hasOwn(selectedPlantOwners, picked_owner)) {
+        if (selectedPlantOwners[picked_owner]) {
             let copy = { ...selectedPlantOwners };
-            delete copy[picked_owner];
+            copy[picked_owner] = false;
             setSelectedPlantOwners(copy);
         } else {
-            let e = Object.entries(selectedPlantOwners);
-            e.push([picked_owner, null]);
-            let copy = Object.fromEntries(e);
+            let copy = { ...selectedPlantOwners };
+            copy[picked_owner] = true;
             setSelectedPlantOwners(copy);
         }
     }
