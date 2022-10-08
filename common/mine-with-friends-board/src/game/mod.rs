@@ -53,23 +53,23 @@ use tokens::TokenRegistry;
 use tracing::info;
 use tracing::trace;
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, JsonSchema)]
 pub struct UXUserInventory {
     user_power_plants: BTreeMap<NftPtr, UXPlantData>,
     user_token_balances: Vec<(String, u128)>,
 }
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct UserData {
     pub key: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, JsonSchema, Debug)]
 pub struct Tick {
     first_time: u64,
     elapsed: u64,
 }
 /// GameBoard holds the entire state of the game.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct GameBoard {
     pub(crate) tokens: tokens::TokenRegistry,
     pub(crate) swap: token_swap::ConstantFunctionMarketMaker,
@@ -596,13 +596,15 @@ impl GameBoard {
                 amount,
                 currency,
             }) => {
-                let shipping_time = 1000;
+                let shipping_time = 1;
                 let owner = &self.nfts.nfts[&nft_id].owner();
                 if owner.eq(&from) {
                     let plant = &self.nfts.power_plants[&nft_id];
                     plant
                         .to_owned()
                         .ship_hashrate(currency, amount, shipping_time, self);
+                } else {
+                    info!("Remove Tokens: NFT owner mismatch");
                 }
             }
             GameMove::Chat(Chat(s)) => {

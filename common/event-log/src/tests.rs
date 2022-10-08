@@ -25,8 +25,11 @@ impl ToOccurrence for StringOccurrence {
     fn to_data(&self) -> ruma_serde::CanonicalJsonValue {
         ruma_serde::CanonicalJsonValue::String(self.0.clone())
     }
+    fn unique_tag(&self) -> Option<String> {
+        None
+    }
 
-    fn stable_typeid(&self) -> crate::db_handle::accessors::occurrence::ApplicationTypeID {
+    fn stable_typeid() -> crate::db_handle::accessors::occurrence::ApplicationTypeID {
         ApplicationTypeID::from_inner("StringOccurrence")
     }
 }
@@ -81,18 +84,23 @@ async fn test_db_basic_function() {
         .is_err(),);
 
     let occur_once = StringOccurrence("First Message".into());
-    let d_first: &dyn ToOccurrence = &occur_once;
     let occurrence_one = accessor
-        .insert_new_occurrence_now_from(group_one, d_first)
+        .insert_new_occurrence_now_from(group_one, &occur_once)
+        .unwrap()
         .unwrap();
     let o = StringOccurrence("Twice".into());
-    let d: &dyn ToOccurrence = &o;
-    let repeat = Occurrence::from(d);
-    let occurrence_two = accessor.insert_occurrence(group_one, &repeat).unwrap();
-    let occurrence_three = accessor.insert_occurrence(group_one, &repeat).unwrap();
+    let repeat = Occurrence::from(&o);
+    let occurrence_two = accessor
+        .insert_occurrence(group_one, &repeat)
+        .unwrap()
+        .unwrap();
+    let occurrence_three = accessor
+        .insert_occurrence(group_one, &repeat)
+        .unwrap()
+        .unwrap();
 
     let occurrences = vec![
-        (occurrence_one, d_first.into()),
+        (occurrence_one, (&occur_once).into()),
         (occurrence_two, repeat.clone()),
         (occurrence_three, repeat.clone()),
     ];

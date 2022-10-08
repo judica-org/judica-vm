@@ -2,7 +2,8 @@ SELECT
     O.occurrence_id,
     O.occurrence_data,
     O.occurrence_time,
-    O.occurrence_typeid
+    O.occurrence_typeid,
+    o.occurrence_unique_tag
 FROM
     occurrence O
 WHERE

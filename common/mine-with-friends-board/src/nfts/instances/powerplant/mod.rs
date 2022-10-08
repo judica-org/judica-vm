@@ -35,7 +35,7 @@ impl PlantType {
         total_prices
     }
 }
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, JsonSchema, Debug)]
 pub(crate) struct PowerPlant {
     pub id: NftPtr,
     pub plant_type: PlantType,
@@ -113,7 +113,8 @@ impl PowerPlant {
         game: &mut GameBoard,
     ) {
         let owner = game.nfts[self.id].owner();
-        CoinLockup::lockup(game, owner, miners, amount, shipping_time)
+        let sender = self.id.0;
+        CoinLockup::lockup(game, sender, owner, miners, amount, shipping_time)
     }
 }
 

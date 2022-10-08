@@ -1,7 +1,6 @@
 import { appWindow } from '@tauri-apps/api/window';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import './App.css';
-import Form, { FormSubmit } from "@rjsf/core";
 import EnergyExchange, { NFTSale } from './energy-exchange/EnergyExchange';
 import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials/RawMaterialsMarket';
@@ -16,6 +15,7 @@ import DrawerAppBar from './menu-bar/MenuDrawer';
 import { EntityID, TradingPairID } from './Types/GameMove';
 import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
 import MoveForm from './move-form/MoveForm';
+import { EmittedAppState, GameBoard, UXPlantData } from './Types/Gameboard';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export const PLANT_SELECTED_EVENT = "PlantSelected";
@@ -35,44 +35,7 @@ export const ListenPlantSelected = (f: (d: EntityID) => void) => {
 }
 
 
-export type PowerPlant = {
-  id: EntityID,
-  plant_type: PlantType //how does PlantType enum show up
-  watts: number,
-  coordinates: number[],
-  owner: EntityID,
-  miners: number,
-  for_sale: boolean,
-}
-
-type NFTs = {
-  nfts: { nft_id: EntityID, owner: EntityID, transfer_count: number }[],
-  power_plants: {
-    id: EntityID,
-    plant_type: string //how does PlantType enum show up
-    watts: number,
-    coordinates: number[]
-  }[]
-}
-
-export type game_board = {
-  erc20s: any,
-  swap: any, // determine TS swap shape
-  turn_count: number,
-  alloc: any,
-  users: Record<string, string>,
-  nfts: NFTs,
-  nft_sales: { nfts: NFTSale },
-  player_move_sequences: Record<string, number>,
-  init: boolean,
-  new_users_allowed: boolean,
-  bitcoin_token_id: null | string,
-  dollar_token_id: null | string,
-  asic_token_id: null | string,
-  root_user: null | string,
-};
-
-function GameBoard(props: { g: game_board | null }) {
+function ListGameBoard(props: { g: GameBoard | null }) {
   return props.g && <ul>
     <li>
       Init: {JSON.stringify(props.g.init)}
@@ -130,9 +93,7 @@ export type MaterialPriceDisplay = {
   price_a_b_b_a: [number, number],
 }
 
-export type UserPowerPlant = PowerPlant & {
-  readonly hashrate: number | null;
-}
+export type UserPowerPlant = UXPlantData;
 
 export type UserInventory = {
   user_power_plants: Record<string, UserPowerPlant>,
@@ -154,109 +115,48 @@ export function flip_trading_pair(s: TradingPairIDParsed): TradingPairIDParsed {
   return { asset_a: s.asset_b, asset_b: s.asset_a }
 }
 function App() {
-  const [game_board, set_game_board] = useState<game_board | null>(null);
   const [location, setLocation] = useState<[number, number]>([0, 0]);
   const [selected_plant, set_selected_plant] = useState<EntityID | null>(null);
-  const [materials, set_materials] = useState<MaterialPriceDisplay[]>([]);
   const [current_tab, set_current_tab] = useState(1);
-  const [userInventory, setUserInventory] = useState<UserInventory | null>(null);
-  const [powerPlants, setPowerPlants] = useState<UserPowerPlant[] | null>(null);
-  const [chat_log, set_chat_log] = React.useState<[number, number, string][]>([]);
-  const [listings, setListings] = useState<NFTSale[]>([]);
-  const [db_name_loaded, set_db_name_loaded] = React.useState<[string, string | null] | null>(null);
-  const [which_game_loaded, set_which_game_loaded] = React.useState<string | null>(null);
-  const [available_sequencers, set_available_sequencers] = React.useState<Array<[string, string]>>([]);
-  const [signing_key, set_signing_key] = useState<string | null>(null);
-  const [available_keys, set_available_keys] = useState<string[]>([]);
+  const [root_state, set_root_state] = useState<null | EmittedAppState>(null);
   useEffect(() => {
-
-
-    const unlisten_user_keys = appWindow.listen("user-keys", (ev) => {
-      console.log(["available keys"], ev.payload);
-      const new_keys = ev.payload as typeof available_keys;
-      set_available_keys(new_keys);
-    })
-    const unlisten_signing_key = appWindow.listen("signing-key", (ev) => {
-      console.log(["signing-key"], ev.payload);
-      set_signing_key(ev.payload as string)
-    });
-    const unlisten_game_board = appWindow.listen("game-board", (ev) => {
-      console.log(['game-board-event'], ev);
-      set_game_board(ev.payload as game_board)
-    });
-
-    const unlisten_db_name_loaded = appWindow.listen("db-connection", (ev) => {
-      console.log(ev);
-      set_db_name_loaded(ev.payload as ([string, string | null] | null));
-    })
-
-    const unlisten_available_sequencers = appWindow.listen("available-sequencers", (ev) => {
-      console.log(ev.payload);
-      set_available_sequencers(ev.payload as typeof available_sequencers);
-    })
-    const unlisten_host_key = appWindow.listen("host-key", (ev) => {
-      console.log(ev.payload);
-      set_which_game_loaded(ev.payload as string);
-    })
-
-    const unlisten_material_prices = appWindow.listen("materials-price-data", (ev) => {
-      console.log(ev);
-      const materials_data = ev.payload as MaterialPriceData[];
-      const transformed: MaterialPriceDisplay[] = materials_data.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b, display_asset }) => {
-        return {
-          trading_pair,
-          price_a_b_b_a: [mkt_qty_b / mkt_qty_a, mkt_qty_a / mkt_qty_b],
-          asset_a: asset_a,
-          asset_b: asset_b,
-          display_asset
-        }
-      })
-      set_materials(transformed)
-    });
-
-    const unlisten_user_inventory = appWindow.listen("user-inventory", (ev) => {
-      console.log(['user-inventory'], ev);
-      setUserInventory(ev.payload as UserInventory);
-    });
-
-    const unlisten_power_plants = appWindow.listen("power-plants", (ev) => {
-      console.log(['power-plants'], ev);
-      setPowerPlants(ev.payload as UserPowerPlant[]);
-    });
-
-    const unlisten_chat_log = appWindow.listen("chat-log", (ev) => {
-      console.log("Chat:", ev.payload);
-      const new_msgs = ev.payload as typeof chat_log;
-      set_chat_log(new_msgs)
-    })
-
-    const unlisten_energy_exchange = appWindow.listen("energy-exchange", (ev) => {
-      console.log(['energy-exchange'], ev);
-      setListings(ev.payload as NFTSale[]);
-    });
-    tauri_host.game_synchronizer()
+    let cancel = setTimeout(() => { }, 0);
+    const callback = async () => {
+      set_root_state(await tauri_host.game_synchronizer());
+      cancel = setTimeout(callback, 5000);
+    };
+    callback();
     return () => {
-      (async () => {
-        const unlisten_all = await Promise.all([
-          unlisten_signing_key,
-          unlisten_user_keys,
-          unlisten_chat_log,
-          unlisten_energy_exchange,
-          unlisten_game_board,
-          unlisten_material_prices,
-          unlisten_user_inventory,
-          unlisten_power_plants,
-          unlisten_db_name_loaded,
-          unlisten_available_sequencers,
-          unlisten_host_key
-        ]);
-        for (const u of unlisten_all) {
-          u()
-        }
-      })();
+      clearTimeout(cancel)
     }
+
   }, []);
 
+  const materials: MaterialPriceDisplay[] = root_state?.materials_price_data?.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b, display_asset }) => {
+    return {
+      trading_pair,
+      price_a_b_b_a: [mkt_qty_b / mkt_qty_a, mkt_qty_a / mkt_qty_b],
+      asset_a: asset_a,
+      asset_b: asset_b,
+      display_asset
+    }
+  }) ?? [];
+
+  const db_name_loaded = root_state?.db_connection ?? null;
+  const available_sequencers = root_state?.available_sequencers ?? [];
+
+  const which_game_loaded = root_state?.host_key ?? null;
+  const signing_key = root_state?.signing_key ?? null;
+
+  const available_keys = root_state?.user_keys ?? [];
+  const join_code = root_state?.pending?.join_code ?? null;
+  const join_password = root_state?.pending?.password ?? null;
+  const game_host_service = root_state?.game_host_service ?? null;
+  const power_plants = root_state?.power_plants ?? [];
+  const chat_log = root_state?.chat_log ?? [];
+  const game_board = root_state?.game_board ?? null;
+  const user_inventory = root_state?.user_inventory ?? null;
+  const listings = root_state?.energy_exchange ?? [];
 
 
   useEffect(() => {
@@ -274,9 +174,15 @@ function App() {
   return (
     <div>
       <div className="App">
-        <DrawerAppBar {...{ db_name_loaded, available_sequencers, which_game_loaded, signing_key, available_keys }}></DrawerAppBar>
+        <DrawerAppBar {...{
+          db_name_loaded,
+          available_sequencers, which_game_loaded,
+          signing_key, available_keys,
+          join_code, join_password,
+          game_host_service
+        }}></DrawerAppBar>
         <div className="Content">
-          <WorkingGlobe></WorkingGlobe>
+          <WorkingGlobe power_plants={power_plants}></WorkingGlobe>
           <Box className="DataDisplay">
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }} className="DisplayContents">
               <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
@@ -300,7 +206,7 @@ function App() {
               <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
             </Panel>
             <Panel index={4} current_index={current_tab}>
-              <Inventory userInventory={userInventory}></Inventory>
+              <Inventory userInventory={user_inventory}></Inventory>
             </Panel>
             <Panel index={5} current_index={current_tab}>
               <MoveForm></MoveForm>
@@ -309,14 +215,14 @@ function App() {
               <Chat chat_log={chat_log}></Chat>
             </Panel>
             <Panel index={7} current_index={current_tab}>
-              <GameBoard g={game_board}></GameBoard>
+              <ListGameBoard g={game_board}></ListGameBoard>
             </Panel>
             <Panel index={8} current_index={current_tab}>
               <ManagePlant
                 asic_token_id={game_board?.asic_token_id ?? null}
                 selected_plant={selected_plant}
-                power_plants={powerPlants}
-                user_inventory={userInventory}
+                power_plants={power_plants}
+                user_inventory={user_inventory}
               />
             </Panel>
           </Box>

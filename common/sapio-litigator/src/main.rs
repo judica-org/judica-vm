@@ -1,88 +1,38 @@
-use attest_database::connection::MsgDB;
-use attest_database::setup_db;
-use attest_util::bitcoin::BitcoinConfig;
 use bitcoin::psbt::PartiallySignedTransaction;
-use bitcoin::{OutPoint, Transaction, Txid, XOnlyPublicKey};
-use bitcoincore_rpc_async::Client;
+use bitcoin::secp256k1::Secp256k1;
+use bitcoin::{OutPoint, Transaction, Txid};
 use emulator_connect::{CTVAvailable, CTVEmulator};
-use event_log::connection::EventLog;
-use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
-use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
-use ruma_serde::CanonicalJsonValue;
-use sapio::contract::abi::continuation::ContinuationPoint;
-use sapio::contract::object::SapioStudioFormat;
-use sapio::contract::{CompilationError, Compiled};
-use sapio_base::effects::{EditableMapEffectDB, PathFragment};
-use sapio_base::serialization_helpers::SArc;
-use sapio_base::txindex::TxIndexLogger;
-use sapio_wasm_plugin::host::PluginHandle;
-use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID;
+use futures::stream::FuturesUnordered;
+use sapio::contract::Compiled;
+use sapio_base::effects::PathFragment;
+use sapio_wasm_plugin::host::WasmPluginHandle;
 use sapio_wasm_plugin::CreateArgs;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use simps::AutoBroadcast;
-
 use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::rc::Rc;
+use std::error::Error;
 use std::sync::Arc;
-
-use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use std::time::Duration;
 use tokio::spawn;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
+use tokio::task::JoinHandle;
+use tracing::{info, trace};
 mod universe;
 
-#[derive(Serialize, Deserialize)]
-pub enum Event {
-    Initialization(CreateArgs<Value>),
-    ExternalEvent(simps::Event),
-    TransactionFinalized(String, Transaction),
-    Rebind(OutPoint),
-    SyntheticPeriodicActions(i64),
+pub mod events;
+pub mod litigator_event_log;
+
+struct AppState {
+    bound_to: Option<OutPoint>,
+    psbt_db: Arc<PSBTDatabase>,
+    event_counter: u64,
+    // Initialized after first move
+    module: Arc<Mutex<Result<WasmPluginHandle<Compiled>, String>>>,
+    args: Result<CreateArgs<Value>, String>,
+    contract: Result<Compiled, String>,
 }
 
-impl ToOccurrence for Event {
-    fn to_data(&self) -> CanonicalJsonValue {
-        ruma_serde::to_canonical_value(self).unwrap()
-    }
-    fn stable_typeid(&self) -> ApplicationTypeID {
-        ApplicationTypeID::from_inner("LitigatorEvent")
-    }
-}
-
-enum AppState {
-    Uninitialized,
-    Initialized {
-        args: CreateArgs<Value>,
-        contract: Compiled,
-        bound_to: Option<OutPoint>,
-        psbt_db: Arc<PSBTDatabase>,
-    },
-}
-impl AppState {
-    fn is_uninitialized(&self) -> bool {
-        matches!(self, AppState::Uninitialized)
-    }
-}
-
-trait CompiledExt {
-    fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a>;
-}
-// TODO: Do away with allocations?
-impl CompiledExt for Compiled {
-    fn continuation_points<'a>(&'a self) -> Box<dyn Iterator<Item = &'a ContinuationPoint> + 'a> {
-        Box::new(
-            self.continue_apis.values().chain(
-                self.suggested_txs
-                    .values()
-                    .chain(self.ctv_to_tx.values())
-                    .flat_map(|x| &x.outputs)
-                    .flat_map(|x| x.contract.continuation_points()),
-            ),
-        )
-    }
-}
+pub mod ext;
 
 struct PSBTDatabase {
     cache: BTreeMap<Txid, Vec<PartiallySignedTransaction>>,
@@ -102,270 +52,194 @@ impl PSBTDatabase {
     }
 }
 
-#[derive(Deserialize)]
-struct Config {
-    db_app_name: String,
-    #[serde(default)]
-    db_prefix: Option<PathBuf>,
-    bitcoin: BitcoinConfig,
-    app_instance: String,
-    logfile: PathBuf,
-    event_log: EventLogConfig,
-    oracle_key: XOnlyPublicKey,
-}
-
-#[derive(Deserialize)]
-struct EventLogConfig {
-    app_name: String,
-    #[serde(default)]
-    prefix: Option<PathBuf>,
-    group: OccurrenceGroupKey,
-}
-
-impl Config {
-    fn from_env() -> Result<Config, Box<dyn std::error::Error>> {
-        let j = std::env::var("LITIGATOR_CONFIG_JSON")?;
-        Ok(serde_json::from_str(&j)?)
-    }
-    async fn get_db(&self) -> Result<MsgDB, Box<dyn std::error::Error>> {
-        let db = setup_db(&self.db_app_name, self.db_prefix.clone()).await?;
-        Ok(db)
-    }
-    async fn get_event_log(&self) -> Result<EventLog, Box<dyn std::error::Error>> {
-        let db =
-            event_log::setup_db(&self.event_log.app_name, self.event_log.prefix.clone()).await?;
-        Ok(db)
-    }
-    async fn get_bitcoin_rpc(&self) -> Result<Arc<Client>, Box<dyn std::error::Error>> {
-        Ok(self.bitcoin.get_new_client().await?)
-    }
-}
+pub mod config;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
-    do_main().await
+    let mut args = std::env::args();
+    let config = config::Config::from_env()?;
+    match args.nth(1) {
+        None => Err("Must have init or run")?,
+        Some(s) if &s == "init" => Ok(init_contract_event_log(config).await?),
+        Some(s) if &s == "run" => Ok(litigate_contract(config).await?),
+        Some(s) => {
+            println!("Invalid argument: {}", s);
+            Ok(())
+        }
+    }
 }
 
-async fn do_main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Arc::new(Config::from_env()?);
+async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    let evlog = config.get_event_log().await?;
+    let accessor = evlog.get_accessor().await;
+    let group = config.event_log.group.clone();
+    let gid = match accessor.get_occurrence_group_by_key(&group) {
+        Ok(gid) => {
+            info!("Instance {} has already been initialized", group);
+            gid
+        }
+        Err(_) => {
+            info!("Initializing OccurenceGroupID for {:?}", group);
+
+            accessor.insert_new_occurrence_group(&group)?
+        }
+    };
+    let occurrences = accessor.get_occurrences_for_group(gid)?;
+    if occurrences.is_empty() {
+        info!(
+            "Initializing OccurrenceGroup with module at {:?}",
+            config.contract_location
+        );
+        let location = config.contract_location.to_str().unwrap();
+        insert_init(location, &config, &accessor, gid).await?;
+    }
+    Ok(())
+}
+
+async fn insert_init(
+    location: &str,
+    _config: &config::Config,
+    accessor: &event_log::db_handle::EventLogAccessor<'_>,
+    gid: OccurrenceGroupID,
+) -> Result<(), Box<dyn Error>> {
+    let ev = events::Event::ModuleBytes(tokio::fs::read(&location).await?);
+    accessor.insert_new_occurrence_now_from(
+        gid,
+        &events::TaggedEvent(ev, Some(events::Tag::InitModule)),
+    )??;
+    Ok(())
+}
+
+async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    // initialize db connection to the event log
     let evlog = config.get_event_log().await?;
     let msg_db = config.get_db().await?;
     let _bitcoin = config.get_bitcoin_rpc().await?;
-    let typ = "org";
-    let org = "judica";
-    let proj = format!("sapio-litigator.{}", config.app_instance);
-    let proj =
-        directories::ProjectDirs::from(typ, org, &proj).expect("Failed to find config directory");
-    let mut data_dir = proj.data_dir().to_owned();
-    data_dir.push("modules");
+
+    // get location of project directory modules
+    let data_dir = config::data_dir_modules(&config.app_instance);
+
+    // allocate a CTV Emulator
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
-    let logfile = config.logfile.clone();
-    let mut opened = OpenOptions::default();
-    opened.append(true).create(true).open(&logfile).await?;
-    let fi = File::open(logfile).await?;
-    let read = BufReader::new(fi);
-    let mut lines = read.lines();
-    let m: ModuleLocator = serde_json::from_str(
-        &lines
-            .next_line()
-            .await?
-            .expect("EVLog Should start with locator"),
-    )?;
-    let module = WasmPluginHandle::<Compiled>::new_async(
-        &data_dir,
-        &emulator,
-        m,
-        bitcoin::Network::Bitcoin,
-        Default::default(),
-    )
-    .await?;
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    let tx = tx.clone();
-    let config = config.clone();
-    let accessor = evlog.get_accessor().await;
+
+    // create wasm plugin handle from contract initialization data at beginning of the event log
+    let _ogid = evlog
+        .get_accessor()
+        .await
+        .get_occurrence_group_by_key(&config.event_log.group)?;
+
+    // check which continuation points need attest message routing
+
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
     let key = &config.event_log.group;
-    let evlog_group_id = accessor.get_occurrence_group_by_key(key);
-    let evlog_group_id = evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?;
+    let evlog_group_id = {
+        let accessor = evlog.get_accessor().await;
+        let evlog_group_id = accessor.get_occurrence_group_by_key(key);
+
+        evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?
+    };
     // This should be in notify_one mode, which means that only the db reader
     // should be calling notified and wakers should call notify_one.
     let new_synthetic_event = Arc::new(Notify::new());
-    {
-        let evlog = evlog.clone();
-        let new_synthetic_event = new_synthetic_event.clone();
-        tokio::spawn(async move {
-            universe::linearized::event_log_processor(
-                evlog,
-                evlog_group_id,
-                tx,
-                new_synthetic_event,
-            )
-            .await?;
-            OK_T
-        });
-    }
-    {
-        let evlog = evlog.clone();
-        let new_synthetic_event = new_synthetic_event.clone();
-        tokio::spawn(async move {
-            universe::extractors::time::time_event_extractor(
-                evlog,
-                evlog_group_id,
-                new_synthetic_event,
-            )
-            .await?;
-            OK_T
-        });
-    }
+    let config = Arc::new(config);
 
-    {
-        let config = config.clone();
-        let evlog = evlog.clone();
-        let new_synthetic_event = new_synthetic_event.clone();
-        spawn(universe::extractors::sequencer::sequencer_extractor(
-            config.oracle_key,
+    let tasks = FuturesUnordered::new();
+    start_extractors(
+        evlog.clone(),
+        evlog_group_id,
+        tx,
+        new_synthetic_event,
+        config.clone(),
+        msg_db.clone(),
+        &tasks,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let root = PathFragment::Root.into();
+    let state = AppState {
+        args: Err("No Args Loaded".into()),
+        module: Arc::new(Mutex::new(Err("No Module Loaded".into()))),
+        contract: Err("No Compiled Object".into()),
+        bound_to: None,
+        psbt_db: Arc::new(PSBTDatabase::new()),
+        event_counter: 0,
+    };
+    let secp = Arc::new(Secp256k1::new());
+    let evl = spawn(litigator_event_log::event_loop(
+        rx,
+        litigator_event_log::EventLoopContext {
+            secp,
+            state,
+            emulator,
+            data_dir,
             msg_db,
-            evlog,
+            config,
+            root,
             evlog_group_id,
-            new_synthetic_event,
-        ));
-    }
-    let mut state = AppState::Uninitialized;
-    loop {
-        match rx.recv().await {
-            Some(Event::TransactionFinalized(_s, _tx)) => {}
-            Some(Event::SyntheticPeriodicActions(_t)) => {
-                match &mut state {
-                    AppState::Uninitialized => (),
-                    AppState::Initialized {
-                        args: _,
-                        contract,
-                        bound_to,
-                        psbt_db: _,
-                    } => {
-                        if let Some(out) = bound_to {
-                            if let Ok(program) = contract.bind_psbt(
-                                *out,
-                                Default::default(),
-                                Rc::new(TxIndexLogger::new()),
-                                emulator.as_ref(),
-                            ) {
-                                for obj in program.program.values() {
-                                    for tx in obj.txs.iter() {
-                                        let SapioStudioFormat::LinkedPSBT {
-                                            psbt: _,
-                                            hex: _,
-                                            metadata,
-                                            output_metadata: _,
-                                            added_output_metadata: _,
-                                        } = tx;
-                                        if let Some(_data) =
-                                            metadata.simp.get(&AutoBroadcast::get_protocol_number())
-                                        {
-                                            // TODO:
-                                            // - Send PSBT out for signatures?
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Some(Event::Initialization(x)) => {
-                if state.is_uninitialized() {
-                    let init: Result<Compiled, CompilationError> =
-                        module.call(&PathFragment::Root.into(), &x);
-                    if let Ok(c) = init {
-                        state = AppState::Initialized {
-                            args: x,
-                            contract: c,
-                            bound_to: None,
-                            psbt_db: Arc::new(PSBTDatabase::new()),
-                        }
-                    }
-                }
-            }
-            Some(Event::Rebind(o)) => match &mut state {
-                AppState::Uninitialized => todo!(),
-                AppState::Initialized {
-                    ref mut bound_to, ..
-                } => {
-                    bound_to.insert(o);
-                }
-            },
-            Some(Event::ExternalEvent(e)) => match &state {
-                AppState::Uninitialized => (),
-                AppState::Initialized {
-                    ref args,
-                    ref contract,
-                    ref bound_to,
-                    psbt_db,
-                } => {
-                    // work on a clone so as to not have an effect if failed
-                    let mut new_args = args.clone();
-                    let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
-                    for api in contract
-                        .continuation_points()
-                        .filter(|api| {
-                            if let Some(recompiler) =
-                                api.simp.get(&simps::EventRecompiler::get_protocol_number())
-                            {
-                                if let Ok(recompiler) =
-                                    serde_json::from_value::<simps::EventRecompiler>(
-                                        recompiler.clone(),
-                                    )
-                                {
-                                    // Only pay attention to events that we are filtering for
-                                    if recompiler.filter == e.key {
-                                        return true;
-                                    }
-                                }
-                            }
-                            false
-                        })
-                        .filter(|api| {
-                            if let Some(schema) = &api.schema {
-                                let json_schema = serde_json::to_value(schema.clone())
-                                    .expect("RootSchema must always be valid JSON");
-                                jsonschema_valid::Config::from_schema(
-                                    // since schema is a RootSchema, cannot throw here
-                                    &json_schema,
-                                    Some(jsonschema_valid::schemas::Draft::Draft6),
-                                )
-                                .map(|validator| validator.validate(&e.data).is_ok())
-                                .unwrap_or(false)
-                            } else {
-                                false
-                            }
-                        })
-                    {
-                        // ensure that if specified, that we skip invalid messages
-                        save.effects
-                            .entry(SArc(api.path.clone()))
-                            .or_default()
-                            .insert(SArc(e.key.0.clone().into()), e.data.clone());
-                    }
+            evlog: evlog.clone(),
+        },
+    ));
 
-                    new_args.context.effects = save.into();
-                    let new_state: Result<Compiled, CompilationError> =
-                        module.call(&PathFragment::Root.into(), &new_args);
-                    // TODO: Check that old_state is augmented by new_state
-                    if let Ok(c) = new_state {
-                        state = AppState::Initialized {
-                            args: new_args,
-                            contract: c,
-                            bound_to: *bound_to,
-                            psbt_db: psbt_db.clone(),
-                        }
-                    }
-                    // TODO: Make it so that faulty effects are ignored.
-                }
-            },
-            None => (),
-        }
-    }
+    tasks.push(evl);
 
+    for task in tasks {
+        let r = task.await?;
+        trace!(?r, "Error From Task Joining");
+        r.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+pub type TaskSet = FuturesUnordered<
+    JoinHandle<
+        std::result::Result<
+            (),
+            std::boxed::Box<
+                (dyn std::error::Error + std::marker::Send + std::marker::Sync + 'static),
+            >,
+        >,
+    >,
+>;
+async fn start_extractors(
+    evlog: event_log::connection::EventLog,
+    evlog_group_id: OccurrenceGroupID,
+    tx: tokio::sync::mpsc::Sender<events::Event>,
+    new_synthetic_event: Arc<Notify>,
+    config: Arc<config::Config>,
+    msg_db: attest_database::connection::MsgDB,
+    tasks: &TaskSet,
+) -> Result<(), Box<dyn Error + Sync + Send + 'static>> {
+    tasks.push(tokio::spawn(universe::linearized::event_log_processor(
+        evlog.clone(),
+        evlog_group_id,
+        tx,
+        new_synthetic_event.clone(),
+    )));
+    tasks.push(tokio::spawn(
+        universe::extractors::time::time_event_extractor(
+            evlog.clone(),
+            evlog_group_id,
+            new_synthetic_event.clone(),
+        ),
+    ));
+    universe::extractors::sequencer::sequencer_extractor(
+        config.oracle_key,
+        msg_db.clone(),
+        evlog.clone(),
+        evlog_group_id,
+        new_synthetic_event.clone(),
+        tasks,
+    )
+    .await?;
+
+    tasks.push(tokio::spawn(universe::extractors::dlog::dlog_extractor(
+        msg_db.clone(),
+        evlog.clone(),
+        evlog_group_id,
+        Duration::from_secs(10),
+    )));
     Ok(())
 }
 

@@ -10,16 +10,17 @@ use crate::{
     },
     util::Price,
 };
+use schemars::JsonSchema;
 use serde::Serialize;
 
 /// Properties of Silicon
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct Silicon {
     // the weight in kg of this silicon token
     pub weight_in_kg: u8,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, JsonSchema, Debug)]
 pub struct SiliconRefinery {
     pub id: EntityID,
     pub total_units: u128,

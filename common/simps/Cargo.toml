@@ -9,6 +9,7 @@ edition = "2021"
 schemars = "0.8.10"
 serde = "1.0.144"
 serde_json = "1.0.85"
+lazy_static = "1.4.0"
 
 [dependencies.sapio]
 path = "../../submodule/sapio/sapio"
@@ -17,3 +18,8 @@ version = "0.2.0"
 [dependencies.sapio-base]
 path = "../../submodule/sapio/sapio-base"
 version = "0.2.0"
+
+[dependencies.bitcoin]
+package = "sapio-bitcoin"
+version = "0.28.0"
+features = ['use-serde', 'rand', 'base64']

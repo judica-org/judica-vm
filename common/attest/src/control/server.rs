@@ -75,10 +75,10 @@ async fn chain_commit_groups(
     Json(key): Json<CanonicalEnvelopeHash>,
     db: Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<ChainCommitGroupInfo>), (StatusCode, String)> {
-    let (resp) = async {
+    let resp = async {
         let handle = db.0.get_handle().await;
         let genesis = &handle.messages_by_hash::<_, Envelope, _>(std::iter::once(&key))?[0];
-        let groups = handle.get_all_chain_commit_groups_for_chain(key)?;
+        let _groups = handle.get_all_chain_commit_groups_for_chain(key)?;
         let group_members = handle.get_all_chain_commit_group_members_for_chain(key)?;
         let group_tips = handle.messages_by_ids::<_, Envelope, _>(group_members.iter())?;
         let mut map = Default::default();
@@ -223,39 +223,18 @@ async fn push_message_dangerous(
         .map(|k| KeyPair::from_secret_key(&secp, k))
         .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
     let tips = bitcoin_tipcache.0.read_cache().await;
-    let env = handle
-        .wrap_message_in_envelope_for_user_by_key::<_, WrappedJson, _>(
+    handle
+        .retry_insert_authenticated_envelope_atomic::<WrappedJson, _, _>(
             msg,
             &kp,
             &secp.0,
             Some(tips),
-            None,
             TipControl::AllTips,
         )
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Wrapping Message failed: {}", e),
-            )
-        })?
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Signing Message failed: {}", e),
-            )
-        })?;
-    handle
-        .try_insert_authenticated_envelope(env.self_authenticate(&secp.0).unwrap())
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Inserting Message failed: {}", e),
-            )
-        })?
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Inserting Message failed, No Corresponding Key: {:?}", e),
+                format!("Wrapping Message and Inserting failed: {}", e),
             )
         })?;
     Ok((

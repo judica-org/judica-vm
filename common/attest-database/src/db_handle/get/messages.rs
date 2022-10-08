@@ -2,11 +2,13 @@ use super::super::handle_type;
 use super::super::MsgDBHandle;
 use crate::db_handle::sql::get::messages::*;
 use crate::db_handle::MessageID;
+use crate::sql_serializers::PK;
 use attest_messages::AttestEnvelopable;
 use attest_messages::Authenticated;
 use attest_messages::CanonicalEnvelopeHash;
 
 use attest_messages::GenericEnvelope;
+
 use fallible_iterator::FallibleIterator;
 use rusqlite::named_params;
 use rusqlite::params;
@@ -18,6 +20,7 @@ use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::HashMap;
 use tracing::debug;
+
 use tracing::trace;
 
 impl<'a, T> MsgDBHandle<'a, T>
@@ -57,8 +60,10 @@ where
         M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGES_BY_HEIGHT_AND_USER)?;
-        stmt.query_row(params![key.to_hex(), height], |r| r.get(0))
-            .optional()
+        stmt.query_row(named_params![":key": PK(key), ":height": height], |r| {
+            r.get::<_, Authenticated<GenericEnvelope<M>>>(0)
+        })
+        .optional()
     }
 
     /// finds the most recent message for a user by their key
@@ -190,8 +195,13 @@ where
         M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_ALL_TIPS_FOR_ALL_USERS)?;
-        let rows = stmt.query([])?;
-        let vs: Vec<E> = rows.map(|r| r.get::<_, E>(0)).collect()?;
+        let mut rows = stmt.query([])?;
+        let mut vs = vec![];
+        while let Some(r) = rows.next()? {
+            if let Ok(e) = r.get::<_, E>(0) {
+                vs.push(e);
+            }
+        }
         debug!(tips=?vs.iter().map(|e| (e.as_ref().header().height(), e.as_ref().get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
         trace!(envelopes=?vs, "Tips Returned");
         Ok(vs)
@@ -204,28 +214,32 @@ where
         M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_ALL_GENESIS)?;
-        let rows = stmt.query([])?;
-        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows
-            .map(|r| r.get::<_, Authenticated<GenericEnvelope<M>>>(0))
-            .collect()?;
+        let mut rows = stmt.query([])?;
+        let mut vs = vec![];
+        while let Some(r) = rows.next()? {
+            if let Ok(e) = r.get::<_, Authenticated<GenericEnvelope<M>>>(0) {
+                vs.push(e);
+            }
+        }
         debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
         trace!(envelopes=?vs, "Genesis Tips Returned");
         Ok(vs)
     }
 
     /// loads all the messages from a given user
-    pub fn load_all_messages_for_user_by_key_connected<M>(
+    pub fn load_all_messages_for_user_by_key_connected<M, E>(
         &self,
         key: &sapio_bitcoin::secp256k1::XOnlyPublicKey,
-    ) -> Result<Vec<Authenticated<GenericEnvelope<M>>>, rusqlite::Error>
+    ) -> Result<Vec<E>, rusqlite::Error>
     where
         M: AttestEnvelopable,
+        E: AsRef<GenericEnvelope<M>> + FromSql,
     {
         let mut stmt = self
             .0
             .prepare_cached(SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED)?;
         let rows = stmt.query(params![key.to_hex()])?;
-        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows.map(|r| r.get(0)).collect()?;
+        let vs: Vec<E> = rows.map(|r| r.get(0)).collect()?;
         Ok(vs)
     }
 
@@ -267,6 +281,7 @@ where
         let mut stmt = self.0.prepare_cached(SQL_GET_MESSAGE_EXISTS)?;
         stmt.exists([hash.to_hex()])
     }
+
     pub fn message_not_exists_it<'i, I>(
         &self,
         hashes: I,
@@ -283,4 +298,12 @@ where
             })
             .collect()
     }
+}
+
+pub fn message_exists_children<'conn>(
+    tx: &rusqlite::Transaction<'conn>,
+    hash: &CanonicalEnvelopeHash,
+) -> Result<bool, rusqlite::Error> {
+    let mut stmt = tx.prepare_cached(SQL_GET_MESSAGE_EXISTS_CHILDREN)?;
+    stmt.exists(named_params! {":prev_msg": hash})
 }

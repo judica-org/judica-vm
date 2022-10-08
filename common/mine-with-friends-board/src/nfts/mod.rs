@@ -12,7 +12,7 @@ use std::ops::IndexMut;
 pub mod instances;
 pub mod sale;
 /// All NFTs must implement these behaviors
-pub(crate) trait NFT: Send + Sync {
+pub(crate) trait NFT: Send + Sync + std::fmt::Debug {
     /// Return the EntityID of the current Owner
     fn owner(&self) -> EntityID;
     /// Transfer the NFT from the current Owner to someone else
@@ -28,10 +28,11 @@ pub(crate) trait NFT: Send + Sync {
 type Nfts = BTreeMap<NftPtr, Box<dyn NFT>>;
 type PowerPlantMap = BTreeMap<NftPtr, PowerPlant>;
 /// A Registry of all NFTs and their MetaData
-#[derive(Default, Serialize)]
+#[derive(Default, Serialize, JsonSchema, Debug)]
 pub(crate) struct NFTRegistry {
     // DO NOT ADD FIELDS HERE WITHOUT UPDATING THE SERIALIZE METHOD
     #[serde(serialize_with = "serialize_nfts")]
+    #[schemars(with = "BTreeMap<NftPtr, serde_json::Value>")]
     pub nfts: Nfts,
     pub power_plants: PowerPlantMap,
 }
@@ -89,7 +90,7 @@ impl IndexMut<NftPtr> for NFTRegistry {
 }
 
 /// Basic NFT Implementation
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub(crate) struct BaseNFT {
     pub(crate) owner: EntityID,
     pub(crate) nft_id: EntityID,
@@ -122,7 +123,7 @@ impl NFT for BaseNFT {
     }
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, JsonSchema)]
 pub struct UXPlantData {
     pub id: NftPtr,
     pub coordinates: Location,

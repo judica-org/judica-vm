@@ -44,7 +44,7 @@ use tokio_tungstenite::tungstenite::error::Error as TungstenError;
 use tokio_tungstenite::tungstenite::error::UrlError;
 use tokio_tungstenite::tungstenite::handshake::client::Response as ClientResponse;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use crate::globals::Globals;
 
@@ -58,7 +58,6 @@ mod maybe_tor {
 
     use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
     use tokio_socks::tcp::Socks5Stream;
-    use tokio_tungstenite::MaybeTlsStream;
 
     /// A stream that might be protected with TLS, or over tor
     #[non_exhaustive]
@@ -158,14 +157,15 @@ impl From<tokio_socks::Error> for TorWSError {
 }
 // TODO: Tor Support
 impl ClientWebSocket {
-    pub async fn connect(globals: &Arc<Globals>, url: String) -> ClientWebSocket {
-        let (ws_stream, _) = Self::connect_async_with_config_tor(globals, url, None)
-            .await
-            .expect("Failed to connect");
-        ClientWebSocket {
+    pub async fn connect(
+        globals: &Arc<Globals>,
+        url: String,
+    ) -> Result<ClientWebSocket, TorWSError> {
+        let (ws_stream, _) = Self::connect_async_with_config_tor(globals, url, None).await?;
+        Ok(ClientWebSocket {
             inner: ws_stream,
             protocol: None,
-        }
+        })
     }
 
     pub async fn connect_async_with_config_tor<R>(
@@ -211,9 +211,7 @@ impl ClientWebSocket {
             // TODO: honor encryption?
             socket.into()
         };
-        return Ok(
-            tokio_tungstenite::client_async_tls_with_config(request, socket, config, None).await?,
-        );
+        Ok(tokio_tungstenite::client_async_tls_with_config(request, socket, config, None).await?)
     }
 }
 impl ClientWebSocket {

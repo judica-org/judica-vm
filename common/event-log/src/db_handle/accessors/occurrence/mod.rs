@@ -14,9 +14,10 @@ pub mod sql;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Occurrence {
-    data: CanonicalJsonValue,
-    time: i64,
-    typeid: ApplicationTypeID,
+    pub data: CanonicalJsonValue,
+    pub time: i64,
+    pub typeid: ApplicationTypeID,
+    pub unique_tag: Option<String>,
 }
 
 #[derive(Debug)]
@@ -35,28 +36,32 @@ impl Display for OccurrenceConversionError {
 impl std::error::Error for OccurrenceConversionError {}
 pub trait ToOccurrence {
     fn to_data(&self) -> CanonicalJsonValue;
-    fn stable_typeid(&self) -> ApplicationTypeID;
+    fn stable_typeid() -> ApplicationTypeID
+    where
+        Self: Sized;
+    fn unique_tag(&self) -> Option<String>;
     fn from_occurrence(occurrence: Occurrence) -> Result<Self, OccurrenceConversionError>
     where
         Self: Sized + for<'de> Deserialize<'de>,
     {
         let v: Self = serde_json::from_value(occurrence.data.into())
             .map_err(OccurrenceConversionError::DeserializationError)?;
-        if occurrence.typeid != v.stable_typeid() {
+        if occurrence.typeid != Self::stable_typeid() {
             return Err(OccurrenceConversionError::TypeidMismatch {
                 expected: occurrence.typeid,
-                got: v.stable_typeid(),
+                got: Self::stable_typeid(),
             });
         }
         Ok(v)
     }
 }
-impl From<&dyn ToOccurrence> for Occurrence {
-    fn from(t: &dyn ToOccurrence) -> Self {
+impl<T: ToOccurrence> From<&T> for Occurrence {
+    fn from(t: &T) -> Self {
         Occurrence {
             data: t.to_data(),
             time: attest_util::now(),
-            typeid: t.stable_typeid(),
+            typeid: T::stable_typeid(),
+            unique_tag: t.unique_tag(),
         }
     }
 }

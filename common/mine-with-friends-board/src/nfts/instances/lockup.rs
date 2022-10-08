@@ -11,7 +11,7 @@ use crate::{
 
 /// CoinLockup implements an NFT type which holds a chunk of coins and releases
 /// them via a scheduled event in the future
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub(crate) struct CoinLockup {
     pub id: NftPtr,
     pub time_when_free: u64,
@@ -21,7 +21,8 @@ impl CoinLockup {
     /// Creates an NFT and transfers the requisite amount of coins to it.
     pub fn lockup(
         game: &mut GameBoard,
-        owner: EntityID,
+        sender: EntityID, // the entity depositing tokens into lockup
+        owner: EntityID,  // the entity entitled to tokens on release
         asset: TokenPointer,
         amount: Price,
         time_when_free: u64,
@@ -40,7 +41,7 @@ impl CoinLockup {
         };
         game.callbacks.schedule(Box::new(lockup));
         game.tokens[asset].transaction();
-        let _ = game.tokens[asset].transfer(&owner, &lockup_id.0, amount);
+        let _ = game.tokens[asset].transfer(&sender, &lockup_id.0, amount);
         game.tokens[asset].end_transaction();
     }
 }

@@ -1,14 +1,10 @@
 SELECT
-    messages.body
+    M.body
 FROM
-    messages
+    messages M
+    INNER JOIN users U on U.user_id = M.user_id
 WHERE
-    user_id = (
-        SELECT
-            user_id
-        from
-            users
-        where
-            key = ?
-    )
-    AND height = ?
+    U.key = :key
+    AND M.height = :height
+LIMIT
+    1

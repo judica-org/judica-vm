@@ -9635,6 +9635,46 @@ __metadata:
   languageName: node
   linkType: hard
 
+"mastermine@workspace:ux":
+  version: 0.0.0-use.local
+  resolution: "mastermine@workspace:ux"
+  dependencies:
+    "@babel/core": ^7.19.3
+    "@babel/plugin-syntax-flow": ^7.18.6
+    "@babel/plugin-transform-react-jsx": ^7.19.0
+    "@emotion/react": ^11.10.4
+    "@emotion/styled": ^11.10.4
+    "@mui/icons-material": ^5.10.3
+    "@mui/material": ^5.10.4
+    "@mui/styled-engine": ^5.10.4
+    "@rjsf/core": ^4.2.3
+    "@tauri-apps/api": ^1.0.2
+    "@tauri-apps/cli": ^1.1.1
+    "@testing-library/dom": ^8.18.1
+    "@testing-library/jest-dom": ^5.14.1
+    "@testing-library/react": ^13.0.0
+    "@testing-library/user-event": ^13.2.1
+    "@types/jest": ^29.0.3
+    "@types/node": ^16.7.13
+    "@types/react": ^18.0.0
+    "@types/react-dom": ^18.0.0
+    babel-plugin-syntax-flow: ^6.18.0
+    babel-standalone: ^6.26.0
+    cross-env: ^7.0.3
+    eslint: ^8.24.0
+    eslint-config-react-app: ^7.0.1
+    eslint-plugin-flowtype: ^8.0.3
+    react: ^18.2.0
+    react-dom: ^18.2.0
+    react-globe.gl: ^2.22.3
+    react-scripts: 5.0.1
+    typescript: ^4.4.2
+    web-vitals: ^2.1.0
+  peerDependencies:
+    "@babel/plugin-syntax-flow": "*"
+  languageName: unknown
+  linkType: soft
+
 "mdn-data@npm:2.0.14":
   version: 2.0.14
   resolution: "mdn-data@npm:2.0.14"
@@ -9741,46 +9781,6 @@ __metadata:
   checksum: bfc6dd03c5eaf623a4963ebd94d087f6f4bbbfd8c41329a7f09706b0cb66969c4ddd336abeb587bc44bc6f08e13bf90f0b374f9d71f9f01e04adc2cd6f083ef1
   languageName: node
   linkType: hard
-
-"mine-with-friends@workspace:ux":
-  version: 0.0.0-use.local
-  resolution: "mine-with-friends@workspace:ux"
-  dependencies:
-    "@babel/core": ^7.19.3
-    "@babel/plugin-syntax-flow": ^7.18.6
-    "@babel/plugin-transform-react-jsx": ^7.19.0
-    "@emotion/react": ^11.10.4
-    "@emotion/styled": ^11.10.4
-    "@mui/icons-material": ^5.10.3
-    "@mui/material": ^5.10.4
-    "@mui/styled-engine": ^5.10.4
-    "@rjsf/core": ^4.2.3
-    "@tauri-apps/api": ^1.0.2
-    "@tauri-apps/cli": ^1.1.1
-    "@testing-library/dom": ^8.18.1
-    "@testing-library/jest-dom": ^5.14.1
-    "@testing-library/react": ^13.0.0
-    "@testing-library/user-event": ^13.2.1
-    "@types/jest": ^29.0.3
-    "@types/node": ^16.7.13
-    "@types/react": ^18.0.0
-    "@types/react-dom": ^18.0.0
-    babel-plugin-syntax-flow: ^6.18.0
-    babel-standalone: ^6.26.0
-    cross-env: ^7.0.3
-    eslint: ^8.24.0
-    eslint-config-react-app: ^7.0.1
-    eslint-plugin-flowtype: ^8.0.3
-    react: ^18.2.0
-    react-dom: ^18.2.0
-    react-globe.gl: ^2.22.3
-    react-scripts: 5.0.1
-    typescript: ^4.4.2
-    web-vitals: ^2.1.0
-  peerDependencies:
-    "@babel/plugin-syntax-flow": "*"
-  languageName: unknown
-  linkType: soft
 
 "mini-css-extract-plugin@npm:^2.4.5":
   version: 2.6.1
@@ -13435,7 +13435,7 @@ __metadata:
 
 "typescript@patch:typescript@^4.4.2#~builtin<compat/typescript>":
   version: 4.8.3
-  resolution: "typescript@patch:typescript@npm%3A4.8.3#~builtin<compat/typescript>::version=4.8.3&hash=a1c5e5"
+  resolution: "typescript@patch:typescript@npm%3A4.8.3#~builtin<compat/typescript>::version=4.8.3&hash=701156"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
@@ -13445,11 +13445,11 @@ __metadata:
 
 "typescript@patch:typescript@^4.8.4#~builtin<compat/typescript>":
   version: 4.8.4
-  resolution: "typescript@patch:typescript@npm%3A4.8.4#~builtin<compat/typescript>::version=4.8.4&hash=a1c5e5"
+  resolution: "typescript@patch:typescript@npm%3A4.8.4#~builtin<compat/typescript>::version=4.8.4&hash=701156"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 563a0ef47abae6df27a9a3ab38f75fc681f633ccf1a3502b1108e252e187787893de689220f4544aaf95a371a4eb3141e4a337deb9895de5ac3c1ca76430e5f0
+  checksum: 301459fc3eb3b1a38fe91bf96d98eb55da88a9cb17b4ef80b4d105d620f4d547ba776cc27b44cc2ef58b66eda23fe0a74142feb5e79a6fb99f54fc018a696afa
   languageName: node
   linkType: hard
 

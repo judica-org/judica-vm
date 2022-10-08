@@ -76,6 +76,8 @@ pub mod get {
         pub const SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED: &str =
             include_str!("../sql/get/all_messages_by_key_connected.sql");
         pub const SQL_GET_MESSAGE_EXISTS: &str = include_str!("../sql/get/messages/exists.sql");
+        pub const SQL_GET_MESSAGE_EXISTS_CHILDREN: &str =
+            include_str!("../sql/get/messages/exists_children.sql");
         pub const SQL_GET_MESSAGE_BY_HASH: &str = include_str!("../sql/get/messages/by_hash.sql");
         pub const SQL_GET_MESSAGE_BY_ID: &str = include_str!("../sql/get/messages/by_id.sql");
     }
@@ -140,6 +142,7 @@ pub const CACHED: &[&str] = &[
     SQL_GET_ALL_GENESIS,
     SQL_GET_ALL_MESSAGES_BY_KEY_CONNECTED,
     SQL_GET_MESSAGE_EXISTS,
+    SQL_GET_MESSAGE_EXISTS_CHILDREN,
     SQL_GET_MESSAGE_BY_HASH,
     SQL_GET_MESSAGE_BY_ID,
     SQL_GET_SECRET_FOR_NONCE,
