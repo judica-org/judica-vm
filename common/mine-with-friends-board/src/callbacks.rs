@@ -12,7 +12,7 @@ pub struct CallbackRegistry {
     /// the key in this type is a virtual "time" at which the event should be
     /// removed and processed
     #[serde(serialize_with = "serialize_callbacks")]
-    #[schemars(with="BTreeMap<u64, Vec<String>>")]
+    #[schemars(with = "BTreeMap<u64, Vec<String>>")]
     callbacks: BTreeMap<u64, Vec<Box<dyn Callback>>>,
 }
 

@@ -39,12 +39,12 @@ impl Display for AddPlayerError {
 }
 impl Error for AddPlayerError {}
 
-#[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Copy, Debug, JsonSchema)]
+#[derive(
+    Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Copy, Debug, JsonSchema,
+)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
-pub struct JoinCode(
-    #[schemars(with="String")]
-    [u8; 16]);
+pub struct JoinCode(#[schemars(with = "String")] [u8; 16]);
 
 impl TryFrom<String> for JoinCode {
     type Error = sapio_bitcoin::hashes::hex::Error;
