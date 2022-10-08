@@ -1,4 +1,4 @@
-use super::view::TradeType;
+use super::view::{TradeType, EmittedAppState};
 use super::{view::SyncError, *};
 use crate::config::Globals;
 use crate::tor::{GameHost, TorClient};
@@ -48,7 +48,7 @@ pub async fn game_synchronizer(
     d: State<'_, Database>,
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
-) -> Result<(), SyncError> {
+) -> Result<EmittedAppState, SyncError> {
     view::game_synchronizer_inner(
         window,
         s,

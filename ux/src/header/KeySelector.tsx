@@ -20,7 +20,6 @@ export function KeySelector({ which_game_loaded, available_sequencers, signing_k
   const setup = available_sequencers.find((([key, _setup]) => key === which_game_loaded));
   const usable_keys = (setup && available_keys.filter((k) => setup[1].players.includes(k))) ?? [];
 
-  console.log("USABLE KEYS", usable_keys);
   const [selected_key, set_selected_key] = useState<string|0>(signing_key ?? 0);
 
   const handle_submit = (ev: FormEvent<HTMLButtonElement>): void => {

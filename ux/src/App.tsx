@@ -120,26 +120,16 @@ function App() {
   const [current_tab, set_current_tab] = useState(1);
   const [root_state, set_root_state] = useState<null | EmittedAppState>(null);
   useEffect(() => {
-
-    type JoinGame = { join_code: string, password: string | null };
-
-    const unlisten_app_state = appWindow.listen("app-state", (ev) => {
-      set_root_state(ev.payload as EmittedAppState);
-      console.log((ev.payload as EmittedAppState));
-    });
-
-
-    tauri_host.game_synchronizer()
+    let cancel = setTimeout(() => { }, 0);
+    const callback = async () => {
+      set_root_state(await tauri_host.game_synchronizer());
+      cancel = setTimeout(callback, 5000);
+    };
+    callback();
     return () => {
-      (async () => {
-        const unlisten_all = await Promise.all([
-          unlisten_app_state
-        ]);
-        for (const u of unlisten_all) {
-          u()
-        }
-      })();
+      clearTimeout(cancel)
     }
+
   }, []);
 
   const materials: MaterialPriceDisplay[] = root_state?.materials_price_data?.map(({ trading_pair, asset_a, mkt_qty_a, asset_b, mkt_qty_b, display_asset }) => {

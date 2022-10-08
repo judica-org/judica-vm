@@ -30,36 +30,15 @@ pub(crate) async fn game_synchronizer_inner(
     d: State<'_, Database>,
     g: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
-) -> Result<(), SyncError> {
-    info!("Registering Window for State Updates");
-    let _p = PrintOnDrop("Registration Canceled".into());
-
-    loop {
-        match game_synchronizer_inner_loop(
-            signing_key.inner(),
-            s.inner(),
-            g.inner(),
-            d.inner(),
-            &window,
-        )
-        .await
-        {
-            Ok(()) => {}
-            Err(e) => {
-                tracing::debug!(?e, "SyncError");
-                match &e {
-                    SyncError::TradeError(_) => {}
-                    SyncError::NoSigningKey | SyncError::NoGame => {
-                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    }
-                    SyncError::KeyUnknownByGame | SyncError::DatabaseError => return Err(e),
-                    SyncError::NoGameHost => {}
-                    SyncError::HungUp => return Err(SyncError::HungUp),
-                }
-            }
-        }
-        tokio::time::sleep(Duration::from_secs(5)).await;
-    }
+) -> Result<EmittedAppState, SyncError> {
+    game_synchronizer_inner_loop(
+        signing_key.inner(),
+        s.inner(),
+        g.inner(),
+        d.inner(),
+        &window,
+    )
+    .await
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -95,11 +74,11 @@ impl<T, E1, E2> ResultFlipExt for Result<Result<T, E1>, E2> {
 }
 
 #[derive(Serialize, JsonSchema, Debug)]
-struct EmittedAppState<'a> {
+pub struct EmittedAppState {
     db_connection: Option<(String, Option<PathBuf>)>,
     #[schemars(with = "String")]
     signing_key: Option<XOnlyPublicKey>,
-    game_host_service: Option<&'a GameHost>,
+    game_host_service: Option<GameHost>,
     #[schemars(with = "Vec<(String, GameSetup)>")]
     available_sequencers: Vec<(XOnlyPublicKey, GameSetup)>,
     #[schemars(with = "Vec<String>")]
@@ -129,7 +108,7 @@ async fn game_synchronizer_inner_loop(
     game_host: &Arc<Mutex<Option<GameHost>>>,
     d: &Database,
     window: &Window,
-) -> Result<(), SyncError> {
+) -> Result<EmittedAppState, SyncError> {
     let (db_connection, available_sequencers, user_keys) = {
         let l = d.state.lock().await;
         if let Some(g) = l.as_ref() {
@@ -165,13 +144,12 @@ async fn game_synchronizer_inner_loop(
     let signing_key_opt = *signing_key.lock().await;
     let signing_key = signing_key_opt.as_ref().ok_or(SyncError::NoSigningKey);
     let game_host_service = game_host.lock().await.clone();
-    let game_host_service = game_host_service.as_ref().ok_or(SyncError::NoGameHost);
 
     let pending = s.lock().await.pending_opt().cloned();
     let mut to_emit = EmittedAppState {
         db_connection,
         signing_key: signing_key_opt,
-        game_host_service: game_host_service.ok(),
+        game_host_service: game_host_service,
         super_handy_self_schema: serde_json::to_value(schemars::schema_for!(EmittedAppState))
             .unwrap(),
         available_sequencers,
@@ -218,8 +196,7 @@ async fn game_synchronizer_inner_loop(
         Ok::<(), SyncError>(())
     }
     .await;
-    emit(window, "app-state", &to_emit);
-    Ok(())
+    Ok(to_emit)
 }
 
 fn emit<S>(window: &Window, event: &str, payload: S) -> Result<(), tauri::Error>

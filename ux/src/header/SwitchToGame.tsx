@@ -15,7 +15,6 @@ export function SwitchToGame({ available_sequencers, which_game_loaded }: Switch
   const [which_game, set_which_game] = React.useState<string | 0>(which_game_loaded ?? 0);
 
   let options = available_sequencers.map(([pkey, name]) => {
-    console.log("OPT", pkey, which_game_loaded);
     return <MenuItem value={pkey} key={pkey}>
       {pkey}
     </MenuItem>;

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api';
 import { PlantType } from './App';
+import { EmittedAppState } from './Types/Gameboard';
 import { GameMove } from './Types/GameMove';
 
 export type SuccessfulTradeOutcome = {
@@ -25,11 +26,8 @@ export const tauri_host = {
   make_move_inner: async (nextMove: GameMove) => {
     return await invoke("make_move_inner", { nextMove });
   },
-  game_synchronizer: async () => {
-    if (game_synchronizer_invoked)
-      return;
-    game_synchronizer_invoked = true;
-    invoke("game_synchronizer");
+  game_synchronizer: async (): Promise<EmittedAppState> => {
+    return await invoke("game_synchronizer");
   },
   get_material_schema: async () => {
     return invoke("get_materials_schema");
@@ -47,7 +45,7 @@ export const tauri_host = {
     return invoke("send_chat", { chat })
   },
   join_existing_game: async (nickname: string, code: string) => {
-    return invoke("make_new_chain", { nickname, code});
+    return invoke("make_new_chain", { nickname, code });
   },
   make_new_game: async (nickname: string) => {
     return invoke("make_new_game", { nickname });
