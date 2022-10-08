@@ -25,6 +25,7 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
 
       const tokens = user_inventory.user_token_balances.find(([name, _number]) => name === "ASIC Gen 1") ?? ["ASIC Gen 1", 0];
       setUserHashboards(tokens[1])
+
     }
   });
   const owner = ((selected_plant && userPowerPlants) && userPowerPlants[selected_plant]) ?? null;
@@ -67,9 +68,9 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
       </Table>}
       <div>
         {selected_plant && plantDetail &&
-          (owner && userHashboards && asic_token_id ? <div className="PlantOwnerOptions">
+          (owner && asic_token_id ? <div className="PlantOwnerOptions">
             <Typography variant="h6">Options</Typography>
-            <MoveHashboards action={"ADD"} plant={plantDetail} user_hashboards={userHashboards} hashboard_pointer={asic_token_id} />
+            {userHashboards ? <MoveHashboards action={"ADD"} plant={plantDetail} user_hashboards={userHashboards} hashboard_pointer={asic_token_id} /> : null}
             <Divider />
             <SaleListingForm nft_id={plantDetail.id} currency={bitcoin_token_id} />
           </div> :

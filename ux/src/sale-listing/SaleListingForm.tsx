@@ -5,16 +5,10 @@ import { tauri_host } from "../tauri_host";
 const SaleListingForm = ({ nft_id, currency }: { nft_id: string, currency: string | null }) => {
   const [sale_price, set_sale_price] = useState<number>(0);
 
-  useEffect(() => {
-    (async () => {
-      tauri_host.get_material_schema
-      setSchema(await invoke("get_listing_schema"));
-    })()
-  }, []);
-  console.log("listing schema:", schema);
-
-  const handle_submit = (data: FormSubmit) => {
-    tauri_host.make_move_inner({ list_n_f_t_for_sale: data.formData })
+  const handle_submit = () => {
+    if (sale_price > 0 && currency) {
+      tauri_host.make_move_inner({ list_n_f_t_for_sale: { nft_id, currency, price: sale_price } });
+    }
   };
 
   return <Card>
@@ -33,6 +27,6 @@ const SaleListingForm = ({ nft_id, currency }: { nft_id: string, currency: strin
       </div>
     </CardContent>
   </Card>;
-};
+}
 
 export default SaleListingForm;
