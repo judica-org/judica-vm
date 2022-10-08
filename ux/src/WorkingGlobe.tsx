@@ -71,14 +71,12 @@ const chose_color = (d: BarData): string => {
 }
 
 export default (props: { power_plants: UXPlantData[] }) => {
-    console.log("POWER FOR GLOBE", props.power_plants);
-    let plant_owners: Set<string> = new Set();
-    props.power_plants.forEach((plant) => {
-        plant_owners.add(plant.owner)
-    })
-    const owners = Array.from(plant_owners.entries()).map(([a, b]) => a);
-    const output_bars = getBarData(props.power_plants);
-    const [selectedPlantOwners, setSelectedPlantOwners] = useState<Record<EntityID, boolean>>(Object.fromEntries(owners.map((a) => [a, true]))); // default to all owners
+    const [all_plant_owners, set_all_plant_owners] = useState<Record<EntityID, true>>(
+        {}
+    ); // default to all owners
+    const [selectedPlantOwners, setSelectedPlantOwners] = useState<Record<EntityID, boolean>>(
+        {}
+    ); // default to all owners
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [plantTypes, setPlantTypes] = React.useState<Record<PlantType, boolean>>({
         'Hydro': true,
@@ -87,12 +85,30 @@ export default (props: { power_plants: UXPlantData[] }) => {
     });
 
     const [selected_plants, set_selected_plants] = React.useState<UXPlantData[]>(props.power_plants);
-
+    const [output_bars, set_output_bars] = React.useState<BarData[]>(getBarData(props.power_plants));
 
     React.useEffect(() => {
         const plants_by_type = props.power_plants.filter(({ plant_type, owner }) => plantTypes[plant_type] && selectedPlantOwners[owner]);
+        const output_bars = getBarData(plants_by_type);
         set_selected_plants(plants_by_type);
+        set_output_bars(output_bars);
     }, [plantTypes, selectedPlantOwners]);
+
+    React.useEffect(() => {
+        const new_all: Record<EntityID, true> =
+            Object.fromEntries(props.power_plants.map((plant) => [plant.owner, true]));
+        set_all_plant_owners(
+            new_all
+        );
+        setSelectedPlantOwners(
+            {
+                // add the new, but
+                ...new_all,
+                // override with existing setting
+                ...selectedPlantOwners
+            }
+        )
+    }, [props.power_plants]);
 
 
     const handlePlantTypeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,7 +229,7 @@ export default (props: { power_plants: UXPlantData[] }) => {
                 </div>
                 <Divider />
                 <PlantTypeSelect handleChange={handlePlantTypeChange} plantTypes={plantTypes} />
-                <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={owners} selectedPlantOwners={selectedPlantOwners} />
+                <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={all_plant_owners} selectedPlantOwners={selectedPlantOwners} />
             </CardContent>
         </Card>
     </div>;

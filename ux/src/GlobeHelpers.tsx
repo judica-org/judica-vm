@@ -31,7 +31,7 @@ export function PlantTypeSelect({ handleChange, plantTypes }: { handleChange: (e
   );
 }
 
-export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwners }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantOwners: EntityID[], selectedPlantOwners: Record<EntityID, boolean> }) {
+export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwners }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantOwners: Record<EntityID, true>, selectedPlantOwners: Record<EntityID, boolean> }) {
   // for each owner, add a checkbox.
   return (
     <div>
@@ -41,7 +41,7 @@ export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwner
         flexWrap: 'wrap'
       }}>
         {
-          plantOwners.map((owner) => {
+          Object.entries(plantOwners).map(([owner, _b]) => {
             return <FormControlLabel control={<Checkbox checked={selectedPlantOwners[owner]} onChange={handleChange} name={`${owner}`} sx={{
               color: lightGreen[800],
               '&.Mui-checked': {
