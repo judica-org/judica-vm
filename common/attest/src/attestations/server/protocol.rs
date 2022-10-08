@@ -417,7 +417,7 @@ where
         let mut locked = db.get_handle().await;
         for envelope in authed {
             trace!("Inserting Into Database");
-            match locked.try_insert_authenticated_envelope(envelope) {
+            match locked.try_insert_authenticated_envelope(envelope, false) {
                 Ok(i) => match i {
                     Ok(()) => {
                         outcomes.push(Outcome { success: true });

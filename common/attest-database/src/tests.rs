@@ -67,11 +67,11 @@ async fn test_reused_nonce() {
         .unwrap();
     let envelope_2 = envelope_2.self_authenticate(&secp).unwrap();
     handle
-        .try_insert_authenticated_envelope(envelope_1.clone())
+        .try_insert_authenticated_envelope(envelope_1.clone(), false)
         .unwrap()
         .unwrap();
     handle
-        .try_insert_authenticated_envelope(envelope_2.clone())
+        .try_insert_authenticated_envelope(envelope_2.clone(), false)
         .unwrap()
         .unwrap();
     for i in 0..2 {
@@ -104,7 +104,7 @@ async fn test_reused_nonce() {
             .unwrap();
         let envelope_i = envelope_i.clone().self_authenticate(&secp).unwrap();
         handle
-            .try_insert_authenticated_envelope(envelope_i.clone())
+            .try_insert_authenticated_envelope(envelope_i.clone(), false)
             .unwrap()
             .unwrap();
     }
@@ -209,7 +209,7 @@ async fn test_envelope_creation() {
             .unwrap();
         let envelope_1 = envelope_1.clone().self_authenticate(&secp).unwrap();
         handle
-            .try_insert_authenticated_envelope(envelope_1.clone())
+            .try_insert_authenticated_envelope(envelope_1.clone(), false)
             .unwrap()
             .unwrap();
         verify_tip(&handle, &envelope_1, user_id, kp, &all_past_tips);
@@ -227,7 +227,7 @@ async fn test_envelope_creation() {
             .unwrap();
         let envelope_2 = envelope_2.clone().self_authenticate(&secp).unwrap();
         handle
-            .try_insert_authenticated_envelope(envelope_2.clone())
+            .try_insert_authenticated_envelope(envelope_2.clone(), false)
             .unwrap()
             .unwrap();
         verify_tip(&handle, &envelope_2, user_id, kp, &all_past_tips);
@@ -257,7 +257,7 @@ async fn test_envelope_creation() {
             if i != special_idx {
                 println!("Inserting i={}", i);
                 handle
-                    .try_insert_authenticated_envelope(envelope_disconnected.clone())
+                    .try_insert_authenticated_envelope(envelope_disconnected.clone(), false)
                     .unwrap()
                     .unwrap();
             } else {
@@ -284,7 +284,7 @@ async fn test_envelope_creation() {
         // handle.drop_message_by_hash(envs[5].0).unwrap();
 
         handle
-            .try_insert_authenticated_envelope(disconnected[user_id].clone())
+            .try_insert_authenticated_envelope(disconnected[user_id].clone(), false)
             .unwrap()
             .unwrap();
         {
@@ -347,7 +347,7 @@ async fn test_envelope_creation() {
         .unwrap();
     let envelope_3 = envelope_3.self_authenticate(&secp).unwrap();
     handle
-        .try_insert_authenticated_envelope(envelope_3.clone())
+        .try_insert_authenticated_envelope(envelope_3.clone(), false)
         .unwrap()
         .unwrap();
 
@@ -509,7 +509,7 @@ async fn test_chain_commit_groups() {
         for msg in msgs {
             if rng.gen_bool(0.5) {
                 handle
-                    .try_insert_authenticated_envelope(msg)
+                    .try_insert_authenticated_envelope(msg, false)
                     .unwrap()
                     .unwrap();
             }

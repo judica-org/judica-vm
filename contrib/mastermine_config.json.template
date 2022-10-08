@@ -1,5 +1,9 @@
 {
     "db": {
         "appname": "testing-$PLAYER"
+    },
+    "tor": {
+        "directory": "$TOR_DIR/$PLAYER/frontend/tor",
+        "socks_port": 11908
     }
 }

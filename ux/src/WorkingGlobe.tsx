@@ -6,13 +6,14 @@ import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent, Icon, Divider } from '@mui/material';
 import { emit, Event } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
-import { PlantSelected, PowerPlant, UserPowerPlant } from './App';
+import { PlantSelected, PlantType } from './App';
 import { PlantOwnerSelect, PlantTypeSelect } from './GlobeHelpers';
 import { COORDINATE_PRECISION } from './mint-power-plant/MintingForm';
 import { EntityID } from './Types/GameMove';
+import { UXPlantData } from './Types/Gameboard';
 const { useState, useEffect } = React;
 
-type Plant = (UserPowerPlant & { text: string });
+type Plant = UXPlantData;
 const stub_plant_data: Plant[] = [{
     coordinates: [46818188, 8227512],
     for_sale: false,
@@ -21,7 +22,6 @@ const stub_plant_data: Plant[] = [{
     miners: 32,
     owner: "12345566",
     plant_type: "Flare",
-    text: "Flare Plant",
     watts: 345634,
 }, {
     coordinates: [49817492, 15472962],
@@ -31,7 +31,6 @@ const stub_plant_data: Plant[] = [{
     miners: 206,
     owner: "9494384",
     plant_type: "Hydro",
-    text: "Hydroelectric Plant",
     watts: 67897,
 }, {
     coordinates: [9145125, 40489673],
@@ -41,7 +40,6 @@ const stub_plant_data: Plant[] = [{
     miners: 30,
     owner: "12345566",
     plant_type: "Solar",
-    text: "Solar Farm",
     watts: 23795,
 }];
 
@@ -57,7 +55,7 @@ function memoized_color(name: string) {
 
 type BarData = { coordinates: number[], hashrate?: number, watts?: number, id: string };
 
-function getBarData(plants: (UserPowerPlant & { text: string })[]) {
+function getBarData(plants: (UXPlantData)[]) {
     return plants.reduce<BarData[]>((acc, { coordinates, hashrate, watts, id }) => {
         return [...acc, { id, coordinates, hashrate }, { id, coordinates: [coordinates[0] + 100000, coordinates[1] + 100000], watts }];
     }, []);
@@ -72,17 +70,46 @@ const chose_color = (d: BarData): string => {
     }
 }
 
-export default () => {
-    const [power_plants, set_power_plants] = useState<(UserPowerPlant & { text: string })[]>([]); // use empty list for now so it will render
-    const [owners, setOwners] = useState<EntityID[]>([]);
-    const [selectedPlantOwners, setSelectedPlantOwners] = useState<EntityID[]>([]); // default to all owners
-    const [output_bars, set_output_bars] = useState<BarData[]>([]);
+export default (props: { power_plants: UXPlantData[] }) => {
+    const [all_plant_owners, set_all_plant_owners] = useState<Record<EntityID, true>>(
+        {}
+    ); // default to all owners
+    const [selectedPlantOwners, setSelectedPlantOwners] = useState<Record<EntityID, boolean>>(
+        {}
+    ); // default to all owners
     const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
-    const [plantTypes, setPlantTypes] = React.useState({
+    const [plantTypes, setPlantTypes] = React.useState<Record<PlantType, boolean>>({
         'Hydro': true,
         'Solar': true,
         'Flare': true
     });
+
+    const [selected_plants, set_selected_plants] = React.useState<UXPlantData[]>(props.power_plants);
+    const [output_bars, set_output_bars] = React.useState<BarData[]>(getBarData(props.power_plants));
+
+    React.useEffect(() => {
+        const plants_by_type = props.power_plants.filter(({ plant_type, owner }) => plantTypes[plant_type] && selectedPlantOwners[owner]);
+        const output_bars = getBarData(plants_by_type);
+        set_selected_plants(plants_by_type);
+        set_output_bars(output_bars);
+    }, [plantTypes, selectedPlantOwners]);
+
+    React.useEffect(() => {
+        const new_all: Record<EntityID, true> =
+            Object.fromEntries(props.power_plants.map((plant) => [plant.owner, true]));
+        set_all_plant_owners(
+            new_all
+        );
+        setSelectedPlantOwners(
+            {
+                // add the new, but
+                ...new_all,
+                // override with existing setting
+                ...selectedPlantOwners
+            }
+        )
+    }, [props.power_plants]);
+
 
     const handlePlantTypeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         setPlantTypes({
@@ -94,37 +121,18 @@ export default () => {
     const handleOwnersChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         console.log(['owners-change-event'], event)
         const picked_owner = event.target.name;
-        if (selectedPlantOwners.includes(picked_owner)) {
-            setSelectedPlantOwners(selectedPlantOwners.filter((owner) => owner !== picked_owner));
+        if (selectedPlantOwners[picked_owner]) {
+            let copy = { ...selectedPlantOwners };
+            copy[picked_owner] = false;
+            setSelectedPlantOwners(copy);
         } else {
-            setSelectedPlantOwners([...selectedPlantOwners, picked_owner]);
+            let copy = { ...selectedPlantOwners };
+            copy[picked_owner] = true;
+            setSelectedPlantOwners(copy);
         }
     }
 
-    useEffect(() => {
-        const unlisten_power_plants = appWindow.listen("power-plants", (ev: Event<(UserPowerPlant & { text: string })[]>) => {
-            console.log(['power-plants-received'], ev);
-            let plant_owners: string[] = [];
-            ev.payload.forEach((plant) => {
-                if (!plant_owners.includes(plant.owner)) {
-                    plant_owners.push(plant.owner)
-                }
-            })
-            setOwners(plant_owners);
-            setSelectedPlantOwners(plant_owners)
-            set_power_plants(ev.payload);
-            set_output_bars(getBarData(ev.payload));
-        });
 
-        return () => {
-            (async () => {
-                (await unlisten_power_plants)();
-            })();
-        }
-    }, [power_plants, owners, location]);
-
-    const selectedPlantTypes = Object.entries(plantTypes).filter(([_type, selected]) => selected === true).map(([type, _selected]) => type);
-    const plants_by_type = power_plants.filter(({ plant_type, owner }) => selectedPlantTypes.includes(plant_type) && selectedPlantOwners.includes(owner));
 
     return <div className='globe-container'>
         <Card>
@@ -137,7 +145,7 @@ export default () => {
                         globeImageUrl={earth}
                         width={600}
                         height={600}
-                        htmlElementsData={plants_by_type}
+                        htmlElementsData={selected_plants}
                         htmlLat={(d: object) => (d as Plant).coordinates[0] / COORDINATE_PRECISION}
                         htmlLng={(d: object) => (d as Plant).coordinates[1] / COORDINATE_PRECISION}
                         htmlAltitude={0.02}
@@ -210,7 +218,7 @@ export default () => {
                 </div>
                 <Divider />
                 <PlantTypeSelect handleChange={handlePlantTypeChange} plantTypes={plantTypes} />
-                <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={owners} selectedPlantOwners={selectedPlantOwners} />
+                <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={all_plant_owners} selectedPlantOwners={selectedPlantOwners} />
             </CardContent>
         </Card>
     </div>;

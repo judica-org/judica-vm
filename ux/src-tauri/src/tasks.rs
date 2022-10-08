@@ -1,6 +1,8 @@
 use super::Database;
 use crate::Game;
+use crate::GameInitState;
 use crate::GameStateInner;
+use crate::Pending;
 use crate::SigningKeyInner;
 use game_sequencer::OnlineDBFetcher;
 use game_sequencer::Sequencer;
@@ -37,19 +39,19 @@ impl GameServer {
         secp: Arc<Secp256k1<All>>,
         signing_key: SigningKeyInner,
         database: Database,
-        mut g_lock: MutexGuard<'_, Option<Game>>,
+        mut g_lock: MutexGuard<'_, GameInitState>,
         g: GameStateInner,
     ) -> Result<(), &'static str> {
         tracing::trace!("Starting Game Server");
         if !std::ptr::eq(MutexGuard::mutex(&g_lock), &*g) {
             return Err("Must be same Mutex Passed in");
         }
-        match g_lock.as_mut() {
-            None => {
+        match &mut *g_lock {
+            GameInitState::None | GameInitState::Pending(_) => {
                 tracing::trace!("No Such Game");
                 return Err("No Game Available");
             }
-            Some(game) => {
+            GameInitState::Game(game) => {
                 if game.server.is_some() {
                     tracing::trace!("Game Already Started");
                     return Err("Game Already has a Server");
@@ -132,7 +134,7 @@ pub(crate) fn start_game(
             info!(move_ = ?game_move, "New Move Recieved");
             let mut game = g.lock().await;
 
-            if let Some(game) = game.as_mut() {
+            if let Some(game) = game.game_mut() {
                 if let Err(err) = game.board.play(game_move, s.to_hex()) {
                     match err {
                         MoveRejectReason::NoSuchUser => {}
@@ -145,7 +147,6 @@ pub(crate) fn start_game(
                     debug!(reason=?err, "Rejected Move");
                 } else {
                     // TODO: Maybe notify less often?
-                    game.should_notify.notify_waiters();
                     info!("NOTIFYING Waiters of New State");
                 }
             }

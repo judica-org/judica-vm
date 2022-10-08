@@ -1,16 +1,29 @@
-use bitcoin::{hashes::sha256, secp256k1::SecretKey, XOnlyPublicKey};
+use bitcoin::{
+    hashes::sha256, secp256k1::SecretKey, BlockHash, BlockHeader, TxMerkleNode, XOnlyPublicKey,
+};
 use lazy_static::lazy_static;
 use sapio::util::amountrange::AmountF64;
 use sapio_base::{
     serialization_helpers::SArc,
-    simp::{CompiledObjectLT, ContinuationPointLT, SIMPAttachableAt, SIMP},
+    simp::{CompiledObjectLT, ContinuationPointLT, SIMPAttachableAt, TemplateLT, SIMP},
 };
 use schemars::JsonSchema;
 use serde::*;
 use serde_json::Value;
 use std::{collections::BTreeMap, sync::Arc};
+
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
-pub struct AutoBroadcast {}
+pub struct AutBroadcastOptions {
+    pub sign: bool,
+    pub sign_all: bool,
+    pub send: bool,
+    pub finalize: bool,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone)]
+pub struct AutoBroadcast {
+    pub signer_roles: Vec<(PK, AutBroadcastOptions)>,
+}
 impl AutoBroadcast {
     pub fn get_protocol_number() -> i64 {
         Self::static_get_protocol_number()
@@ -39,6 +52,8 @@ impl SIMP for AutoBroadcast {
         -0xcafe
     }
 }
+
+impl SIMPAttachableAt<TemplateLT> for AutoBroadcast {}
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct EventSource(pub String);
@@ -204,4 +219,37 @@ lazy_static! {
         SArc(Arc::new(EventKey("game_action_players_lose".into())));
     pub static ref EK_NEW_DLOG: SArc<EventKey> =
         SArc(Arc::new(EventKey("discrete_log_discovery".into())));
+    // Bitcoin Related
+    pub static ref SOURCE_BITCOIN_RPC: SArc<EventSource> =
+        SArc(Arc::new(EventSource("bitcoin-rpc".into())));
+    pub static ref EK_BITCOIN_BLOCKHEADER: SArc<EventKey> =
+        SArc(Arc::new(EventKey("blockheader".into())));
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct ListenBlockHeader {
+    #[schemars(with = "BlockHeaderRemote")]
+    pub current_block_header: BlockHeader,
+    #[schemars(with = "BlockHeaderRemote")]
+    pub parent_in: BlockHeader,
+}
+
+#[derive(JsonSchema)]
+#[serde(remote = "BlockHeader")]
+pub struct BlockHeaderRemote {
+    /// The protocol version. Should always be 1.
+    pub version: i32,
+    /// Reference to the previous block in the chain.
+    #[schemars(with = "bitcoin::hashes::sha256d::Hash")]
+    pub prev_blockhash: BlockHash,
+    /// The root hash of the merkle tree of transactions in the block.
+    #[schemars(with = "bitcoin::hashes::sha256d::Hash")]
+    pub merkle_root: TxMerkleNode,
+    /// The timestamp of the block, as claimed by the miner.
+    pub time: u32,
+    /// The target value below which the blockhash must lie, encoded as a
+    /// a float (with well-defined rounding, of course).
+    pub bits: u32,
+    /// The nonce, selected to obtain a low enough blockhash.
+    pub nonce: u32,
 }

@@ -11,7 +11,7 @@ use crate::{
 
 /// CoinLockup implements an NFT type which holds a chunk of coins and releases
 /// them via a scheduled event in the future
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub(crate) struct CoinLockup {
     pub id: NftPtr,
     pub time_when_free: u64,

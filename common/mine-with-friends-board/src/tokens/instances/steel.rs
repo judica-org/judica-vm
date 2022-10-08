@@ -1,5 +1,6 @@
 use std::cmp::min;
 
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
@@ -13,13 +14,13 @@ use crate::{
     util::Price,
 };
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, JsonSchema, Debug)]
 pub enum SteelVariety {
     Structural,
 }
 
 /// Properties of Steel
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct Steel {
     // currently stainless steel only
     pub variety: SteelVariety,
@@ -27,7 +28,7 @@ pub struct Steel {
     pub weight_in_kg: u8,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct SteelSmelter {
     pub id: EntityID,
     pub total_units: u128,

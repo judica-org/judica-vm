@@ -3,6 +3,7 @@
         "directory": "$TOR_DIR/$PLAYER/host/tor",
         "socks_port": 11408,
         "application_port": 11409,
+        "exposed_application_port": 4040,
         "application_path": "service1"
     },
     "game_host_name": "testing-host"

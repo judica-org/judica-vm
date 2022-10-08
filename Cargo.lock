@@ -2445,6 +2445,7 @@ dependencies = [
  "sapio",
  "sapio-base",
  "sapio-bitcoin",
+ "sapio-psbt",
  "sapio-wasm-plugin",
  "schemars",
  "serde",
@@ -2464,6 +2465,18 @@ dependencies = [
  "sapio-bitcoin",
  "schemars",
  "serde",
+]
+
+[[package]]
+name = "sapio-psbt"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "sapio-bitcoin",
+ "sapio-miniscript",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

@@ -1,58 +1,26 @@
-use attest_messages::{Authenticated, GenericEnvelope};
-use bitcoin::blockdata::script::Script;
 use bitcoin::psbt::PartiallySignedTransaction;
-use bitcoin::{Amount, OutPoint, Transaction, Txid, XOnlyPublicKey};
+use bitcoin::secp256k1::Secp256k1;
+use bitcoin::{OutPoint, Transaction, Txid};
 use emulator_connect::{CTVAvailable, CTVEmulator};
-use event_log::db_handle::accessors::occurrence::{ApplicationTypeID, ToOccurrence};
-use ext::CompiledExt;
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID;
 use futures::stream::FuturesUnordered;
-use game_player_messages::ParticipantAction;
-use mine_with_friends_board::MoveEnvelope;
-use ruma_serde::CanonicalJsonValue;
-use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
-use sapio::util::amountrange::AmountF64;
-use sapio_base::effects::{EditableMapEffectDB, PathFragment};
-use sapio_base::serialization_helpers::SArc;
-use sapio_base::simp::{by_simp, SIMP};
-use sapio_base::txindex::TxIndexLogger;
-use sapio_wasm_plugin::host::{plugin_handle::ModuleLocator, WasmPluginHandle};
-use sapio_wasm_plugin::plugin_handle::PluginHandle;
-use sapio_wasm_plugin::{ContextualArguments, CreateArgs};
-use serde::{Deserialize, Serialize};
+use sapio_base::effects::PathFragment;
+use sapio_wasm_plugin::host::WasmPluginHandle;
+use sapio_wasm_plugin::CreateArgs;
 use serde_json::Value;
-use simps::GameStarted;
-use simps::{AutoBroadcast, EventKey, GameKernel, PK};
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::rc::Rc;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
-use tracing::{debug, info, trace};
-use universe::extractors::sequencer::get_game_setup;
+use tracing::{info, trace};
 mod universe;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Event {
-    ModuleBytes(Vec<u8>),
-    TransactionFinalized(String, Transaction),
-    Rebind(OutPoint),
-    SyntheticPeriodicActions(i64),
-    NewRecompileTriggeringObservation(Value, SArc<EventKey>),
-}
-
-impl ToOccurrence for Event {
-    fn to_data(&self) -> CanonicalJsonValue {
-        ruma_serde::to_canonical_value(self).unwrap()
-    }
-    fn stable_typeid(&self) -> ApplicationTypeID {
-        ApplicationTypeID::from_inner("LitigatorEvent")
-    }
-}
+pub mod events;
+pub mod litigator_event_log;
 
 struct AppState {
     bound_to: Option<OutPoint>,
@@ -133,10 +101,13 @@ async fn insert_init(
     location: &str,
     _config: &config::Config,
     accessor: &event_log::db_handle::EventLogAccessor<'_>,
-    gid: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
+    gid: OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error>> {
-    let ev = Event::ModuleBytes(tokio::fs::read(&location).await?);
-    accessor.insert_new_occurrence_now_from(gid, &ev)?;
+    let ev = events::Event::ModuleBytes(tokio::fs::read(&location).await?);
+    accessor.insert_new_occurrence_now_from(
+        gid,
+        &events::TaggedEvent(ev, Some(events::Tag::InitModule)),
+    )??;
     Ok(())
 }
 
@@ -183,7 +154,8 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         msg_db.clone(),
         &tasks,
     )
-    .await;
+    .await
+    .map_err(|e| e.to_string())?;
 
     let root = PathFragment::Root.into();
     let state = AppState {
@@ -194,9 +166,20 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         psbt_db: Arc::new(PSBTDatabase::new()),
         event_counter: 0,
     };
-
-    let evl = spawn(event_loop(
-        rx, state, emulator, data_dir, msg_db, config, root,
+    let secp = Arc::new(Secp256k1::new());
+    let evl = spawn(litigator_event_log::event_loop(
+        rx,
+        litigator_event_log::EventLoopContext {
+            secp,
+            state,
+            emulator,
+            data_dir,
+            msg_db,
+            config,
+            root,
+            evlog_group_id,
+            evlog: evlog.clone(),
+        },
     ));
 
     tasks.push(evl);
@@ -221,13 +204,13 @@ pub type TaskSet = FuturesUnordered<
 >;
 async fn start_extractors(
     evlog: event_log::connection::EventLog,
-    evlog_group_id: event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID,
-    tx: tokio::sync::mpsc::Sender<Event>,
+    evlog_group_id: OccurrenceGroupID,
+    tx: tokio::sync::mpsc::Sender<events::Event>,
     new_synthetic_event: Arc<Notify>,
     config: Arc<config::Config>,
     msg_db: attest_database::connection::MsgDB,
     tasks: &TaskSet,
-) {
+) -> Result<(), Box<dyn Error + Sync + Send + 'static>> {
     tasks.push(tokio::spawn(universe::linearized::event_log_processor(
         evlog.clone(),
         evlog_group_id,
@@ -249,7 +232,7 @@ async fn start_extractors(
         new_synthetic_event.clone(),
         tasks,
     )
-    .await;
+    .await?;
 
     tasks.push(tokio::spawn(universe::extractors::dlog::dlog_extractor(
         msg_db.clone(),
@@ -257,217 +240,7 @@ async fn start_extractors(
         evlog_group_id,
         Duration::from_secs(10),
     )));
-}
-
-async fn event_loop(
-    mut rx: tokio::sync::mpsc::Receiver<Event>,
-    mut state: AppState,
-    emulator: Arc<dyn CTVEmulator>,
-    data_dir: std::path::PathBuf,
-    msg_db: attest_database::connection::MsgDB,
-    config: Arc<config::Config>,
-    root: sapio_base::reverse_path::ReversePath<PathFragment>,
-) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    Ok(loop {
-        match rx.recv().await {
-            Some(Event::TransactionFinalized(_s, _tx)) => {
-                info!("Transaction Finalized");
-            }
-            Some(Event::SyntheticPeriodicActions(time)) => {
-                info!(time, "SyntehticPeriodicActions");
-                if let Some(out) = state.bound_to.as_ref() {
-                    let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
-                    if let Ok(program) = c.bind_psbt(
-                        *out,
-                        Default::default(),
-                        Rc::new(TxIndexLogger::new()),
-                        emulator.as_ref(),
-                    ) {
-                        for obj in program.program.values() {
-                            for tx in obj.txs.iter() {
-                                let SapioStudioFormat::LinkedPSBT {
-                                    psbt: _,
-                                    hex: _,
-                                    metadata,
-                                    output_metadata: _,
-                                    added_output_metadata: _,
-                                } = tx;
-                                if let Some(_data) =
-                                    metadata.simp.get(&AutoBroadcast::get_protocol_number())
-                                {
-                                    // TODO:
-                                    // - Send PSBT out for signatures?
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Some(Event::ModuleBytes(contract_bytes)) => {
-                info!("ModuleBytes");
-                let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
-                let module = WasmPluginHandle::<Compiled>::new_async(
-                    &data_dir,
-                    &emulator,
-                    locator,
-                    bitcoin::Network::Bitcoin,
-                    Default::default(),
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-                info!("Module Loaded Successfully");
-                let setup = match get_game_setup(&msg_db, config.oracle_key).await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        debug!(error=?e, "Error");
-                        return Err(e)?;
-                    }
-                };
-                info!(?setup, "Game Setup");
-                // TODO: Game Amount from somewhere?
-                let amt_per_player: AmountF64 =
-                    AmountF64::from(Amount::from_sat(100000 / setup.players.len() as u64));
-                let g = GameKernel {
-                    game_host: PK(config.oracle_key),
-                    players: setup
-                        .players
-                        .iter()
-                        .map(|p| Ok((PK(XOnlyPublicKey::from_str(p)?), amt_per_player)))
-                        .collect::<Result<_, bitcoin::secp256k1::Error>>()
-                        .map_err(|e| {
-                            format!(
-                                "Failed To Make JSON {}:{}\n    Error: {:?}",
-                                file!(),
-                                line!(),
-                                e
-                            )
-                        })?,
-                    timeout: setup.finish_time,
-                };
-                info!(?g, "Game Kernel");
-                // todo real args for contract
-                let args = CreateArgs {
-                    arguments: serde_json::to_value(&GameStarted { kernel: g }).unwrap(),
-                    context: ContextualArguments {
-                        network: bitcoin::network::constants::Network::Bitcoin,
-                        amount: Amount::from_sat(100000),
-                        effects: Default::default(),
-                    },
-                };
-
-                info!(?args, "Contract Args Ready");
-                state.contract = match module.call(&root, &args) {
-                    Ok(c) => {
-                        info!(address=?c.address,"Contract Compilation Successful");
-                        Ok(c)
-                    }
-                    Err(e) => {
-                        debug!(error=?e, "Contract Failed to Compiled");
-                        return Err("First Run of contract must pass")?;
-                    }
-                };
-                state.args = Ok(args);
-            }
-            Some(Event::Rebind(o)) => {
-                info!(output=?o, "Rebind");
-                state.bound_to.insert(o);
-            }
-            Some(Event::NewRecompileTriggeringObservation(new_info_as_v, filter)) => {
-                info!("NewRecompileTriggeringObservation");
-                let idx_str = SArc(Arc::new(format!("event-{}", state.event_counter)));
-                // work on a clone so as to not have an effect if failed
-                let mut new_args = state.args.as_ref().map_err(|e| e.as_str())?.clone();
-                let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
-
-                let mut any_edits = false;
-                for api in state
-                    .contract
-                    .as_ref()
-                    .map_err(|e| e.as_str())?
-                    .continuation_points()
-                    .filter(|api| {
-                        (&api.simp >> by_simp::<simps::EventRecompiler>())
-                            .and_then(|j| simps::EventRecompiler::from_json(j.clone()).ok())
-                            .map(|j| j.filter == *filter.0)
-                            .unwrap_or(false)
-                    })
-                    .filter(|api| {
-                        api.schema
-                            .as_ref()
-                            .and_then(|schema| {
-                                // todo: cache?
-                                jsonschema_valid::Config::from_schema(
-                                    // since schema is a RootSchema, cannot throw here
-                                    &schema.0,
-                                    Some(jsonschema_valid::schemas::Draft::Draft6),
-                                )
-                                .ok()
-                            })
-                            .map(|validator| validator.validate(&new_info_as_v).is_ok())
-                            .unwrap_or(false)
-                    })
-                {
-                    any_edits = true;
-                    // ensure that if specified, that we skip invalid messages
-                    save.effects
-                        .entry(SArc(api.path.clone()))
-                        .or_default()
-                        .insert(
-                            idx_str.clone(),
-                            // todo: maybe use arcs here too
-                            new_info_as_v.clone(),
-                        );
-                }
-
-                if any_edits {
-                    new_args.context.effects = save.into();
-                    let result = {
-                        let g_handle = state.module.lock().await;
-                        // drop error before releasing g_handle so that the CompilationError non-send type
-                        // doesn't get held across an await point
-                        g_handle
-                            .as_ref()
-                            .map_err(|e| e.as_str())?
-                            .fresh_clone()?
-                            .call(&PathFragment::Root.into(), &new_args)
-                            .map_err(|e| debug!(error=?e, "Module did not like the new argument"))
-                    };
-
-                    match result {
-                        // TODO:  Belt 'n Suspsender Check:
-                        // Check that old_state is augmented by new_state
-                        Ok(new_contract) => {
-                            let old_addr = state.contract.as_ref().map(|c| c.address.clone());
-                            let new_addr = &new_contract.address;
-                            if Script::from(old_addr.unwrap()) != Script::from(new_addr.clone()) {
-                                Err("Critical Invariant Failed: Contract address mutated after recompile")?;
-                            }
-
-                            info!(address=?new_contract.address,"Contract ReCompilation Successful");
-                            state.args = Ok(new_args);
-                            state.contract = Ok(new_contract);
-                        }
-                        Err(_e) => {}
-                    }
-                }
-            }
-            None => (),
-        }
-
-        // Post Event:
-
-        state.event_counter += 1;
-    })
+    Ok(())
 }
 
 const OK_T: Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> = Ok(());
-
-fn read_move(
-    e: Authenticated<GenericEnvelope<ParticipantAction>>,
-) -> Result<(MoveEnvelope, XOnlyPublicKey), ()> {
-    match e.msg() {
-        ParticipantAction::MoveEnvelope(m) => Ok((m.clone(), e.header().key())),
-        ParticipantAction::Custom(_) => Err(()),
-        ParticipantAction::PsbtSigningCoordination(_) => Err(()),
-    }
-}

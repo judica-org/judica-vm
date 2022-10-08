@@ -31,6 +31,10 @@ features = ['use-serde', 'rand', 'base64', 'bitcoinconsensus']
 path = "../../submodule/sapio/sapio"
 version = "0.2.0"
 
+[dependencies.sapio-psbt]
+path = "../../submodule/sapio/sapio-psbt"
+version = "0.1.0"
+
 [dependencies.sapio-base]
 path = "../../submodule/sapio/sapio-base"
 version = "0.2.0"

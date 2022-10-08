@@ -14,11 +14,11 @@ dev)
 
 debug)
     echo "Using Debug Tauri"
-    ./src-tauri/target/debug/mine-with-friends
+    ./src-tauri/target/debug/mastermine
     ;;
 
 release)
     echo "Using Release Tauri"
-    ./src-tauri/target/release/mine-with-friends
+    ./src-tauri/target/release/mastermine
     ;;
 esac
