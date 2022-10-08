@@ -23,7 +23,7 @@ use tracing::debug;
 
 use tracing::trace;
 
-impl<'a, T> MsgDBHandle<'a, T>
+impl<T> MsgDBHandle<T>
 where
     T: handle_type::Get,
 {

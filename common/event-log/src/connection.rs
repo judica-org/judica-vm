@@ -11,7 +11,7 @@ impl EventLog {
     pub fn new(db: Arc<Mutex<Connection>>) -> Self {
         EventLog(db)
     }
-    pub async fn get_accessor(&self) -> EventLogAccessor<'_, accessor_type::All> {
-        EventLogAccessor(self.0.lock().await, PhantomData::default())
+    pub async fn get_accessor(&self) -> EventLogAccessor<'static, accessor_type::All> {
+        EventLogAccessor(self.0.clone().lock_owned().await, PhantomData::default())
     }
 }

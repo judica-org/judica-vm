@@ -32,7 +32,7 @@ use tracing::debug;
 use tracing::info;
 use tracing::trace;
 
-impl<'a, T> MsgDBHandle<'a, T>
+impl<T> MsgDBHandle<T>
 where
     T: handle_type::Insert,
 {

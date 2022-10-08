@@ -22,6 +22,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::spawn_blocking;
 #[cfg(feature = "has_async")]
 use tokio::{
     spawn,
@@ -344,8 +345,13 @@ where
                         Option<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>>,
                         _,
                     > = {
-                        let handle = self.db.get_handle().await;
-                        handle.get_message_at_height_for_user(self.oracle_key, count)
+                        let handle = self.db.get_handle_read().await;
+                        let oracle_key = self.oracle_key;
+                        spawn_blocking(move || {
+                            handle.get_message_at_height_for_user(oracle_key, count)
+                        })
+                        .await
+                        .expect("Panic Free")
                     };
                     match msg {
                         Ok(None) => {
@@ -363,17 +369,22 @@ where
                                     };
                                 }
                                 BroadcastByHost::NewPeer(Peer { service_url, port }) => {
-                                    let handle = self.db.get_handle().await;
-                                    // idempotent
-                                    handle
-                                        .insert_hidden_service(
-                                            service_url.clone(),
-                                            *port,
-                                            true,
-                                            true,
-                                            true,
-                                        )
-                                        .ok();
+                                    let handle = self.db.get_handle_all().await;
+                                    let service_url = service_url.clone();
+                                    let port = *port;
+                                    spawn_blocking(move || {
+                                        // idempotent
+                                        handle
+                                            .insert_hidden_service(
+                                                service_url,
+                                                port,
+                                                true,
+                                                true,
+                                                true,
+                                            )
+                                            .ok();
+                                    })
+                                    .await;
                                 }
                                 BroadcastByHost::GameSetup(_) => {}
                             }
@@ -394,15 +405,27 @@ where
             while !self.should_shutdown() {
                 let newer_before = newer;
                 {
-                    let handle = self.db.get_handle().await;
-                    let mut env = self.msg_cache.lock().await;
+                    let mut env = self.msg_cache.clone().lock_owned().await;
+                    let handle = self.db.get_handle_read().await;
                     // it's fine for us to filter for *only* game moves in our
                     // DB...  Ideally, we'd be able to use the group filter as
                     // well, but currently we don't have that set up properly
                     // for the host, so instead we load all moves.
-                    if let Err(e) = handle.get_all_messages_collect_into_inconsistent_skip_invalid(
-                        &mut newer, &mut env, true,
-                    ) {
+                    let mut newer_copy = newer;
+                    let (res, newer_overwrite) = spawn_blocking(move || {
+                        let c = handle.get_all_messages_collect_into_inconsistent_skip_invalid(
+                            &mut newer_copy,
+                            &mut env,
+                            true,
+                        );
+
+                        (c, newer_copy)
+                    })
+                    .await
+                    .expect("Panic Free");
+                    newer = newer_overwrite;
+
+                    if let Err(e) = res {
                         warn!(error=?e, "DB Fetching Failed");
                         return;
                     }

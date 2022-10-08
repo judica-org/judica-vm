@@ -29,7 +29,7 @@ use std::{
 use tokio::{
     spawn,
     sync::{mpsc::UnboundedReceiver, Notify, OwnedMutexGuard},
-    task::JoinHandle,
+    task::{spawn_blocking, JoinHandle},
 };
 use tracing::{debug, info};
 
@@ -98,11 +98,14 @@ pub async fn get_game_setup(
     oracle_key: XOnlyPublicKey,
 ) -> Result<mine_with_friends_board::game::GameSetup, &'static str> {
     let genesis = {
-        let handle = msg_db.get_handle().await;
-        handle
-            .get_message_at_height_for_user::<Channelized<BroadcastByHost>>(oracle_key, 0)
-            .map_err(|_e| "Internal Databse Error")?
-            .ok_or("No Genesis found for selected Key")?
+        let handle = msg_db.get_handle_read().await;
+        spawn_blocking(move || {
+            handle.get_message_at_height_for_user::<Channelized<BroadcastByHost>>(oracle_key, 0)
+        })
+        .await
+        .map_err(|_| "Panic in DB")?
+        .map_err(|_e| "Internal Databse Error")?
+        .ok_or("No Genesis found for selected Key")?
     };
     let game_setup = {
         let m: Channelized<BroadcastByHost> = genesis.inner().into_msg();
@@ -225,16 +228,18 @@ fn make_snapshot(
     new_synthetic_event: Arc<Notify>,
 ) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
     spawn(async move {
-        let handle = msg_db.get_handle().await;
-
-        let sequencer_envelopes = handle
-            .load_all_messages_for_user_by_key_connected::<_, HostEnvelope>(&oracle_key)
-            .map_err(|_| "Database Fetch Error")?;
-        let mut m = Default::default();
-        handle
-            .get_all_messages_collect_into_inconsistent_skip_invalid(&mut None, &mut m, true)
-            .map_err(|_| "Database Fetch Error")?;
-        drop(handle);
+        let handle = msg_db.get_handle_read().await;
+        let (sequencer_envelopes, mut m) = spawn_blocking(move || {
+            let sequencer_envelopes = handle
+                .load_all_messages_for_user_by_key_connected::<_, HostEnvelope>(&oracle_key)
+                .map_err(|_| "Database Fetch Error")?;
+            let mut m = Default::default();
+            handle
+                .get_all_messages_collect_into_inconsistent_skip_invalid(&mut None, &mut m, true)
+                .map_err(|_| "Database Fetch Error")
+                .and(Ok((sequencer_envelopes, m)))
+        })
+        .await??;
 
         // todo handle channels...
         let def = Default::default();

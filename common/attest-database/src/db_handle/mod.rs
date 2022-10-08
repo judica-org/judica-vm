@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use super::sql_serializers::{self};
 use rusqlite::{types::FromSql, Connection, ToSql};
 use serde::{Deserialize, Serialize};
-use tokio::sync::MutexGuard;
+use tokio::sync::{MutexGuard, OwnedMutexGuard};
 
 pub mod create;
 pub mod get;
@@ -12,10 +12,7 @@ pub mod setup;
 pub mod sql;
 pub mod update;
 
-pub struct MsgDBHandle<'a, T = handle_type::All>(
-    pub MutexGuard<'a, Connection>,
-    pub PhantomData<T>,
-);
+pub struct MsgDBHandle<T = handle_type::All>(pub OwnedMutexGuard<Connection>, pub PhantomData<T>);
 
 pub enum ConsistentMessages {
     AllMessagesNotReady,
@@ -27,6 +24,8 @@ pub mod handle_type {
     pub trait Get {}
     pub trait Setup {}
     pub trait Update {}
+    pub struct ReadOnly;
+    impl Get for ReadOnly {}
     pub struct All;
     impl Insert for All {}
     impl Get for All {}

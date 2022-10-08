@@ -18,7 +18,9 @@ use serde::Serialize;
 use std;
 use std::collections::BTreeMap;
 use std::fmt::Display;
+use std::rc::Rc;
 use std::sync::Arc;
+use tokio::task::spawn_blocking;
 
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -414,10 +416,14 @@ where
     }
     let mut outcomes = Vec::with_capacity(authed.len());
     {
-        let mut locked = db.get_handle().await;
         for envelope in authed {
             trace!("Inserting Into Database");
-            match locked.try_insert_authenticated_envelope(envelope, false) {
+            let mut locked = db.get_handle_all().await;
+            let res =
+                spawn_blocking(move || locked.try_insert_authenticated_envelope(envelope, false))
+                    .await
+                    .expect("DB Panic");
+            match res {
                 Ok(i) => match i {
                     Ok(()) => {
                         outcomes.push(Outcome { success: true });
@@ -459,8 +465,11 @@ where
     tips.tips.dedup();
     trace!(method = "GET /tips", ?tips);
     let all_tips = {
-        let handle = db.get_handle().await;
-        if let Ok(r) = handle.messages_by_hash(tips.tips.iter()) {
+        let handle = db.get_handle_read().await;
+        if let Ok(r) = spawn_blocking(move || handle.messages_by_hash(tips.tips.iter()))
+            .await
+            .expect("DB Panic")
+        {
             r
         } else {
             return Err(AttestProtocolError::DatabaseError);
@@ -489,8 +498,10 @@ where
 {
     info!(method = "GET", item = "/latest_tips");
     let r = {
-        let handle = db.get_handle().await;
-        handle.get_tips_for_all_users()
+        let handle = db.get_handle_read().await;
+        spawn_blocking(move || handle.get_tips_for_all_users())
+            .await
+            .expect("DB Error")
     };
     if let Ok(v) = r {
         let msg = AttestResponse::LatestTips(LatestTipsResponse(v)).into_protocol_and_log(seq)?;

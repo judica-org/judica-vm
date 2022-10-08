@@ -17,7 +17,7 @@ use sapio_bitcoin::secp256k1::SecretKey;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::collections::HashMap;
 
-impl<'a, T> MsgDBHandle<'a, T>
+impl<T> MsgDBHandle<T>
 where
     T: handle_type::Get,
 {

@@ -1,7 +1,7 @@
 use super::handle_type;
 use super::MsgDBHandle;
 use crate::db_handle::sql::update::*;
-impl<'a, T> MsgDBHandle<'a, T>
+impl<T> MsgDBHandle<T>
 where
     T: handle_type::Get + handle_type::Insert,
 {

@@ -132,12 +132,17 @@ async fn handle_envelope(
         match envelope.self_authenticate(&g.secp) {
             Ok(authentic) => {
                 tracing::debug!(?service, "Authentic Tip: {:?}", authentic);
-                let mut handle = conn.get_handle().await;
                 if authentic.inner_ref().header().ancestors().is_none()
                     && authentic.inner_ref().header().height() == 0
                 {
                     let new_name = format!("user-{}", now());
-                    match handle.insert_user_by_genesis_envelope(new_name, authentic)? {
+                    let mut handle = conn.get_handle_all().await;
+                    let res = spawn_blocking(move || {
+                        handle.insert_user_by_genesis_envelope(new_name, authentic)
+                    })
+                    .await
+                    .expect("DB Panic")?;
+                    match res {
                         Ok(key) => {
                             trace!(key, ?service, "Created New Genesis From Peer");
                         }
@@ -150,7 +155,15 @@ async fn handle_envelope(
                         }
                     }
                 } else {
-                    match handle.try_insert_authenticated_envelope(authentic.clone(), false)? {
+                    let mut handle = conn.get_handle_all().await;
+                    let mut handle = conn.get_handle_all().await;
+                    let authentic_copy = authentic.clone();
+                    let res = spawn_blocking(move || {
+                        handle.try_insert_authenticated_envelope(authentic_copy, false)
+                    })
+                    .await
+                    .expect("DB Panic")?;
+                    match res {
                         Ok(()) => {}
                         // This means that a conststraint, most likely that the
                         // genesis header must be known, was not allowed
@@ -192,10 +205,13 @@ async fn handle_envelope(
     }
     all_tips.sort_unstable();
     all_tips.dedup();
-    let unknown_dep_tips = conn
-        .get_handle()
-        .await
-        .message_not_exists_it(all_tips.iter())?;
+    let unknown_dep_tips = {
+        let handle = conn.get_handle_read().await;
+        // ideally we'd capture just handle and keep a ref to all_tips, but IDK
+        // how to do that.
+        let it = all_tips.clone();
+        spawn_blocking(move || handle.message_not_exists_it(it.iter())).await??
+    };
     trace!(?all_tips, ?unknown_dep_tips);
     if !unknown_dep_tips.is_empty() {
         request_tips.send(unknown_dep_tips)?;
