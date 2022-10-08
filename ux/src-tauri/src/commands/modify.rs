@@ -9,7 +9,6 @@ use crate::GameInitState;
 use crate::GameState;
 use crate::Pending;
 use crate::SigningKeyInner;
-use crate::TriggerRerender;
 use attest_database::db_handle::create::TipControl;
 use attest_database::generate_new_user;
 use attest_messages::Authenticated;
@@ -54,7 +53,6 @@ pub(crate) async fn make_new_game(
     globals: State<'_, Arc<Globals>>,
     game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
-    trigger: TriggerRerender,
 ) -> Result<(), String> {
     let game_host = game_host_state.inner().lock().await.clone();
     let game_host = game_host.ok_or("Must be connected to some host")?;
@@ -87,7 +85,6 @@ pub(crate) async fn make_new_game(
         join_code: new_game.join,
         password: Some(new_game.password),
     });
-    trigger.notify();
     Ok(())
 }
 pub(crate) async fn make_new_chain_genesis(
@@ -124,7 +121,6 @@ pub(crate) async fn make_new_chain_inner(
     globals: State<'_, Arc<Globals>>,
     game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
-    trigger: TriggerRerender,
 ) -> Result<(), String> {
     let game_host = game_host_state.inner().lock().await.clone();
     let game_host = game_host.ok_or("Must be connected to some host")?;
@@ -147,7 +143,6 @@ pub(crate) async fn make_new_chain_inner(
         join_code: code,
         password: None,
     });
-    trigger.notify().map_err(|e| "Hung Up")?;
     Ok(())
 }
 
@@ -219,7 +214,6 @@ pub(crate) async fn switch_to_game_inner(
     db: Database,
     game: GameState<'_>,
     key: XOnlyPublicKey,
-    trigger: TriggerRerender,
 ) -> Result<(), ()> {
     info!(?key, "Switching to Sequencer Key");
     let game = game.inner().clone();
@@ -258,7 +252,7 @@ pub(crate) async fn switch_to_game_inner(
             server: None,
         };
         *g = GameInitState::Game(new_game);
-        GameServer::start(secp, singing_key, db, g, game, trigger).await?;
+        GameServer::start(secp, singing_key, db, g, game, ).await?;
         Ok::<(), &'static str>(())
     });
     Ok(())
@@ -268,15 +262,11 @@ pub(crate) async fn set_signing_key_inner(
     s: GameState<'_>,
     selected: Option<XOnlyPublicKey>,
     sk: State<'_, SigningKeyInner>,
-    trigger: TriggerRerender,
 ) -> Result<(), ()> {
     info!(?selected, "Selecting Key");
     {
         let mut l = sk.inner().lock().await;
         *l = selected;
-    }
-    {
-        trigger.notify().map_err(|e| ())?;
     }
 
     Ok(())

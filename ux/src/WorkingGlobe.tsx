@@ -57,7 +57,7 @@ function memoized_color(name: string) {
 
 type BarData = { coordinates: number[], hashrate?: number, watts?: number, id: string };
 
-function getBarData(plants: (UserPowerPlant & { text: string })[]) {
+function getBarData(plants: (UserPowerPlant)[]) {
     return plants.reduce<BarData[]>((acc, { coordinates, hashrate, watts, id }) => {
         return [...acc, { id, coordinates, hashrate }, { id, coordinates: [coordinates[0] + 100000, coordinates[1] + 100000], watts }];
     }, []);
@@ -72,8 +72,8 @@ const chose_color = (d: BarData): string => {
     }
 }
 
-export default () => {
-    const [power_plants, set_power_plants] = useState<(UserPowerPlant & { text: string })[]>([]); // use empty list for now so it will render
+export default (props: { power_plants: UserPowerPlant[] }) => {
+    const [power_plants, set_power_plants] = useState<(UserPowerPlant)[]>(props.power_plants); // use empty list for now so it will render
     const [owners, setOwners] = useState<EntityID[]>([]);
     const [selectedPlantOwners, setSelectedPlantOwners] = useState<EntityID[]>([]); // default to all owners
     const [output_bars, set_output_bars] = useState<BarData[]>([]);
@@ -102,26 +102,16 @@ export default () => {
     }
 
     useEffect(() => {
-        const unlisten_power_plants = appWindow.listen("power-plants", (ev: Event<(UserPowerPlant & { text: string })[]>) => {
-            console.log(['power-plants-received'], ev);
-            let plant_owners: string[] = [];
-            ev.payload.forEach((plant) => {
-                if (!plant_owners.includes(plant.owner)) {
-                    plant_owners.push(plant.owner)
-                }
-            })
-            setOwners(plant_owners);
-            setSelectedPlantOwners(plant_owners)
-            set_power_plants(ev.payload);
-            set_output_bars(getBarData(ev.payload));
-        });
-
-        return () => {
-            (async () => {
-                (await unlisten_power_plants)();
-            })();
-        }
-    }, [power_plants, owners, location]);
+        let plant_owners: string[] = [];
+        power_plants.forEach((plant) => {
+            if (!plant_owners.includes(plant.owner)) {
+                plant_owners.push(plant.owner)
+            }
+        })
+        setOwners(plant_owners);
+        setSelectedPlantOwners(plant_owners)
+        set_output_bars(getBarData(power_plants));
+    }, [power_plants, location]);
 
     const selectedPlantTypes = Object.entries(plantTypes).filter(([_type, selected]) => selected === true).map(([type, _selected]) => type);
     const plants_by_type = power_plants.filter(({ plant_type, owner }) => selectedPlantTypes.includes(plant_type) && selectedPlantOwners.includes(owner));

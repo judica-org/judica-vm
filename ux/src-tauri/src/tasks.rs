@@ -4,7 +4,6 @@ use crate::GameInitState;
 use crate::GameStateInner;
 use crate::Pending;
 use crate::SigningKeyInner;
-use crate::TriggerRerender;
 use game_sequencer::OnlineDBFetcher;
 use game_sequencer::Sequencer;
 use mine_with_friends_board::entity::EntityID;
@@ -42,7 +41,6 @@ impl GameServer {
         database: Database,
         mut g_lock: MutexGuard<'_, GameInitState>,
         g: GameStateInner,
-        trigger: TriggerRerender,
     ) -> Result<(), &'static str> {
         tracing::trace!("Starting Game Server");
         if !std::ptr::eq(MutexGuard::mutex(&g_lock), &*g) {
@@ -86,7 +84,6 @@ impl GameServer {
                         g,
                         game_sequencer,
                         heartbeat_enable.clone(),
-                        trigger,
                     )
                 };
                 spawn({
@@ -130,7 +127,6 @@ pub(crate) fn start_game(
     g: GameStateInner,
     sequencer: Sequencer,
     heartbeat_enable: Arc<AtomicBool>,
-    trigger: TriggerRerender,
 ) -> JoinHandle<()> {
     spawn(async move {
         // TODO: Check which game the move is for?
@@ -151,9 +147,6 @@ pub(crate) fn start_game(
                     debug!(reason=?err, "Rejected Move");
                 } else {
                     // TODO: Maybe notify less often?
-                    if trigger.notify().is_err() {
-                        return;
-                    }
                     info!("NOTIFYING Waiters of New State");
                 }
             }

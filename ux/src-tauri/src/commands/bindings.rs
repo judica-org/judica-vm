@@ -48,14 +48,12 @@ pub async fn game_synchronizer(
     d: State<'_, Database>,
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
-    trigger: State<'_, TriggerRerender>,
 ) -> Result<(), SyncError> {
     view::game_synchronizer_inner(
         window,
         s,
         d,
         game_host,
-        trigger.inner().clone(),
         signing_key,
     )
     .await
@@ -108,9 +106,8 @@ pub(crate) async fn set_signing_key(
     s: GameState<'_>,
     selected: Option<XOnlyPublicKey>,
     sk: State<'_, SigningKeyInner>,
-    trigger: State<'_, TriggerRerender>,
 ) -> Result<(), ()> {
-    modify::set_signing_key_inner(s, selected, sk, trigger.inner().clone()).await
+    modify::set_signing_key_inner(s, selected, sk).await
 }
 
 #[tauri::command]
@@ -144,7 +141,6 @@ pub(crate) async fn make_new_chain(
     globals: State<'_, Arc<Globals>>,
     game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
-    trigger: State<'_, TriggerRerender>,
 ) -> Result<(), String> {
     modify::make_new_chain_inner(
         nickname,
@@ -154,7 +150,6 @@ pub(crate) async fn make_new_chain(
         globals,
         game_host_state,
         game,
-        trigger.inner().clone(),
     )
     .await
 }
@@ -175,7 +170,6 @@ pub(crate) async fn make_new_game(
     client: State<'_, Arc<Globals>>,
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
-    trigger: State<'_, TriggerRerender>,
 ) -> Result<(), String> {
     modify::make_new_game(
         nickname,
@@ -184,7 +178,6 @@ pub(crate) async fn make_new_game(
         client,
         game_host,
         game,
-        trigger.inner().clone(),
     )
     .await
 }
@@ -223,7 +216,6 @@ pub(crate) async fn switch_to_game(
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
     sk: State<'_, SigningKeyInner>,
-    trigger: State<'_, TriggerRerender>,
     game: GameState<'_>,
     key: XOnlyPublicKey,
 ) -> Result<(), ()> {
@@ -233,7 +225,6 @@ pub(crate) async fn switch_to_game(
         db.inner().clone(),
         game,
         key,
-        trigger.inner().clone(),
     )
     .await
 }

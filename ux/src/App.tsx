@@ -125,6 +125,7 @@ function App() {
 
     const unlisten_app_state = appWindow.listen("app-state", (ev) => {
       set_root_state(ev.payload as EmittedAppState);
+      console.log((ev.payload as EmittedAppState));
     });
 
 
@@ -191,7 +192,7 @@ function App() {
           game_host_service
         }}></DrawerAppBar>
         <div className="Content">
-          <WorkingGlobe></WorkingGlobe>
+          <WorkingGlobe power_plants={power_plants}></WorkingGlobe>
           <Box className="DataDisplay">
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }} className="DisplayContents">
               <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>

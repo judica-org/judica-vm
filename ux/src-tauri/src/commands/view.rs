@@ -29,7 +29,6 @@ pub(crate) async fn game_synchronizer_inner(
     s: GameState<'_>,
     d: State<'_, Database>,
     g: State<'_, Arc<Mutex<Option<GameHost>>>>,
-    trigger: TriggerRerender,
     signing_key: State<'_, SigningKeyInner>,
 ) -> Result<(), SyncError> {
     info!("Registering Window for State Updates");
@@ -42,7 +41,6 @@ pub(crate) async fn game_synchronizer_inner(
             g.inner(),
             d.inner(),
             &window,
-            trigger.clone(),
         )
         .await
         {
@@ -131,7 +129,6 @@ async fn game_synchronizer_inner_loop(
     game_host: &Arc<Mutex<Option<GameHost>>>,
     d: &Database,
     window: &Window,
-    trigger: TriggerRerender,
 ) -> Result<(), SyncError> {
     let (db_connection, available_sequencers, user_keys) = {
         let l = d.state.lock().await;
