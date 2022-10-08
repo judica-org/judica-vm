@@ -157,14 +157,15 @@ impl From<tokio_socks::Error> for TorWSError {
 }
 // TODO: Tor Support
 impl ClientWebSocket {
-    pub async fn connect(globals: &Arc<Globals>, url: String) -> ClientWebSocket {
-        let (ws_stream, _) = Self::connect_async_with_config_tor(globals, url, None)
-            .await
-            .expect("Failed to connect");
-        ClientWebSocket {
+    pub async fn connect(
+        globals: &Arc<Globals>,
+        url: String,
+    ) -> Result<ClientWebSocket, TorWSError> {
+        let (ws_stream, _) = Self::connect_async_with_config_tor(globals, url, None).await?;
+        Ok(ClientWebSocket {
             inner: ws_stream,
             protocol: None,
-        }
+        })
     }
 
     pub async fn connect_async_with_config_tor<R>(

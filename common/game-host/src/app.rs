@@ -1,4 +1,7 @@
-use crate::Config;
+use crate::{
+    app::routes::game_init::{add_player, create_new_game_instance, finish_setup, NewGameDB},
+    Config,
+};
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
 use attest_messages::CanonicalEnvelopeHash;
 use axum::{
@@ -10,7 +13,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use game_host_messages::{BroadcastByHost, Channelized, Peer};
+use game_host_messages::{BroadcastByHost, Channelized, CreatedNewChain, Peer};
 use mine_with_friends_board::game::GameSetup;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
@@ -18,7 +21,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{error::Error, net::SocketAddr, sync::Arc};
+use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
+mod routes;
 
 #[derive(Deserialize, Serialize)]
 pub struct Tips {
@@ -77,12 +82,6 @@ pub async fn add_new_peer(
             .expect("Response<()> should always be valid"),
         Json(json!("Success")),
     ))
-}
-
-#[derive(Serialize)]
-pub struct CreatedNewChain {
-    pub genesis_hash: CanonicalEnvelopeHash,
-    pub group_name: String,
 }
 
 fn flip<T, E1, E2>(r: Result<Result<T, E1>, E2>) -> Result<Result<T, E2>, E1> {
@@ -204,6 +203,7 @@ pub async fn add_chain_to_group(
         Json(()),
     ))
 }
+
 pub fn run(
     config: Arc<Config>,
     db: MsgDB,
@@ -214,6 +214,9 @@ pub fn run(
         let app = Router::new()
             // `POST /msg` goes to `msg`
             .route("/peer/new", post(add_new_peer))
+            .route("/game/new", post(create_new_game_instance))
+            .route("/game/player/new", post(add_player))
+            .route("/game/finish", post(finish_setup))
             .route("/peer", get(get_peers))
             .route("/attestation_chain/new", post(create_new_attestation_chain))
             .route("/attestation_chain", get(list_groups))
@@ -223,6 +226,7 @@ pub fn run(
             )
             .layer(Extension(db))
             .layer(Extension(secp))
+            .layer(Extension(Arc::new(Mutex::new(NewGameDB::new()))))
             .layer(
                 CorsLayer::new()
                     .allow_methods([Method::GET, Method::OPTIONS, Method::POST])

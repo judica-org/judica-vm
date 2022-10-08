@@ -283,11 +283,12 @@ async fn game(
                 data: BroadcastByHost::Sequence(to_sequence.iter().map(|k| k.1).collect()),
                 channel: "default".into(),
             };
-            let mut handle = db.get_handle().await;
-            // TODO: Run a tipcache
+            {
+                let mut handle = db.get_handle().await;
+                // TODO: Run a tipcache
 
-            // try to insert and handle
-            handle
+                // try to insert and handle
+                handle
                 .retry_insert_authenticated_envelope_atomic::<Channelized<BroadcastByHost>, _, _>(
                     msg,
                     &keypair,
@@ -295,7 +296,9 @@ async fn game(
                     None,
                     TipControl::GroupsOnly,
                 )?;
+            }
         }
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 

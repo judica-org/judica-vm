@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
+    fmt::Debug,
     ops::{Index, IndexMut},
 };
 use tracing::trace;
@@ -18,7 +19,7 @@ pub mod token_swap;
 ///     - transaction_required => a pairing of `transaction` and
 ///      `end_transaction` is required to wrap this call. May panic if not
 ///      (especially in test mode)
-pub(crate) trait Token: Send + Sync {
+pub(crate) trait Token: Send + Sync + Debug {
     /// To Be called before calling any methods marked "transaction_required"
     fn transaction(&mut self);
     /// To Be called after calling any methods marked "transaction_required"
@@ -54,7 +55,7 @@ pub(crate) trait Token: Send + Sync {
 }
 
 /// A Basic Token Implementation
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub(crate) struct TokenBase {
     pub(crate) balances: BTreeMap<EntityID, Price>,
     /// Cached from the sum(balances.values())
@@ -200,9 +201,10 @@ impl TokenPointer {
 }
 
 /// Holds Tokens and metadata for custom token types
-#[derive(Default, Serialize)]
+#[derive(Default, Serialize, JsonSchema, Debug)]
 pub(crate) struct TokenRegistry {
     #[serde(serialize_with = "special_serializer")]
+    #[schemars(with = "BTreeMap<EntityID, serde_json::Value>")]
     pub tokens: BTreeMap<EntityID, Box<dyn Token>>,
     pub hashboards: BTreeMap<TokenPointer, HashBoardData>,
     pub steel: BTreeMap<TokenPointer, Steel>,

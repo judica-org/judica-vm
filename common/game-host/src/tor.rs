@@ -25,6 +25,7 @@ pub struct TorConfig {
     pub directory: PathBuf,
     pub socks_port: u16,
     pub application_port: u16,
+    pub exposed_application_port: u16,
     pub application_path: String,
 }
 impl TorConfig {
@@ -68,8 +69,8 @@ pub async fn start(config: Arc<Config>) -> JoinHandle<Result<(), Box<dyn Error +
             ))
             .flag(TorFlag::HiddenServiceVersion(HiddenServiceVersion::V3))
             .flag(TorFlag::HiddenServicePort(
-                TorAddress::Port(config.tor.application_port),
-                None.into(),
+                TorAddress::Port(config.tor.exposed_application_port),
+                Some(TorAddress::Port(config.tor.application_port)).into(),
             ))
             .start_background()
             .join()

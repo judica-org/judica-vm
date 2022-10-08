@@ -5,6 +5,7 @@ use crate::game::CallContext;
 use crate::tokens::TokenRegistry;
 use crate::util::Currency;
 use crate::util::Price;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -13,7 +14,7 @@ use std::collections::BTreeMap;
 pub struct UXForSaleList {
     pub listings: Vec<UXNFTSale>,
 }
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, JsonSchema)]
 pub struct UXNFTSale {
     pub nft_id: NftPtr,
     pub price: Price,
@@ -22,7 +23,7 @@ pub struct UXNFTSale {
     pub transfer_count: u128,
 }
 /// Represents an offer to sell an NFT
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, JsonSchema)]
 pub struct NFTSale {
     /// The Price the owner will accept
     pub price: Price,
@@ -34,7 +35,7 @@ pub struct NFTSale {
     pub transfer_count: u128,
 }
 /// A Registry of all pending sales
-#[derive(Serialize, Default, Debug)]
+#[derive(Serialize, Default, Debug, JsonSchema)]
 pub(crate) struct NFTSaleRegistry {
     pub(crate) nfts: BTreeMap<NftPtr, NFTSale>,
 }
