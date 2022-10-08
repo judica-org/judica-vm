@@ -1,13 +1,15 @@
 import ConstructionIcon from '@mui/icons-material/Construction';
-import { Typography, Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
-import { appWindow } from '@tauri-apps/api/window';
+import { Typography, Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Button, Divider } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { MaterialPriceDisplay } from '../App';
-import FormModal from '../form-modal/FormModal';
-import { material_type_color_map } from '../util';
+import PurchaseMaterialForm from '../purchase-material/PurchaseMaterialForm';
+import { RawMaterialsActions } from '../util';
 
 
 export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisplay[] }) => {
+  const [selected_material, set_selected_material] = useState<MaterialPriceDisplay | null>(null);
+  const [action, set_action] = useState<RawMaterialsActions | null>(null);
+
   return (
     <div>
       <div className='materials-market-container'>
@@ -37,17 +39,21 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
                     <TableCell align="right">1 to {material.price_a_b_b_a[0]}</TableCell>
                     <TableCell align="right">{material.asset_a} / {material.asset_b}</TableCell>
                     <TableCell align="right">
-                      <FormModal title={"Buy Tokens"} action={"BUY"} market={material} />
-                      <FormModal title={"Sell Tokens"} action={"SELL"} market={material} />
+                      <Button onClick={() => {
+                        set_action("BUY");
+                        set_selected_material(material);
+                      }}>Trade</Button>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            <Divider />
+            { (action && selected_material) && <PurchaseMaterialForm action={action} market={selected_material}/>}
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div >
   )
 };
 export default RawMaterialsMarket;
