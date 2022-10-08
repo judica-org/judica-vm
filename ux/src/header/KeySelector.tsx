@@ -1,5 +1,5 @@
-import { ContentCopy } from '@mui/icons-material';
-import { Button, FormControl, FormLabel, IconButton, MenuItem, Select } from '@mui/material';
+import { ContentCopy, RemoveCircleOutline } from '@mui/icons-material';
+import { Button, FormControl, FormGroup, FormLabel, IconButton, MenuItem, Select } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import { FormEvent, useEffect, useState } from "react";
 import { tauri_host } from '../tauri_host';
@@ -9,7 +9,7 @@ export interface KeySelectorProps {
   signing_key: string | null,
   available_keys: string[],
   available_sequencers: [string, GameSetup][],
-  which_game_loaded: string|null;
+  which_game_loaded: string | null;
 };
 
 export interface KeySelectorDirectProps {
@@ -20,7 +20,7 @@ export function KeySelector({ which_game_loaded, available_sequencers, signing_k
   const setup = available_sequencers.find((([key, _setup]) => key === which_game_loaded));
   const usable_keys = (setup && available_keys.filter((k) => setup[1].players.includes(k))) ?? [];
 
-  const [selected_key, set_selected_key] = useState<string|0>(signing_key ?? 0);
+  const [selected_key, set_selected_key] = useState<string | 0>(signing_key ?? 0);
 
   const handle_submit = (ev: FormEvent<HTMLButtonElement>): void => {
     ev.preventDefault();
@@ -43,16 +43,30 @@ export function KeySelector({ which_game_loaded, available_sequencers, signing_k
   if (setup)
     return <div>
       <FormControl disabled={disabled}>
-        <FormLabel>Select Player</FormLabel>
-        <Select label="Public Key" 
-        onChange={(ev) => set_selected_key(ev.target.value as string)} 
-        value={selected_key} 
-        renderValue={(v) => `${(v !== 0? v : null)?.substring(0, 16)??"None"}...`}>
-          <MenuItem value={0} selected={selected_key === 0} ></MenuItem>
-          {key_options}
-        </Select>
-        <Button variant="contained" type="submit" onClick={handle_submit}>Select This Key</Button>
-        {signing_key && <IconButton onClick={() => window.navigator.clipboard.writeText(signing_key)}><ContentCopy></ContentCopy></IconButton>}
+        {
+          signing_key === null &&
+          <>
+            <FormLabel>Select Player</FormLabel>
+            <Select label="Public Key"
+              onChange={(ev) => set_selected_key(ev.target.value as string)}
+              value={selected_key}
+              renderValue={(v) => `${(v !== 0 ? v : null)?.substring(0, 16) ?? "None"}...`}>
+              <MenuItem value={0} selected={selected_key === 0} >None</MenuItem>
+              {key_options}
+            </Select>
+            <Button variant="contained" type="submit" onClick={handle_submit}>Select This Key</Button>
+          </>
+        }
+        {
+          signing_key !== null &&
+          <>
+            <FormLabel sx={{ wordBreak: "break-word" }}>Signing Key: {signing_key}</FormLabel>
+            <FormGroup row>
+              <IconButton onClick={() => tauri_host.set_signing_key(null)}><RemoveCircleOutline></RemoveCircleOutline></IconButton>
+              <IconButton onClick={() => window.navigator.clipboard.writeText(signing_key)}><ContentCopy></ContentCopy></IconButton>
+            </FormGroup>
+          </>
+        }
       </FormControl>
     </div>
   else

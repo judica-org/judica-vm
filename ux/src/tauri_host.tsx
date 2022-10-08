@@ -65,6 +65,12 @@ export const tauri_host = {
   },
   finalize_game: async (args: FinishArgs): Promise<void> => {
     return invoke("finalize_game", { args });
+  },
+  disconnect_game: async (): Promise<void> => {
+    return await invoke("disconnect_game", { });
+  },
+  disconnect_game_host: async (): Promise<void> => {
+    return await invoke("disconnect_game_host", { });
   }
 };
 
