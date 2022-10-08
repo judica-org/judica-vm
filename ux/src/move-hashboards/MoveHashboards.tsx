@@ -5,7 +5,7 @@ import { tauri_host } from "../tauri_host";
 import { MoveHashboardsActions } from "../util";
 
 export const MoveHashboards = ({ action: initial_action, plant, user_hashboards, hashboard_pointer }:
-  { readonly action: MoveHashboardsActions, plant: UserPowerPlant, user_hashboards: number, hashboard_pointer: string }) => {
+  { readonly action: MoveHashboardsActions, plant: UserPowerPlant, user_hashboards: number | null, hashboard_pointer: string }) => {
   const [action, set_action] = useState<MoveHashboardsActions>(initial_action);
   const [hashboard_qty, set_hashboard_qty] = useState<number>(0);
   const switch_action = () => {

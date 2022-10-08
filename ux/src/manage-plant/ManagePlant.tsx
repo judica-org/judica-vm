@@ -70,7 +70,7 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
         {selected_plant && plantDetail &&
           (owner && asic_token_id ? <div className="PlantOwnerOptions">
             <Typography variant="h6">Options</Typography>
-            {userHashboards ? <MoveHashboards action={"ADD"} plant={plantDetail} user_hashboards={userHashboards} hashboard_pointer={asic_token_id} /> : null}
+            <MoveHashboards action={"ADD"} plant={plantDetail} user_hashboards={userHashboards} hashboard_pointer={asic_token_id} />
             <Divider />
             <SaleListingForm nft_id={plantDetail.id} currency={bitcoin_token_id} />
           </div> :
