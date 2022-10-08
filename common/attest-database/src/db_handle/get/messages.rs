@@ -195,8 +195,13 @@ where
         M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_ALL_TIPS_FOR_ALL_USERS)?;
-        let rows = stmt.query([])?;
-        let vs: Vec<E> = rows.map(|r| r.get::<_, E>(0)).collect()?;
+        let mut rows = stmt.query([])?;
+        let mut vs = vec![];
+        while let Some(r) = rows.next()? {
+            if let Ok(e) = r.get::<_, E>(0) {
+                vs.push(e);
+            }
+        }
         debug!(tips=?vs.iter().map(|e| (e.as_ref().header().height(), e.as_ref().get_genesis_hash())).collect::<Vec<_>>(), "Latest Tips Returned");
         trace!(envelopes=?vs, "Tips Returned");
         Ok(vs)
@@ -209,10 +214,13 @@ where
         M: AttestEnvelopable,
     {
         let mut stmt = self.0.prepare_cached(SQL_GET_ALL_GENESIS)?;
-        let rows = stmt.query([])?;
-        let vs: Vec<Authenticated<GenericEnvelope<M>>> = rows
-            .map(|r| r.get::<_, Authenticated<GenericEnvelope<M>>>(0))
-            .collect()?;
+        let mut rows = stmt.query([])?;
+        let mut vs = vec![];
+        while let Some(r) = rows.next()? {
+            if let Ok(e) = r.get::<_, Authenticated<GenericEnvelope<M>>>(0) {
+                vs.push(e);
+            }
+        }
         debug!(tips=?vs.iter().map(|e| (e.header().height(), e.get_genesis_hash())).collect::<Vec<_>>(), "Genesis Tips Returned");
         trace!(envelopes=?vs, "Genesis Tips Returned");
         Ok(vs)

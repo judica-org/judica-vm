@@ -3,13 +3,11 @@
     min-height: 10vh;
     font-size: calc(10px + 1vmin);
     color: white;
-    display: flex;
-    flex-direction: row;
     justify-content: space-evenly;
     padding: 1em;
-    flex-basis: 25%;
-    /* display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr; */
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    column-gap: 3em;
 }
 
 .App-header>* {

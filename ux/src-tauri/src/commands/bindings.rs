@@ -1,13 +1,17 @@
-use std::sync::Arc;
-
+use super::view::{TradeType, EmittedAppState};
+use super::{view::SyncError, *};
+use crate::config::Globals;
+use crate::tor::{GameHost, TorClient};
+use crate::{Game, TriggerRerender};
+use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode};
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
+use std::sync::Arc;
+use tauri::async_runtime::Mutex;
 use tauri::{generate_handler, Invoke};
 
-use super::view::TradeType;
-use super::{view::SyncError, *};
 pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     game_synchronizer,
     get_move_schema,
@@ -19,10 +23,13 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     set_signing_key,
     send_chat,
     make_new_chain,
+    make_new_game,
     list_my_users,
     mint_power_plant_cost,
     super_mint,
-    simulate_trade
+    simulate_trade,
+    set_game_host,
+    finalize_game,
 ];
 #[tauri::command]
 pub async fn simulate_trade(
@@ -39,9 +46,17 @@ pub async fn game_synchronizer(
     window: Window,
     s: GameState<'_>,
     d: State<'_, Database>,
+    game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
-) -> Result<(), SyncError> {
-    view::game_synchronizer_inner(window, s, d, signing_key).await
+) -> Result<EmittedAppState, SyncError> {
+    view::game_synchronizer_inner(
+        window,
+        s,
+        d,
+        game_host,
+        signing_key,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -120,10 +135,65 @@ pub(crate) async fn list_my_users(
 #[tauri::command]
 pub(crate) async fn make_new_chain(
     nickname: String,
+    code: JoinCode,
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
-) -> Result<String, String> {
-    modify::make_new_chain_inner(nickname, secp, db).await
+    globals: State<'_, Arc<Globals>>,
+    game_host_state: State<'_, Arc<Mutex<Option<GameHost>>>>,
+    game: GameState<'_>,
+) -> Result<(), String> {
+    modify::make_new_chain_inner(
+        nickname,
+        code,
+        secp,
+        db,
+        globals,
+        game_host_state,
+        game,
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn set_game_host(
+    g: GameHost,
+    game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
+) -> Result<(), ()> {
+    game_host.inner().lock().await.replace(g);
+    Ok(())
+}
+#[tauri::command]
+pub(crate) async fn make_new_game(
+    nickname: String,
+    secp: State<'_, Arc<Secp256k1<All>>>,
+    db: State<'_, Database>,
+    client: State<'_, Arc<Globals>>,
+    game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
+    game: GameState<'_>,
+) -> Result<(), String> {
+    modify::make_new_game(
+        nickname,
+        secp,
+        db,
+        client,
+        game_host,
+        game,
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn finalize_game(
+    args: FinishArgs,
+    globals: State<'_, Arc<Globals>>,
+    game_host_s: State<'_, Arc<Mutex<Option<GameHost>>>>,
+) -> Result<CreatedNewChain, String> {
+    let client = globals.get_client().await.map_err(|e| e.to_string())?;
+    let game_host = game_host_s.lock().await.clone().ok_or("No Host")?;
+    client
+        .finish_setup(&game_host, args)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

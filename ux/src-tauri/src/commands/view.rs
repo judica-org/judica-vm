@@ -1,14 +1,25 @@
-use std::sync::Arc;
-
-use crate::{Database, Game, GameState, PrintOnDrop, SigningKeyInner};
-
+use crate::{
+    tor::GameHost, Database, Game, GameInitState, GameState, GameStateInner, Pending, PrintOnDrop,
+    SigningKeyInner, TriggerRerender,
+};
+use game_host_messages::{BroadcastByHost, Channelized, JoinCode};
+use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
-    nfts::{instances::powerplant::PlantType, sale::UXForSaleList, NftPtr, UXPlantData},
-    tokens::token_swap::{TradeError, TradeOutcome, TradingPairID},
+    entity::EntityID,
+    game::{GameBoard, GameSetup, UXUserInventory},
+    nfts::{
+        instances::powerplant::PlantType,
+        sale::{UXForSaleList, UXNFTSale},
+        NftPtr, UXPlantData,
+    },
+    tokens::token_swap::{TradeError, TradeOutcome, TradingPairID, UXMaterialsPriceData},
 };
 use sapio_bitcoin::XOnlyPublicKey;
-
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::{collections::VecDeque, ops::Deref, sync::Arc};
+use std::{path::PathBuf, time::Duration};
 use tauri::{async_runtime::Mutex, State, Window};
 use tokio::sync::futures::Notified;
 use tracing::info;
@@ -17,30 +28,23 @@ pub(crate) async fn game_synchronizer_inner(
     window: Window,
     s: GameState<'_>,
     d: State<'_, Database>,
+    g: State<'_, Arc<Mutex<Option<GameHost>>>>,
     signing_key: State<'_, SigningKeyInner>,
-) -> Result<(), SyncError> {
-    info!("Registering Window for State Updates");
-    let _p = PrintOnDrop("Registration Canceled".into());
-    loop {
-        match game_synchronizer_inner_loop(signing_key.inner(), s.inner(), d.inner(), &window).await
-        {
-            Ok(()) => {}
-            Err(e) => {
-                tracing::debug!(?e, "SyncError");
-                match &e {
-                    SyncError::TradeError(_) => {}
-                    SyncError::NoSigningKey | SyncError::NoGame => {
-                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    }
-                    SyncError::KeyUnknownByGame | SyncError::DatabaseError => return Err(e),
-                }
-            }
-        }
-    }
+) -> Result<EmittedAppState, SyncError> {
+    game_synchronizer_inner_loop(
+        signing_key.inner(),
+        s.inner(),
+        g.inner(),
+        d.inner(),
+        &window,
+    )
+    .await
 }
 
 #[derive(Serialize, Debug, Clone)]
 pub enum SyncError {
+    HungUp,
+    NoGameHost,
     NoSigningKey,
     NoGame,
     KeyUnknownByGame,
@@ -69,72 +73,98 @@ impl<T, E1, E2> ResultFlipExt for Result<Result<T, E1>, E2> {
     }
 }
 
+#[derive(Serialize, JsonSchema, Debug)]
+pub struct EmittedAppState {
+    db_connection: Option<(String, Option<PathBuf>)>,
+    #[schemars(with = "String")]
+    signing_key: Option<XOnlyPublicKey>,
+    game_host_service: Option<GameHost>,
+    #[schemars(with = "Vec<(String, GameSetup)>")]
+    available_sequencers: Vec<(XOnlyPublicKey, GameSetup)>,
+    #[schemars(with = "Vec<String>")]
+    user_keys: Vec<XOnlyPublicKey>,
+    #[serde(flatten)]
+    game: Option<GameDependentEmitted>,
+    super_handy_self_schema: Value,
+    pending: Option<Pending>,
+}
+
+#[derive(Serialize, JsonSchema, Debug)]
+struct GameDependentEmitted {
+    chat_log: VecDeque<(u64, EntityID, String)>,
+    #[schemars(with = "String")]
+    host_key: XOnlyPublicKey,
+    #[schemars(with = "GameBoard")]
+    game_board: Value,
+    materials_price_data: Vec<UXMaterialsPriceData>,
+    power_plants: Vec<UXPlantData>,
+    energy_exchange: Vec<UXNFTSale>,
+    user_inventory: Option<UXUserInventory>,
+}
+
 async fn game_synchronizer_inner_loop(
     signing_key: &Arc<Mutex<Option<XOnlyPublicKey>>>,
-    s: &Arc<Mutex<Option<Game>>>,
+    s: &Arc<Mutex<GameInitState>>,
+    game_host: &Arc<Mutex<Option<GameHost>>>,
     d: &Database,
     window: &Window,
-) -> Result<(), SyncError> {
-    let (db_connection, list_of_chains, user_keys) = {
+) -> Result<EmittedAppState, SyncError> {
+    let (db_connection, available_sequencers, user_keys) = {
         let l = d.state.lock().await;
         if let Some(g) = l.as_ref() {
             let handle = g.db.get_handle().await;
-            let v = handle
-                .get_all_users()
-                .map_err(|_| SyncError::DatabaseError)?;
-            let keys: Vec<XOnlyPublicKey> = handle
-                .get_keymap()
+            let sequencer_keys: Vec<(XOnlyPublicKey, GameSetup)> = handle
+                .get_all_genesis::<Channelized<BroadcastByHost>>()
                 .map_err(|_| SyncError::DatabaseError)?
-                .into_keys()
+                .iter()
+                .filter_map(|e| match &e.msg().data {
+                    BroadcastByHost::GameSetup(g) => Some((e.header().key(), g.clone())),
+                    BroadcastByHost::Sequence(_)
+                    | BroadcastByHost::NewPeer(_)
+                    | BroadcastByHost::Heartbeat => None,
+                })
                 .collect();
-            (Some((g.name.clone(), g.prefix.clone())), v, keys)
+            let v = handle.get_keymap().map_err(|_| SyncError::DatabaseError)?;
+            let user_keys: Vec<XOnlyPublicKey> = handle
+                .get_all_genesis::<ParticipantAction>()
+                .map_err(|_| SyncError::DatabaseError)?
+                .iter()
+                .map(|e| e.header().key())
+                .filter(|k| v.contains_key(k))
+                .collect();
+            (
+                Some((g.name.clone(), g.prefix.clone())),
+                sequencer_keys,
+                user_keys,
+            )
         } else {
             (None, vec![], vec![])
         }
     };
-    let signing_key = *signing_key.lock().await;
-    let signing_key = signing_key.as_ref().ok_or(SyncError::NoSigningKey);
+    let signing_key_opt = *signing_key.lock().await;
+    let signing_key = signing_key_opt.as_ref().ok_or(SyncError::NoSigningKey);
+    let game_host_service = game_host.lock().await.clone();
 
-    info!("Emitting Basic Info Updates");
-    Ok(())
-        .and_then(|()| emit(window, "db-connection", db_connection))
-        .and_then({
-            let signing_key = signing_key.clone();
-            |()| {
-                signing_key
-                    .map(|key| emit(window, "signing-key", key))
-                    .flip()?;
-                Ok(())
-            }
-        })
-        .and_then(|()| emit(window, "available-sequencers", list_of_chains))
-        .and_then(|()| emit(window, "user-keys", user_keys))
-        .expect("All window emits should succeed");
-
-    // No Idea why the borrow checker likes this, but it seems to be the case
-    // that because the notified needs to live inside the async state machine
-    // hapily, giving a stable reference to it tricks the compiler into thinking
-    // that the lifetime is 'static and we can successfully wait on it outside
-    // the lock.
-    let mut arc_cheat = None;
-    let (
-        gamestring,
-        wait_on,
-        key,
-        chat_log,
-        user_inventory,
-        raw_price_data,
-        power_plants,
-        listings,
-    ) = {
+    let pending = s.lock().await.pending_opt().cloned();
+    let mut to_emit = EmittedAppState {
+        db_connection,
+        signing_key: signing_key_opt,
+        game_host_service: game_host_service,
+        super_handy_self_schema: serde_json::to_value(schemars::schema_for!(EmittedAppState))
+            .unwrap(),
+        available_sequencers,
+        user_keys,
+        pending,
+        game: None,
+    };
+    // capture all errors from this section...
+    async {
         let mut game = s.lock().await;
-        let game = game.as_mut().ok_or(SyncError::NoGame)?;
-        let s = serde_json::to_value(&game.board).unwrap_or_else(|e| {
+        let game = game.game_mut().ok_or(SyncError::NoGame)?;
+        let game_value = serde_json::to_value(&game.board).unwrap_or_else(|e| {
             tracing::warn!(error=?e, "Failed to Serialized Game Board");
             serde_json::Value::Null
         });
-        arc_cheat = Some(game.should_notify.clone());
-        let w: Option<Notified> = arc_cheat.as_ref().map(|x| x.notified());
         let chat_log = game.board.get_ux_chat_log();
         let user_inventory = signing_key
             .as_ref()
@@ -144,7 +174,8 @@ async fn game_synchronizer_inner_loop(
                     .map_err(|()| SyncError::KeyUnknownByGame)
             })
             .flip()?
-            .map_err(|e| e.clone());
+            .map_err(|e| e.clone())
+            .ok();
         // Attempt to get data to show prices
         let raw_price_data = game.board.get_ux_materials_prices();
         let plants: Vec<UXPlantData> = game.board.get_ux_power_plant_data();
@@ -153,38 +184,19 @@ async fn game_synchronizer_inner_loop(
             listings: Vec::new(),
         });
 
-        (
-            s,
-            w,
-            game.host_key,
+        to_emit.game = Some(GameDependentEmitted {
             chat_log,
+            host_key: game.host_key,
+            game_board: game_value,
+            materials_price_data: raw_price_data,
+            power_plants: plants,
+            energy_exchange: listings.listings,
             user_inventory,
-            raw_price_data,
-            plants,
-            listings,
-        )
-    };
-    info!("Emitting State Updates");
-    Ok(())
-        .and_then(|()| emit(window, "chat-log", chat_log))
-        .and_then(|()| emit(window, "host-key", key))
-        .and_then(|()| emit(window, "game-board", gamestring))
-        .and_then(|()| emit(window, "materials-price-data", raw_price_data))
-        .and_then(|()| emit(window, "power-plants", power_plants))
-        .and_then(|()| emit(window, "energy-exchange", listings.listings))
-        .and_then(|()| {
-            user_inventory
-                .map(|inventory| emit(window, "user-inventory", inventory))
-                .flip()?;
-            Ok(())
-        })
-        .expect("All window emits should succeed");
-    if let Some(w) = wait_on {
-        w.await;
-    } else {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        });
+        Ok::<(), SyncError>(())
     }
-    Ok(())
+    .await;
+    Ok(to_emit)
 }
 
 fn emit<S>(window: &Window, event: &str, payload: S) -> Result<(), tauri::Error>
@@ -246,7 +258,7 @@ pub(crate) async fn mint_power_plant_cost(
         .await
         .ok_or(SyncError::NoSigningKey)?;
     let mut game = s.inner().lock().await;
-    let game = game.as_mut().ok_or(SyncError::NoGame)?;
+    let game = game.game_mut().ok_or(SyncError::NoGame)?;
     let current_prices =
         game.board
             .get_power_plant_cost(scale, location, plant_type, signing_key.to_string())?;
@@ -273,7 +285,7 @@ pub(crate) async fn simulate_trade(
     let sk = &sk.ok_or(SyncError::NoSigningKey)?;
     let sk = sk.to_string();
     let mut game = s.inner().lock().await;
-    let game = game.as_mut().ok_or(SyncError::NoGame)?;
+    let game = game.game_mut().ok_or(SyncError::NoGame)?;
     let sender = game
         .board
         .get_user_id(&sk)

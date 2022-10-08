@@ -53,23 +53,23 @@ use tokens::TokenRegistry;
 use tracing::info;
 use tracing::trace;
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, JsonSchema)]
 pub struct UXUserInventory {
     user_power_plants: BTreeMap<NftPtr, UXPlantData>,
     user_token_balances: Vec<(String, u128)>,
 }
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct UserData {
     pub key: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, JsonSchema, Debug)]
 pub struct Tick {
     first_time: u64,
     elapsed: u64,
 }
 /// GameBoard holds the entire state of the game.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct GameBoard {
     pub(crate) tokens: tokens::TokenRegistry,
     pub(crate) swap: token_swap::ConstantFunctionMarketMaker,

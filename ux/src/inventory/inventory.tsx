@@ -5,10 +5,12 @@ import { PowerPlant, UserInventory } from '../App';
 import SaleListingForm from '../sale-listing/SaleListingForm';
 import { EntityID } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
+import { UXUserInventory } from '../Types/Gameboard';
 
 
-export const Inventory = ({ userInventory, currency }: { userInventory: UserInventory | null, currency: EntityID | null }) => {
+export const Inventory = ({ userInventory, currency }: { userInventory: UXUserInventory | null, currency: EntityID | null }) => {
   const [selected_plant_id, set_selected_plant_id] = useState<string | null>(null);
+
 
   return (
     <div>

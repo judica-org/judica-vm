@@ -1,12 +1,12 @@
 import { Divider, Typography } from "@mui/material";
 import { useState, useEffect, useRef } from "react";
 
-export function ChatLog({ chat_log }: { chat_log: [number, number, string][] }) {
+export function ChatLog({ chat_log }: { chat_log: [number, string, string][] }) {
     const bottomEl = useRef<HTMLDivElement>(null);
-    const [chat_messages, set_chat_messages] = useState<[number, number, string][]>([]);
+    const [chat_messages, set_chat_messages] = useState<[number, string, string][]>([]);
 
     useEffect(() => {
-        set_chat_messages(chat_log as [number, number, string][]);
+        set_chat_messages(chat_log as [number, string, string][]);
         bottomEl.current?.scrollIntoView(false)
     }, [chat_messages])
 

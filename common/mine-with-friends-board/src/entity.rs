@@ -42,7 +42,7 @@ impl From<EntityID> for String {
 }
 
 /// Allocator which can assign IDs sequentially
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct EntityIDAllocator(pub u64);
 
 impl EntityIDAllocator {

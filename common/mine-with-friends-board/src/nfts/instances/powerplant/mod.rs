@@ -35,7 +35,7 @@ impl PlantType {
         total_prices
     }
 }
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, JsonSchema, Debug)]
 pub(crate) struct PowerPlant {
     pub id: NftPtr,
     pub plant_type: PlantType,

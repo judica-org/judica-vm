@@ -5,15 +5,10 @@ import { PlantType } from '../App';
 import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
 import { EntityID } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
+import { UXNFTSale } from '../Types/Gameboard';
 
-export type NFTSale = {
-  currency: EntityID,
-  nft_id: EntityID,
-  plant_type: PlantType
-  price: number,
-  seller: EntityID,
-  transfer_count: number,
-}
+export type NFTSale = UXNFTSale;
+
 
 export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
   const [selected_listing, set_selected_listing] = useState<NFTSale | null>(null);
@@ -43,8 +38,8 @@ export const EnergyExchange = ({ listings }: { listings: NFTSale[] }) => {
                 {listings && listings.map((listing, index) => (
                   <TableRow key={index}>
                     <TableCell>
-                      {listing.plant_type}
-                      <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[listing.plant_type] }} />
+                      {/* color code these in the future */}
+                      <FactoryIcon className='sale-factory-icon' /*sx={{ color: plant_type_color_map[listing.plant_type] }}*/ />
                     </TableCell>
                     <TableCell component="th" scope="row">
                       {listing.seller}
