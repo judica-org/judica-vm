@@ -1,5 +1,5 @@
-import { Key, Add } from '@mui/icons-material';
-import { Button, FormControl, FormControlLabel, FormGroup, FormLabel, Slider, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Key, Add, RemoveCircleOutline, ContentCopy, Check, Pending } from '@mui/icons-material';
+import { Button, FormControl, FormControlLabel, FormGroup, FormLabel, IconButton, Slider, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { appWindow } from '@tauri-apps/api/window';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
@@ -30,9 +30,9 @@ export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps
       } else {
         nick && await tauri_host.make_new_game(nick);
       }
-    } catch(e) {
+    } catch (e) {
       alert(e);
-    }finally {
+    } finally {
       set_is_creating(false);
     }
   };
@@ -55,7 +55,7 @@ export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps
 
     } catch (e) {
       alert(e);
-    }finally {
+    } finally {
 
       set_is_finalizing(false);
     }
@@ -100,19 +100,18 @@ export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps
           </Button>
         </>
       }
-      {
-        join_code && <Typography>Invite: {join_code}</Typography>
-      }
-      {
-        join_password &&
-        <Button variant="contained" type="submit" onClick={handle_finalize_click} disabled={is_finalizing || ext_disabled}>
-          {is_finalizing ? "Finalizing..." : "Finalize Game"}
-        </Button>
-      }
       {join_code &&
-        <Button variant="contained" type="submit" onClick={handle_disconnect} >
-          Disconnect
-        </Button>
+        <FormGroup row>
+          <FormLabel sx={{ wordBreak: "break-word" }}>Join Code: {join_code}</FormLabel>
+          <IconButton onClick={handle_disconnect}> <RemoveCircleOutline></RemoveCircleOutline> </IconButton>
+          <IconButton onClick={() => window.navigator.clipboard.writeText(join_code)}><ContentCopy></ContentCopy></IconButton>
+          {
+            join_password &&
+            <IconButton type="submit" onClick={handle_finalize_click} disabled={is_finalizing || ext_disabled}>
+              {is_finalizing ? <Pending></Pending> : <Check></Check>}
+            </IconButton>
+          }
+        </FormGroup>
       }
     </FormGroup>
   </div>;
