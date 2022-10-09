@@ -486,7 +486,10 @@ impl GameBoard {
         self.add_to_event_log(LogEvent::GameMove(mv.clone()));
         match self.play_inner(mv, from) {
             Ok(_) => info!("Move Successfully Made"),
-            Err(e) => self.add_to_event_log(LogEvent::MoveRejectReason(e)),
+            Err(e) => {
+                self.add_to_event_log(LogEvent::MoveRejectReason(e.clone()));
+                return Err(e);
+            }
         }
         Ok(())
     }
