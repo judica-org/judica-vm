@@ -4,7 +4,8 @@
     flex-direction: column;
     align-items: start;
     height: 500px;
-    overflow-y: scroll;
+    overflow-y: auto;
+    overflow-x: hidden;
     word-break: break-word;
     padding: 1em;
     margin:auto;
@@ -22,4 +23,8 @@
 .EventsTitle {
     padding: 1em;
     background-color: bisque;
+}
+
+.LogUserName {
+    margin: 2px;
 }
