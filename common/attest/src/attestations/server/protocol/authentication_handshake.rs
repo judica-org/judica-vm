@@ -89,7 +89,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
             .authenticate(&challenge_secret, &s.0, s.1)
             .await
             .map_err(|_| AttestProtocolError::FailedToAuthenticate)?;
-        tokio::time::timeout(Duration::from_secs(10), socket.t_recv())
+        tokio::time::timeout(Duration::from_secs(60), socket.t_recv())
             .await
             .map_err(|_| AttestProtocolError::TimedOut)?
             .ok_or(AttestProtocolError::SocketClosed)??
@@ -139,7 +139,7 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     })?;
     trace!(protocol, role=?Role::Client, ?me, "Confirmed Receipt of Challenge");
     trace!(protocol, role=?Role::Client, ?me, "Waiting to Learn Secret");
-    let cookie = tokio::time::timeout(Duration::from_secs(10), expect)
+    let cookie = tokio::time::timeout(Duration::from_secs(60), expect)
         .await
         .map_err(|_| {
             trace!(protocol, role=?Role::Client, ?me, "Timed Out Learning Cookie");
