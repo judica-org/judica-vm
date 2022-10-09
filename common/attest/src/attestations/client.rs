@@ -124,11 +124,17 @@ mod connection_creation;
 mod http_methods;
 mod ws_methods;
 
+pub enum PeerState {
+    Open(ProtocolChan),
+    Closed,
+    Pending,
+}
+
 #[derive(Clone)]
 pub struct AttestationClient {
     client: Client,
     inflight: Arc<Mutex<BTreeSet<CanonicalEnvelopeHash>>>,
-    connections: Arc<RwLock<HashMap<ServiceUrl, ProtocolChan>>>,
+    connections: Arc<RwLock<HashMap<ServiceUrl, PeerState>>>,
     g: Arc<Globals>,
     db: MsgDB,
     gss: GlobalSocketState,

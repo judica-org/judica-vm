@@ -2,6 +2,7 @@ use self::authentication_handshake::MessageExt;
 
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
+use crate::attestations::client::new_protocol_chan;
 use crate::attestations::client::AnySender;
 use crate::attestations::client::OpenState;
 use crate::attestations::client::ProtocolReceiver;
