@@ -15,6 +15,7 @@ use sapio_bitcoin::hashes::Hash;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use serde::Deserialize;
 use serde::Serialize;
+use tracing::debug;
 use std;
 use std::collections::BTreeMap;
 use std::fmt::Display;
@@ -263,7 +264,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     )
                     .await?;
                 } else {
-                    trace!(seq, ?role, "socket quit: TCP Socket is Disconnected");
+                    debug!(seq, ?role, "socket quit: TCP Socket is Disconnected");
                     return Ok("Peer Disconnected from us");
                 }
             }

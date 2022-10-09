@@ -68,6 +68,7 @@ impl AttestationClient {
         let svc_url = svc.to_string();
         match s {
             OpenState::Newly(tx, rx) => {
+                trace!(svc_url, "Must Create a New P2P Channel");
                 let g = self.g.clone();
                 let gss = self.gss.clone();
                 let db = self.db.clone();
@@ -81,11 +82,16 @@ impl AttestationClient {
                         {
                             break socket;
                         }
+                        tracing::debug!(
+                            ?svc_url,
+                            role = ?Role::Client,
+                            "Retrying Opening Socket To"
+                        );
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     };
                     let res =
                         protocol::run_protocol(g, socket, gss, db, Role::Client, Some(rx)).await;
-                    trace!(?res, role=?Role::Server,"socket quit");
+                    trace!(?res, role=?Role::Client,"socket quit");
                 });
                 tx
             }

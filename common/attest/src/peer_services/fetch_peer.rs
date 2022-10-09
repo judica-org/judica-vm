@@ -155,8 +155,8 @@ async fn handle_envelope(
                         }
                     }
                 } else {
-                    let mut handle = conn.get_handle_all().await;
                     let authentic_copy = authentic.clone();
+                    let mut handle = conn.get_handle_all().await;
                     let res = spawn_blocking(move || {
                         handle.try_insert_authenticated_envelope(authentic_copy, false)
                     })

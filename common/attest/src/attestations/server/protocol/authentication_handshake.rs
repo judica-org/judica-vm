@@ -66,6 +66,8 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
         let s = ServiceUrl(Arc::new(s.0), s.1);
         let challenge_secret = new_cookie();
         let client = g.get_client().await?;
+        //  Query the open state up here -- bounce if already open for this peer
+
         if client.conn_already_exists(&s).await.is_some() {
             trace!(protocol, role=?Role::Server, svc=?s, "Already connected to service");
             socket.t_close();
@@ -94,7 +96,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
             .authenticate(&challenge_secret, &s.0, s.1)
             .await
             .map_err(|_| AttestProtocolError::FailedToAuthenticate)?;
-        tokio::time::timeout(Duration::from_secs(2), socket.t_recv())
+        tokio::time::timeout(Duration::from_secs(10), socket.t_recv())
             .await
             .map_err(|_| AttestProtocolError::TimedOut)?
             .ok_or(AttestProtocolError::SocketClosed)??
@@ -106,15 +108,18 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
                     Err(AttestProtocolError::CookieMissMatch)
                 }
             })?;
-        // Authenticated!
-        let new_conn = client
-            .conn_already_exists_or_create(&ServiceUrl(s.0, s.1))
-            .await;
-        if let OpenState::Newly(_tx, rx) = new_conn {
-            Ok((socket, rx))
-        } else {
-            Err(AttestProtocolError::AlreadyConnected)
-        }
+        // If we get a new verified instance, allow it.
+        let open_state = client.conn_already_exists_or_create(&s).await;
+        let rx = match open_state {
+            OpenState::Unknown => unreachable!("Must Not Be Returned"),
+            OpenState::Already(_) => {
+                trace!(protocol, role=?Role::Server, svc=?s, "Already connected to service");
+                socket.t_close();
+                return Err(AttestProtocolError::AlreadyConnected);
+            }
+            OpenState::Newly(_, rx) => rx,
+        };
+        Ok((socket, rx))
     }
 }
 

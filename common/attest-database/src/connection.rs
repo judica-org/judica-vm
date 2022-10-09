@@ -28,18 +28,21 @@ impl MsgDB {
 
     pub async fn get_handle_all(&self) -> MsgDBHandle<handle_type::All> {
         let conns = &self.0;
+        tracing::trace!("Getting Write Handle to DB...");
         let first = conns[0].clone().lock_owned().await;
-
+        tracing::trace!("Write Handle Acquired");
         MsgDBHandle(first, PhantomData::default())
     }
 
     pub async fn get_handle_read(&self) -> MsgDBHandle<handle_type::ReadOnly> {
         let conns = &self.0;
+        tracing::trace!("Getting Read Handle to DB");
         // try N random locks
         for lock in 1..conns.len() {
             let lock = SliceRandom::choose(&conns[1..], &mut thread_rng())
                 .expect("conns known to be >= 2 in length");
             if let Ok(l) = lock.clone().try_lock_owned() {
+                tracing::trace!("Read Handle Acquired");
                 return MsgDBHandle(l, PhantomData::default());
             }
         }
@@ -48,6 +51,7 @@ impl MsgDB {
             .expect("conns known to be >= 2 in length")
             .clone();
         let l = l.lock_owned().await;
+        tracing::trace!("Read Handle Acquired");
         MsgDBHandle(l, PhantomData::default())
     }
 }

@@ -10,7 +10,10 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::{
-    mpsc::{channel, error::SendError, Receiver, Sender},
+    mpsc::{
+        channel, error::SendError, unbounded_channel, Receiver, Sender, UnboundedReceiver,
+        UnboundedSender,
+    },
     oneshot, Mutex, Notify, RwLock,
 };
 use tracing::warn;
@@ -48,9 +51,9 @@ type PostT = (protocol::Post, oneshot::Sender<protocol::PostResponse>);
 
 #[derive(Clone)]
 pub struct ProtocolChan {
-    latest_tips: Sender<LatestTipsT>,
-    specific_tips: Sender<SpecificTipsT>,
-    post: Sender<PostT>,
+    latest_tips: UnboundedSender<LatestTipsT>,
+    specific_tips: UnboundedSender<SpecificTipsT>,
+    post: UnboundedSender<PostT>,
 }
 
 impl ProtocolChan {
@@ -59,23 +62,23 @@ impl ProtocolChan {
         self.post.is_closed() || self.specific_tips.is_closed() || self.latest_tips.is_closed()
     }
     pub async fn send_latest_tips(&self, value: LatestTipsT) -> Result<(), SendError<LatestTipsT>> {
-        self.latest_tips.send(value).await
+        self.latest_tips.send(value)
     }
     pub async fn send_specific_tips(
         &self,
         value: SpecificTipsT,
     ) -> Result<(), SendError<SpecificTipsT>> {
-        self.specific_tips.send(value).await
+        self.specific_tips.send(value)
     }
     pub async fn send_post(&self, value: PostT) -> Result<(), SendError<PostT>> {
-        self.post.send(value).await
+        self.post.send(value)
     }
 }
 
 pub struct ProtocolReceiverMut<'a> {
-    pub latest_tips: &'a mut Receiver<LatestTipsT>,
-    pub specific_tips: &'a mut Receiver<SpecificTipsT>,
-    pub post: &'a mut Receiver<PostT>,
+    pub latest_tips: &'a mut UnboundedReceiver<LatestTipsT>,
+    pub specific_tips: &'a mut UnboundedReceiver<SpecificTipsT>,
+    pub post: &'a mut UnboundedReceiver<PostT>,
 }
 impl Drop for ProtocolReceiver {
     fn drop(&mut self) {
@@ -83,9 +86,9 @@ impl Drop for ProtocolReceiver {
     }
 }
 pub struct ProtocolReceiver {
-    pub latest_tips: Receiver<LatestTipsT>,
-    pub specific_tips: Receiver<SpecificTipsT>,
-    pub post: Receiver<PostT>,
+    pub latest_tips: UnboundedReceiver<LatestTipsT>,
+    pub specific_tips: UnboundedReceiver<SpecificTipsT>,
+    pub post: UnboundedReceiver<PostT>,
 }
 
 impl ProtocolReceiver {
@@ -99,9 +102,9 @@ impl ProtocolReceiver {
 }
 
 pub fn new_protocol_chan(p: usize) -> (ProtocolChan, ProtocolReceiver) {
-    let (latest_tips_tx, latest_tips_rx) = channel(p);
-    let (specific_tips_tx, specific_tips_rx) = channel(p);
-    let (post_tx, post_rx) = channel(p);
+    let (latest_tips_tx, latest_tips_rx) = unbounded_channel();
+    let (specific_tips_tx, specific_tips_rx) = unbounded_channel();
+    let (post_tx, post_rx) = unbounded_channel();
     (
         ProtocolChan {
             latest_tips: latest_tips_tx,
