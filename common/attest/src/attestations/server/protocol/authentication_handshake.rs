@@ -13,6 +13,7 @@ use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::hashes::Hash;
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
+use tracing::debug;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -52,9 +53,9 @@ impl MessageExt for Message {
 }
 pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    mut socket: W,
+    socket: &mut W,
     _gss: &mut GlobalSocketState,
-) -> Result<(W, ProtocolReceiver), AttestProtocolError> {
+) -> Result<ServiceUrl, AttestProtocolError> {
     let protocol = "handshake";
     let t = socket
         .t_recv()
@@ -66,13 +67,6 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
         let s = ServiceUrl(Arc::new(s.0), s.1);
         let challenge_secret = new_cookie();
         let client = g.get_client().await?;
-        //  Query the open state up here -- bounce if already open for this peer
-
-        if client.conn_already_exists(&s).await.is_some() {
-            trace!(protocol, role=?Role::Server, svc=?s, "Already connected to service");
-            socket.t_close();
-            return Err(AttestProtocolError::AlreadyConnected);
-        }
         let challenge_hash = sha256::Hash::hash(&challenge_secret[..]);
         socket
             .t_send(Message::Text(challenge_hash.to_hex()))
@@ -108,26 +102,15 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
                     Err(AttestProtocolError::CookieMissMatch)
                 }
             })?;
-        // If we get a new verified instance, allow it.
-        let open_state = client.conn_already_exists_or_create(&s).await;
-        let rx = match open_state {
-            OpenState::Unknown => unreachable!("Must Not Be Returned"),
-            OpenState::Already(_) => {
-                trace!(protocol, role=?Role::Server, svc=?s, "Already connected to service");
-                socket.t_close();
-                return Err(AttestProtocolError::AlreadyConnected);
-            }
-            OpenState::Newly(_, rx) => rx,
-        };
-        Ok((socket, rx))
+        Ok(s)
     }
 }
 
 pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    mut socket: W,
+    socket: &mut W,
     gss: &mut GlobalSocketState,
-) -> Result<W, AttestProtocolError> {
+) -> Result<(), AttestProtocolError> {
     let me = if let Some(conf) = g.config.tor.as_ref().map(|conf| conf.get_hostname()) {
         conf.await
             .map_err(|_| AttestProtocolError::HostnameUnknown)?
@@ -174,30 +157,25 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
         .t_send(Message::Text(cookie.to_hex()))
         .await
         .map_err(|_| AttestProtocolError::SocketClosed)?;
-    Ok(socket)
+    Ok(())
 }
 
 pub async fn handshake_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    socket: W,
+    socket: &mut W,
     gss: &mut GlobalSocketState,
     role: Role,
-    new_request: Option<ProtocolReceiver>,
-) -> Result<(W, ProtocolReceiver), AttestProtocolError> {
+) -> Result<Option<ServiceUrl>, AttestProtocolError> {
     trace!(protocol = "handshake", ?role, "Starting Handshake");
-    let res = match (role, new_request) {
-        (Role::Server, None) => handshake_protocol_server(g, socket, gss).await,
-        (Role::Client, Some(r)) => Ok((handshake_protocol_client(g, socket, gss).await?, r)),
-        _ => {
-            warn!(
-                protocol = "handshake",
-                "Invalid Combo of Client/Server Role and Channel"
-            );
-            Err(AttestProtocolError::InvalidSetup)
-        }
+    let res = match role {
+        (Role::Server) => handshake_protocol_server(g, socket, gss).await.map(Some),
+        (Role::Client) => handshake_protocol_client(g, socket, gss)
+            .await
+            .map(|()| None),
     };
+
     if let Err(e) = &res {
-        trace!(protocol="handshake", error=?e, ?role, "Handshake Protocol Failed");
+        debug!(protocol="handshake", error=?e, ?role, "Handshake Protocol Failed");
     } else {
         trace!(protocol = "handshake", ?role, "Handshake Successful");
     }

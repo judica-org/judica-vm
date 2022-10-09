@@ -3,8 +3,10 @@ use self::authentication_handshake::MessageExt;
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
 use crate::attestations::client::AnySender;
+use crate::attestations::client::OpenState;
 use crate::attestations::client::ProtocolReceiver;
 use crate::attestations::client::ProtocolReceiverMut;
+use crate::attestations::client::ServiceUrl;
 use crate::control::query::Outcome;
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
@@ -15,13 +17,12 @@ use sapio_bitcoin::hashes::Hash;
 use sapio_bitcoin::secp256k1::Secp256k1;
 use serde::Deserialize;
 use serde::Serialize;
-use tracing::debug;
 use std;
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::rc::Rc;
 use std::sync::Arc;
 use tokio::task::spawn_blocking;
+use tracing::debug;
 
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
@@ -230,15 +231,50 @@ pub const MAX_MESSAGE_DEFECIT: i64 = 10;
 
 pub async fn run_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    socket: W,
+    mut socket: W,
+    gss: GlobalSocketState,
+    db: MsgDB,
+    role: Role,
+    peer_name_in: Option<ServiceUrl>,
+) -> Result<&'static str, AttestProtocolError> {
+    let res = run_protocol_inner(g, &mut socket, gss, db, role, peer_name_in).await;
+    // THis never runs I think because of the top recv
+    trace!(error=?res, ?role, "websocket quit: Internal Connection Dropped");
+    socket.t_close().await.ok();
+    res
+}
+pub async fn run_protocol_inner<W: WebSocketFunctionality>(
+    g: Arc<Globals>,
+    socket: &mut W,
     mut gss: GlobalSocketState,
     mut db: MsgDB,
     role: Role,
-    new_request: Option<ProtocolReceiver>,
+    peer_name_in: Option<ServiceUrl>,
 ) -> Result<&'static str, AttestProtocolError> {
-    let (mut socket, mut receiver) =
-        authentication_handshake::handshake_protocol(g, socket, &mut gss, role, new_request)
-            .await?;
+    let mut peer_name =
+        authentication_handshake::handshake_protocol(g.clone(), socket, &mut gss, role).await?;
+
+    let peer_name = match (role, peer_name, peer_name_in) {
+        (Role::Server, Some(p), None) | (Role::Client, None, Some(p)) => p,
+        _ => {
+            warn!(
+                protocol = "handshake",
+                "Invalid Combo of Client/Server Role and Channel"
+            );
+            return Err(AttestProtocolError::InvalidSetup);
+        }
+    };
+    let client = g.get_client().await?;
+    // If we get a new verified instance, allow it.
+    let open_state = client.conn_already_exists_or_create(&peer_name).await;
+    let mut receiver = match open_state {
+        OpenState::Unknown => unreachable!("Must Not Be Returned"),
+        OpenState::Already(_) => {
+            trace!(protocol="connection-dedup", role=?role, "Already connected to service");
+            return Err(AttestProtocolError::AlreadyConnected);
+        }
+        OpenState::Newly(_, rx) => rx,
+    };
     let ProtocolReceiverMut {
         latest_tips,
         specific_tips,
@@ -255,7 +291,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                 if let Some(Ok(msg)) = msg {
                     handle_message_from_peer(
                         &mut defecit,
-                        &mut socket,
+                        socket,
                         &mut gss,
                         &mut db,
                         &mut inflight_requests,
@@ -271,7 +307,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
             Some((request, chan)) = post.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
                 handle_internal_request(
                     &mut defecit,
-                    &mut socket,
+                    socket,
                     &mut inflight_requests,
                     seq,
                     request,
@@ -282,7 +318,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
             Some((request, chan)) = specific_tips.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
                 handle_internal_request(
                     &mut defecit,
-                    &mut socket,
+                    socket,
                     &mut inflight_requests,
                     seq,
                     request,
@@ -293,7 +329,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
             Some((request, chan)) = latest_tips.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
                 handle_internal_request(
                     &mut defecit,
-                    &mut socket,
+                    socket,
                     &mut inflight_requests,
                     seq,
                     request,
@@ -302,8 +338,6 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                 .await?;
             }
             else => {
-                trace!(seq, ?role, "socket quit: Internal Connection Dropped");
-                socket.t_close().await.ok();
                 return Ok("Exiting...");
             }
         }

@@ -4,6 +4,7 @@ use super::new_protocol_chan;
 use super::AttestationClient;
 use super::OpenState;
 use super::ProtocolChan;
+use super::ProtocolReceiver;
 use super::ServiceUrl;
 use crate::globals::Globals;
 use reqwest::Client;
@@ -64,39 +65,43 @@ impl AttestationClient {
         }
     }
     pub async fn get_conn(&self, svc: &ServiceUrl) -> ProtocolChan {
-        let s = self.conn_already_exists_or_create(svc).await;
-        let svc_url = svc.to_string();
-        match s {
-            OpenState::Newly(tx, rx) => {
-                trace!(svc_url, "Must Create a New P2P Channel");
-                let g = self.g.clone();
-                let gss = self.gss.clone();
-                let db = self.db.clone();
-                spawn(async move {
-                    let socket = loop {
-                        if let Ok(socket) = tungstenite_client_adaptor::ClientWebSocket::connect(
-                            &g,
-                            svc_url.clone(),
-                        )
-                        .await
-                        {
-                            break socket;
-                        }
-                        tracing::debug!(
-                            ?svc_url,
-                            role = ?Role::Client,
-                            "Retrying Opening Socket To"
-                        );
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    };
-                    let res =
-                        protocol::run_protocol(g, socket, gss, db, Role::Client, Some(rx)).await;
-                    trace!(?res, role=?Role::Client,"socket quit");
-                });
-                tx
+        let s = self.conn_already_exists(svc).await;
+        if let Some(s) = s {
+            return s;
+        }
+        {
+            let svc_url = svc.to_string();
+            trace!(svc_url, "Must Create a New P2P Channel");
+            let g = self.g.clone();
+            let gss = self.gss.clone();
+            let db = self.db.clone();
+            let svc = svc.clone();
+            spawn(async move {
+                let socket = loop {
+                    if let Ok(socket) =
+                        tungstenite_client_adaptor::ClientWebSocket::connect(&g, svc_url.clone())
+                            .await
+                    {
+                        break socket;
+                    }
+                    tracing::debug!(
+                        ?svc_url,
+                        role = ?Role::Client,
+                        "Retrying Opening Socket To"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                };
+                let res = protocol::run_protocol(g, socket, gss, db, Role::Client, Some(svc)).await;
+                trace!(?res, role=?Role::Client,"socket quit");
+            });
+        }
+
+        loop {
+            let s = self.conn_already_exists(svc).await;
+            if let Some(s) = s {
+                return s;
             }
-            OpenState::Already(tx) => tx,
-            OpenState::Unknown => unreachable!("Must have been set"),
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
     pub fn new(client: Client, g: Arc<Globals>) -> Self {
