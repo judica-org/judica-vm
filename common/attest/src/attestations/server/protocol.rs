@@ -1,11 +1,7 @@
 use self::authentication_handshake::MessageExt;
-
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
-
 use crate::attestations::client::AnySender;
-use crate::attestations::client::OpenState;
-
 use crate::attestations::client::ProtocolReceiverMut;
 use crate::attestations::client::ServiceUrl;
 use crate::control::query::Outcome;
@@ -22,13 +18,12 @@ use std;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::sync::Arc;
-use tokio::task::spawn_blocking;
-use tracing::debug;
-
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
+use tokio::task::spawn_blocking;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing;
+use tracing::debug;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
@@ -144,6 +139,7 @@ pub enum AttestProtocolError {
     ResponseTypeIncorrect,
     UnrequestedResponse,
     InvalidChallengeHashString,
+    SelfConnection,
 }
 
 unsafe impl Send for AttestProtocolError {}
@@ -265,16 +261,18 @@ pub async fn run_protocol_inner<W: WebSocketFunctionality>(
             return Err(AttestProtocolError::InvalidSetup);
         }
     };
+
     let client = g.get_client().await?;
-    // If we get a new verified instance, allow it.
-    let open_state = client.conn_already_exists_or_create(&peer_name).await;
-    let mut receiver = match open_state {
-        OpenState::Unknown => unreachable!("Must Not Be Returned"),
-        OpenState::Already(_) => {
-            trace!(protocol="connection-dedup", role=?role, "Already connected to service");
-            return Err(AttestProtocolError::AlreadyConnected);
-        }
-        OpenState::Newly(_, rx) => rx,
+    let prefer_role = preferred_role(g, &peer_name).await?;
+    let mut receiver = {
+        // We're in a session, and we only know now the peer name to register
+        // a pending conn for. Since we're already handshaken, if we're still in Pending,
+        // cancel the other pending job and take it over.
+        // If we're no longer pending, then we're already connected elsewhere as a client.
+        client
+            .set_conn_open_prob(&peer_name, prefer_role, role)
+            .await
+            .ok_or(AttestProtocolError::AlreadyConnected)?
     };
     let ProtocolReceiverMut {
         latest_tips,
@@ -343,6 +341,30 @@ pub async fn run_protocol_inner<W: WebSocketFunctionality>(
             }
         }
     }
+}
+
+pub async fn preferred_role(g: Arc<Globals>, peer_name: &ServiceUrl) -> Result<Role, AttestProtocolError> {
+    let my_name = get_my_name(&g).await?;
+    let prefer_role = if my_name < *peer_name {
+        Role::Client
+    } else if my_name == *peer_name {
+        return Err(AttestProtocolError::SelfConnection);
+    } else {
+        Role::Server
+    };
+    Ok(prefer_role)
+}
+
+pub async fn get_my_name(g: &Arc<Globals>) -> Result<ServiceUrl, AttestProtocolError> {
+    let my_name = if let Some(conf) = g.config.tor.as_ref().map(|conf| conf.get_hostname()) {
+        let p = conf
+            .await
+            .map_err(|_| AttestProtocolError::HostnameUnknown)?;
+        ServiceUrl(p.0.into(), p.1)
+    } else {
+        ServiceUrl(Arc::new("127.0.0.1".into()), g.config.attestation_port)
+    };
+    Ok(my_name)
 }
 async fn handle_internal_request<W, IChan, IReq>(
     defecit: &mut i64,

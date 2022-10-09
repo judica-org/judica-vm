@@ -19,7 +19,7 @@ impl AttestationClient {
     pub async fn get_latest_tips(&self, url: &ServiceUrl) -> Option<Vec<Envelope>> {
         let conn = self.get_conn(url).await;
         let (tx, rx) = oneshot::channel();
-        if conn.send_latest_tips((LatestTips {}, tx)).await.is_err() {
+        if conn.send_latest_tips((LatestTips {}, tx)).is_err() {
             warn!("The channel to enqueue new requests is closed.");
             return None;
         }
@@ -58,7 +58,6 @@ impl AttestationClient {
         let (tx, rx) = oneshot::channel();
         let send_ok = conn
             .send_specific_tips((SpecificTips { tips: tips.clone() }, tx))
-            .await
             .ok();
         let resp_ok = rx.await.ok();
 
@@ -98,7 +97,6 @@ impl AttestationClient {
             },
             tx,
         ))
-        .await
         .map_err(|_| {
             warn!("The channel to enqueue new requests is closed.");
         })

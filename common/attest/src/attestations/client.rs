@@ -7,12 +7,13 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::Display,
-    sync::Arc,
+    sync::{atomic::AtomicU64, Arc},
 };
 use tokio::sync::{
     mpsc::{error::SendError, unbounded_channel, UnboundedReceiver, UnboundedSender},
     oneshot, Mutex, Notify, RwLock,
 };
+use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing::warn;
 type LatestTipsT = (
     protocol::LatestTips,
@@ -46,7 +47,7 @@ impl From<oneshot::Sender<protocol::LatestTipsResponse>> for AnySender {
 
 type PostT = (protocol::Post, oneshot::Sender<protocol::PostResponse>);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ProtocolChan {
     latest_tips: UnboundedSender<LatestTipsT>,
     specific_tips: UnboundedSender<SpecificTipsT>,
@@ -58,16 +59,13 @@ impl ProtocolChan {
     pub fn is_closed(&self) -> bool {
         self.post.is_closed() || self.specific_tips.is_closed() || self.latest_tips.is_closed()
     }
-    pub async fn send_latest_tips(&self, value: LatestTipsT) -> Result<(), SendError<LatestTipsT>> {
+    pub fn send_latest_tips(&self, value: LatestTipsT) -> Result<(), SendError<LatestTipsT>> {
         self.latest_tips.send(value)
     }
-    pub async fn send_specific_tips(
-        &self,
-        value: SpecificTipsT,
-    ) -> Result<(), SendError<SpecificTipsT>> {
+    pub fn send_specific_tips(&self, value: SpecificTipsT) -> Result<(), SendError<SpecificTipsT>> {
         self.specific_tips.send(value)
     }
-    pub async fn send_post(&self, value: PostT) -> Result<(), SendError<PostT>> {
+    pub fn send_post(&self, value: PostT) -> Result<(), SendError<PostT>> {
         self.post.send(value)
     }
 }
@@ -121,10 +119,12 @@ mod connection_creation;
 mod http_methods;
 mod ws_methods;
 
+static PENDING_COOKIE: AtomicU64 = AtomicU64::new(0);
+#[derive(Debug)]
 pub enum PeerState {
-    Open(ProtocolChan),
+    Open(ProtocolChan, Role),
     Closed,
-    Pending,
+    Pending(u64),
 }
 
 #[derive(Clone)]
@@ -137,7 +137,13 @@ pub struct AttestationClient {
     gss: GlobalSocketState,
 }
 
-#[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize)]
+impl AttestationClient {
+    pub fn client(&self) -> &Client {
+        &self.client
+    }
+}
+
+#[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct ServiceUrl(pub Arc<String>, pub u16);
 
 impl Display for ServiceUrl {
@@ -168,7 +174,7 @@ impl Drop for NotifyOnDrop {
     }
 }
 pub enum OpenState {
-    Unknown,
     Already(ProtocolChan),
     Newly(ProtocolChan, ProtocolReceiver),
+    Abort,
 }

@@ -176,7 +176,7 @@ pub async fn handshake_protocol<W: WebSocketFunctionality>(
     if let Err(e) = &res {
         debug!(protocol="handshake", error=?e, ?role, "Handshake Protocol Failed");
     } else {
-        trace!(protocol = "handshake", ?role, "Handshake Successful");
+        trace!(protocol = "handshake", talking_to=?res, ?role, "Handshake Successful");
     }
     res
 }
