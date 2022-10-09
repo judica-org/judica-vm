@@ -406,67 +406,68 @@ impl ConstantFunctionMarketMaker {
             } else {
                 0
             };
-        if !(send_a_amt == amount_a && send_b_amt == amount_b) {
+        if send_a_amt != amount_a || send_b_amt != amount_b {
             trace!("Returning funds");
             // undo swap
-            if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, amount_a) {
+            if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, send_a_amt) {
                 panic!("Corrupt Game");
             }
-            if !tokens[mkt.pair.asset_b].transfer(sender, &mkt.id, amount_b) {
+            if !tokens[mkt.pair.asset_b].transfer(sender, &mkt.id, send_b_amt) {
                 panic!("Corrupt Game");
             }
             trace!("Funds Returned");
             tokens[mkt.pair.asset_b].end_transaction();
             tokens[mkt.pair.asset_a].end_transaction();
-            return Err(TradeError::InsufficientTokens(
+            Err(TradeError::InsufficientTokens(
                 "Insufficient funds asset".to_string(),
-            ));
-        }
-        tokens[mkt.pair.asset_b].end_transaction();
-        tokens[mkt.pair.asset_a].end_transaction();
-
-        let a_reserves_2 = tokens[mkt.pair.asset_a].balance_check(&mkt.id);
-        let b_reserves_2 = tokens[mkt.pair.asset_b].balance_check(&mkt.id);
-        let k_2 = a_reserves_2 * b_reserves_2;
-        let k_1 = mkt.reserve_a * mkt.reserve_b;
-
-        trace!(
-            "Invariant: ({} * {} = {}) >= ({} = {} * {}) ?",
-            a_reserves_2,
-            b_reserves_2,
-            k_2,
-            k_1,
-            mkt.reserve_a,
-            mkt.reserve_b
-        );
-        if k_2 < k_1 {
-            tokens[mkt.pair.asset_a].transaction();
-            tokens[mkt.pair.asset_b].transaction();
-
-            trace!("Returning funds");
-            if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, amount_a) {
-                panic!("Corrupt Game");
-            }
-            if !tokens[mkt.pair.asset_b].transfer(sender, &mkt.id, amount_b) {
-                panic!("Corrupt Game");
-            }
-
-            trace!("Funds Returned");
+            ))
+        } else {
             tokens[mkt.pair.asset_b].end_transaction();
             tokens[mkt.pair.asset_a].end_transaction();
-            return Err(TradeError::InvalidTrade(
-                "Reserves Not Preserved".to_string(),
-            ));
-        }
 
-        let pair = game
-            .swap
-            .markets
-            .get_mut(&mkt.pair)
-            .expect("Market must exist");
-        pair.reserve_a -= amount_a;
-        pair.reserve_b -= amount_b;
-        Ok(())
+            let a_reserves_2 = tokens[mkt.pair.asset_a].balance_check(&mkt.id);
+            let b_reserves_2 = tokens[mkt.pair.asset_b].balance_check(&mkt.id);
+            let k_2 = a_reserves_2 * b_reserves_2;
+            let k_1 = mkt.reserve_a * mkt.reserve_b;
+
+            trace!(
+                "Invariant: ({} * {} = {}) >= ({} = {} * {}) ?",
+                a_reserves_2,
+                b_reserves_2,
+                k_2,
+                k_1,
+                mkt.reserve_a,
+                mkt.reserve_b
+            );
+            if k_2 < k_1 {
+                tokens[mkt.pair.asset_a].transaction();
+                tokens[mkt.pair.asset_b].transaction();
+
+                trace!("Returning funds");
+                if !tokens[mkt.pair.asset_a].transfer(sender, &mkt.id, amount_a) {
+                    panic!("Corrupt Game");
+                }
+                if !tokens[mkt.pair.asset_b].transfer(sender, &mkt.id, amount_b) {
+                    panic!("Corrupt Game");
+                }
+
+                trace!("Funds Returned");
+                tokens[mkt.pair.asset_b].end_transaction();
+                tokens[mkt.pair.asset_a].end_transaction();
+                Err(TradeError::InvalidTrade(
+                    "Reserves Not Preserved".to_string(),
+                ))
+            } else {
+                let pair = game
+                    .swap
+                    .markets
+                    .get_mut(&mkt.pair)
+                    .expect("Market must exist");
+                pair.reserve_a = a_reserves_2;
+                pair.reserve_b = b_reserves_2;
+                Ok(())
+            }
+        }
     }
     pub(crate) fn internal_do_trade_sell_fixed_amount(
         game: &mut GameBoard,

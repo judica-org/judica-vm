@@ -783,7 +783,9 @@ impl GameBoard {
             total += rate;
         }
         // normalization step
-        res.iter_mut().for_each(|(_, v)| v.0 /= total);
+        if total > 0 {
+            res.iter_mut().for_each(|(_, v)| v.0 /= total);
+        }
         res
     }
 
