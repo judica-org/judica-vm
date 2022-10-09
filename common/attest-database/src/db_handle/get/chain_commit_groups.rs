@@ -17,7 +17,7 @@ use rusqlite::types::FromSql;
 use sapio_bitcoin::XOnlyPublicKey;
 use tracing::warn;
 
-impl<'a, T> MsgDBHandle<'a, T>
+impl<T> MsgDBHandle<T>
 where
     T: handle_type::Get,
 {

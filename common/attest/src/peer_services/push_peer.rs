@@ -4,6 +4,7 @@ use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope};
 use tokio::{
     spawn,
     sync::{Mutex, Notify},
+    task::spawn_blocking,
 };
 use tracing::{trace, warn};
 
@@ -121,16 +122,19 @@ pub async fn push_to_peer(
                 let to_broadcast = {
                     // get the DB first as it is more contended, and we're OK
                     // waiting on the other thread later
-                    let handle = conn.get_handle().await;
+                    let handle = conn.get_handle_read().await;
                     // if we can't get the lock on tip_tracker, it means we'll have fresh-er results soon,
                     // so it's fine to wait again.
-                    let tip_tracker = tip_tracker.try_lock();
+                    let tip_tracker = tip_tracker.clone().try_lock_owned();
                     if let Ok(tip_tracker) = tip_tracker {
                         // TODO: Profile if should copy out of tip_tracker or if hold lock during query.
                         let mut msgs = handle
                             .get_connected_messages_newer_than_envelopes(tip_tracker.values())?;
-                        let gen = handle.get_all_genesis()?;
-                        drop(handle);
+                        let gen = {
+                            spawn_blocking(move || handle.get_all_genesis())
+                                .await
+                                .expect("Panic Free")?
+                        };
 
                         let following_chains: BTreeSet<_> =
                             msgs.iter().map(|e| e.get_genesis_hash()).collect();

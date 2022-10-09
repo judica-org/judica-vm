@@ -18,15 +18,18 @@ where
     /// Receive another message.
     ///
     /// Returns `None` if the stream has closed.
+    #[must_use]
     fn t_recv<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = RecvOutput> + Send + 'a>>;
 
     /// Send a message.
+    #[must_use]
     fn t_send<'a>(
         &'a mut self,
         msg: Message,
     ) -> Pin<Box<dyn Future<Output = Result<(), axum::Error>> + Send + 'a>>;
 
     /// Gracefully close this WebSocket.
+    #[must_use]
     fn t_close(self) -> Pin<Box<dyn Future<Output = Result<(), axum::Error>> + Send>>;
 }
 

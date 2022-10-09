@@ -2,8 +2,7 @@ use super::super::generic_websocket::WebSocketFunctionality;
 use super::AttestProtocolError;
 use super::GlobalSocketState;
 use super::ServiceIDBuilder;
-use crate::attestations::client::OpenState;
-use crate::attestations::client::ProtocolReceiver;
+
 use crate::attestations::client::ServiceUrl;
 use crate::globals::Globals;
 use axum::extract::ws::Message;
@@ -15,9 +14,10 @@ use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::debug;
 
 use tokio_tungstenite::tungstenite::protocol::Role;
-use tracing::{trace, warn};
+use tracing::trace;
 
 fn new_cookie() -> [u8; 32] {
     let mut rng = rand::thread_rng();
@@ -52,9 +52,9 @@ impl MessageExt for Message {
 }
 pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    mut socket: W,
+    socket: &mut W,
     _gss: &mut GlobalSocketState,
-) -> Result<(W, ProtocolReceiver), AttestProtocolError> {
+) -> Result<ServiceUrl, AttestProtocolError> {
     let protocol = "handshake";
     let t = socket
         .t_recv()
@@ -66,11 +66,6 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
         let s = ServiceUrl(Arc::new(s.0), s.1);
         let challenge_secret = new_cookie();
         let client = g.get_client().await?;
-        if client.conn_already_exists(&s).await.is_some() {
-            trace!(protocol, role=?Role::Server, svc=?s, "Already connected to service");
-            socket.t_close();
-            return Err(AttestProtocolError::AlreadyConnected);
-        }
         let challenge_hash = sha256::Hash::hash(&challenge_secret[..]);
         socket
             .t_send(Message::Text(challenge_hash.to_hex()))
@@ -94,7 +89,7 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
             .authenticate(&challenge_secret, &s.0, s.1)
             .await
             .map_err(|_| AttestProtocolError::FailedToAuthenticate)?;
-        tokio::time::timeout(Duration::from_secs(2), socket.t_recv())
+        tokio::time::timeout(Duration::from_secs(60), socket.t_recv())
             .await
             .map_err(|_| AttestProtocolError::TimedOut)?
             .ok_or(AttestProtocolError::SocketClosed)??
@@ -106,23 +101,15 @@ pub async fn handshake_protocol_server<W: WebSocketFunctionality>(
                     Err(AttestProtocolError::CookieMissMatch)
                 }
             })?;
-        // Authenticated!
-        let new_conn = client
-            .conn_already_exists_or_create(&ServiceUrl(s.0, s.1))
-            .await;
-        if let OpenState::Newly(_tx, rx) = new_conn {
-            Ok((socket, rx))
-        } else {
-            Err(AttestProtocolError::AlreadyConnected)
-        }
+        Ok(s)
     }
 }
 
 pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    mut socket: W,
+    socket: &mut W,
     gss: &mut GlobalSocketState,
-) -> Result<W, AttestProtocolError> {
+) -> Result<(), AttestProtocolError> {
     let me = if let Some(conf) = g.config.tor.as_ref().map(|conf| conf.get_hostname()) {
         conf.await
             .map_err(|_| AttestProtocolError::HostnameUnknown)?
@@ -152,7 +139,7 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
     })?;
     trace!(protocol, role=?Role::Client, ?me, "Confirmed Receipt of Challenge");
     trace!(protocol, role=?Role::Client, ?me, "Waiting to Learn Secret");
-    let cookie = tokio::time::timeout(Duration::from_secs(10), expect)
+    let cookie = tokio::time::timeout(Duration::from_secs(60), expect)
         .await
         .map_err(|_| {
             trace!(protocol, role=?Role::Client, ?me, "Timed Out Learning Cookie");
@@ -169,32 +156,27 @@ pub async fn handshake_protocol_client<W: WebSocketFunctionality>(
         .t_send(Message::Text(cookie.to_hex()))
         .await
         .map_err(|_| AttestProtocolError::SocketClosed)?;
-    Ok(socket)
+    Ok(())
 }
 
 pub async fn handshake_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    socket: W,
+    socket: &mut W,
     gss: &mut GlobalSocketState,
     role: Role,
-    new_request: Option<ProtocolReceiver>,
-) -> Result<(W, ProtocolReceiver), AttestProtocolError> {
+) -> Result<Option<ServiceUrl>, AttestProtocolError> {
     trace!(protocol = "handshake", ?role, "Starting Handshake");
-    let res = match (role, new_request) {
-        (Role::Server, None) => handshake_protocol_server(g, socket, gss).await,
-        (Role::Client, Some(r)) => Ok((handshake_protocol_client(g, socket, gss).await?, r)),
-        _ => {
-            warn!(
-                protocol = "handshake",
-                "Invalid Combo of Client/Server Role and Channel"
-            );
-            Err(AttestProtocolError::InvalidSetup)
-        }
+    let res = match role {
+        Role::Server => handshake_protocol_server(g, socket, gss).await.map(Some),
+        Role::Client => handshake_protocol_client(g, socket, gss)
+            .await
+            .map(|()| None),
     };
+
     if let Err(e) = &res {
-        trace!(protocol="handshake", error=?e, ?role, "Handshake Protocol Failed");
+        debug!(protocol="handshake", error=?e, ?role, "Handshake Protocol Failed");
     } else {
-        trace!(protocol = "handshake", ?role, "Handshake Successful");
+        trace!(protocol = "handshake", talking_to=?res, ?role, "Handshake Successful");
     }
     res
 }

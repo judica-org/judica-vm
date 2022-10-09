@@ -21,7 +21,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{error::Error, net::SocketAddr, sync::Arc};
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::spawn_blocking};
 use tower_http::cors::{Any, CorsLayer};
 mod routes;
 
@@ -32,21 +32,25 @@ pub struct Tips {
 pub async fn get_peers(
     Extension(db): Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<Vec<Peer>>), (StatusCode, &'static str)> {
-    let handle = db.get_handle().await;
-    let services = handle
-        .get_all_hidden_services()
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
-        .into_iter()
-        .map(
-            |PeerInfo {
-                 service_url,
-                 port,
-                 fetch_from: _,
-                 push_to: _,
-                 allow_unsolicited_tips: _,
-             }| Peer { service_url, port },
-        )
-        .collect();
+    let handle = db.get_handle_read().await;
+    let services = spawn_blocking(move || {
+        Ok(handle
+            .get_all_hidden_services()
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
+            .into_iter()
+            .map(
+                |PeerInfo {
+                     service_url,
+                     port,
+                     fetch_from: _,
+                     push_to: _,
+                     allow_unsolicited_tips: _,
+                 }| Peer { service_url, port },
+            )
+            .collect())
+    })
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))??;
     Ok((
         Response::builder()
             .status(200)
@@ -63,16 +67,20 @@ pub async fn add_new_peer(
     tracing::debug!("Adding Peer: {:?}", peer);
     {
         tracing::debug!("Inserting Into Database");
-        let locked = db.get_handle().await;
-        locked
-            .upsert_hidden_service(
-                peer.service_url,
-                peer.port,
-                Some(true),
-                Some(true),
-                Some(true),
-            )
-            .ok();
+        let locked = db.get_handle_all().await;
+        spawn_blocking(move || {
+            locked
+                .upsert_hidden_service(
+                    peer.service_url,
+                    peer.port,
+                    Some(true),
+                    Some(true),
+                    Some(true),
+                )
+                .ok();
+        })
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     }
     Ok((
         Response::builder()
@@ -107,11 +115,11 @@ impl<T> Apply for T {}
 pub async fn create_new_attestation_chain(
     Json((args, setup)): Json<(Vec<CanonicalEnvelopeHash>, GameSetup)>,
     Extension(db): Extension<MsgDB>,
-    Extension(ref secp): Extension<Secp256k1<All>>,
+    Extension(secp): Extension<Arc<Secp256k1<All>>>,
 ) -> Result<(Response<()>, Json<CreatedNewChain>), (StatusCode, &'static str)> {
     tracing::debug!("Creating New Attestation Chain");
     let (kp, n, e) = generate_new_user::<_, Channelized<BroadcastByHost>, _>(
-        secp,
+        &secp,
         Channelized {
             data: BroadcastByHost::GameSetup(setup),
             channel: "default".into(),
@@ -119,28 +127,33 @@ pub async fn create_new_attestation_chain(
     )
     .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     let e = e
-        .self_authenticate(secp)
+        .self_authenticate(&secp)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     let genesis_hash = e.get_genesis_hash();
     let nickname = e.get_genesis_hash().to_hex();
     let group_name = {
-        let mut handle = db.get_handle().await;
-        Ok(())
-            .and_then(|_| handle.save_keypair(kp))
-            .and_then(|_| handle.save_nonce_for_user_by_key(n, secp, kp.x_only_public_key().0))
-            .and_then(|_| handle.insert_user_by_genesis_envelope(nickname, e))
-            .apply(flip)
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
-            .and_then(|_| handle.new_chain_commit_group(None))
-            .and_then(|(name, group_id)| {
-                handle.add_subscriber_to_chain_commit_group(group_id, genesis_hash)?;
-                for genesis_hash in args {
-                    handle.add_member_to_chain_commit_group(group_id, genesis_hash)?;
-                }
-                Ok(name)
-            })
-    }
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+        let mut handle = db.get_handle_all().await;
+        let secp = secp.clone();
+        spawn_blocking(move || {
+            Ok(())
+                .and_then(|_| handle.save_keypair(kp))
+                .and_then(|_| handle.save_nonce_for_user_by_key(n, &secp, kp.x_only_public_key().0))
+                .and_then(|_| handle.insert_user_by_genesis_envelope(nickname, e))
+                .apply(flip)
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
+                .and_then(|_| handle.new_chain_commit_group(None))
+                .and_then(|(name, group_id)| {
+                    handle.add_subscriber_to_chain_commit_group(group_id, genesis_hash)?;
+                    for genesis_hash in args {
+                        handle.add_member_to_chain_commit_group(group_id, genesis_hash)?;
+                    }
+                    Ok(name)
+                })
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))
+        })
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))??
+    };
     Ok((
         Response::builder()
             .status(200)
@@ -157,10 +170,12 @@ pub async fn create_new_attestation_chain(
 pub async fn list_groups(
     Extension(db): Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<Vec<String>>), (StatusCode, &'static str)> {
-    let handle = db.get_handle().await;
-    let groups = handle
-        .get_all_chain_commit_groups()
+    let handle = db.get_handle_read().await;
+    let groups = spawn_blocking(move || handle.get_all_chain_commit_groups())
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+
     let v = groups.into_iter().map(|g| g.1).collect();
     Ok((
         Response::builder()
@@ -181,19 +196,24 @@ pub async fn add_chain_to_group(
     Json(j): Json<AddChainToGroup>,
     Extension(db): Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<()>), (StatusCode, &'static str)> {
-    let handle = db.get_handle().await;
-    // todo: more efficient query
-    let groups: Vec<_> = handle
-        .get_all_chain_commit_groups()
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
-    let id = groups
-        .iter()
-        .find(|x| x.1 == j.group)
-        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, ""))?
-        .0;
-    handle
-        .add_member_to_chain_commit_group(id, j.genesis_hash)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+    let handle = db.get_handle_all().await;
+    spawn_blocking(move || {
+        // todo: more efficient query
+        let groups: Vec<_> = handle
+            .get_all_chain_commit_groups()
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
+        let id = groups
+            .iter()
+            .find(|x| x.1 == j.group)
+            .ok_or((StatusCode::INTERNAL_SERVER_ERROR, ""))?
+            .0;
+        handle
+            .add_member_to_chain_commit_group(id, j.genesis_hash)
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))
+    })
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))??;
+
     Ok((
         Response::builder()
             .status(200)
@@ -208,7 +228,7 @@ pub fn run(
     config: Arc<Config>,
     db: MsgDB,
 ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + Send + Sync + 'static>>> {
-    let secp = Secp256k1::new();
+    let secp = Arc::new(Secp256k1::new());
     tokio::spawn(async move {
         // build our application with a route
         let app = Router::new()

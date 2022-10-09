@@ -7,7 +7,7 @@ use event_log::{
     db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
 };
 use simps::{DLogDiscovered, EK_NEW_DLOG};
-use tokio::time;
+use tokio::{task::spawn_blocking, time};
 use tracing::{debug, info};
 
 use crate::{events::Event, events::Tag, events::TaggedEvent};
@@ -23,11 +23,15 @@ pub async fn dlog_extractor(
         time::sleep(interval).await;
 
         let mut reused_nonce_map = {
-            let hdl = msg_db.get_handle().await;
-            hdl.get_reused_nonces().map_err(|e| {
-                tracing::error!(error=?e, "Failed to fetch reused nonces");
-                e
-            })?
+            let hdl = msg_db.get_handle_read().await;
+
+            spawn_blocking(move || {
+                hdl.get_reused_nonces().map_err(|e| {
+                    tracing::error!(error=?e, "Failed to fetch reused nonces");
+                    e
+                })
+            })
+            .await??
         };
 
         // remove ones we already learned so we don't put it in the evlog more

@@ -1,7 +1,8 @@
 use attest_database::connection::MsgDB;
 use attest_database::setup_db;
+use attest_database::setup_test_db;
 use attest_util::bitcoin::BitcoinConfig;
-use rusqlite::Connection;
+
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use serde::Deserialize;
@@ -10,7 +11,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
+
 use tokio::time::{Interval, MissedTickBehavior};
 
 pub(crate) const fn default_port() -> u16 {
@@ -126,9 +127,7 @@ pub(crate) fn get_config() -> Result<Arc<Config>, Box<dyn Error>> {
 impl Config {
     pub async fn setup_db(&self) -> Result<MsgDB, Box<dyn Error + Send + Sync>> {
         if self.test_db {
-            let db = MsgDB::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())));
-            db.get_handle().await.setup_tables();
-            Ok(db)
+            Ok(setup_test_db().await)
         } else {
             let application = format!("attestations.{}", self.subname);
             let mdb = setup_db(&application, self.prefix.clone())

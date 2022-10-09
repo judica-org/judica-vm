@@ -6,7 +6,7 @@ use super::{
     MsgDBHandle,
 };
 
-impl<'a, T> MsgDBHandle<'a, T>
+impl<T> MsgDBHandle<T>
 where
     T: handle_type::Setup,
 {

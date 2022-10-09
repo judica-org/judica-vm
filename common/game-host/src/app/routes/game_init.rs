@@ -25,21 +25,13 @@ use mine_with_friends_board::{
     sanitize::Unsanitized,
     MoveEnvelope,
 };
-use sapio_bitcoin::{
-    hashes::hex::{FromHex, ToHex},
-    secp256k1::{
-        rand::{thread_rng, Rng},
-        All, Secp256k1,
-    },
-};
-use serde::{Deserialize, Serialize};
+use sapio_bitcoin::secp256k1::{All, Secp256k1};
+
 use std::{
     collections::{HashMap, VecDeque},
-    error::Error,
-    fmt::{Debug, Display},
     sync::{Arc, Weak},
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::spawn_blocking};
 
 struct Metadata {
     state: Mutex<GameStartingState>,
@@ -103,8 +95,8 @@ impl GameStartingState {
         match p.msg() {
             ParticipantAction::MoveEnvelope(MoveEnvelope {
                 d: Unsanitized(GameMove::Heartbeat(_)),
-                sequence,
-                time_millis,
+                sequence: _,
+                time_millis: _,
             }) => {}
             _ => return Err(AddPlayerError::WrongFirstMessage),
         };
@@ -190,7 +182,7 @@ pub async fn add_player(
 
 pub async fn finish_setup(
     msgdb: Extension<MsgDB>,
-    secp: Extension<Secp256k1<All>>,
+    secp: Extension<Arc<Secp256k1<All>>>,
     Json(FinishArgs {
         passcode,
         code,
@@ -215,16 +207,19 @@ pub async fn finish_setup(
                         .collect::<Result<_, AuthenticationError>>()
                         .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
                     {
-                        let mut handle = msgdb.get_handle().await;
                         for (i, env) in authed.into_iter().enumerate() {
-                            handle
-                                .insert_user_by_genesis_envelope(
+                            let mut handle = msgdb.get_handle_all().await;
+                            spawn_blocking(move || {
+                                handle.insert_user_by_genesis_envelope(
                                     format!("{}::{}", String::from(code), i),
                                     env,
                                 )
-                                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()))?
-                                // These errors are OK here
-                                .ok();
+                            })
+                            .await
+                            .map_err(|_e| (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()))?
+                            .map_err(|_e| (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()))?
+                            // These errors are OK here
+                            .ok();
                         }
                     }
                     return create_new_attestation_chain(

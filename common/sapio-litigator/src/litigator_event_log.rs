@@ -39,6 +39,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
+use tokio::task::spawn_blocking;
 use tracing::debug;
 use tracing::info;
 
@@ -269,10 +270,13 @@ pub(crate) async fn handle_synthetic_periodic(
         let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
         if let Ok(program) = bind_psbt(c, out, emulator) {
             // TODO learn available keys through an extractor...
-            let keys = Arc::new({
-                let handle = msg_db.get_handle().await;
-                handle.get_keymap().map_err(|e| e.to_string())
-            }?);
+            let keys = Arc::new(
+                {
+                    let handle = msg_db.get_handle_read().await;
+                    spawn_blocking(move || handle.get_keymap()).await
+                }?
+                .map_err(|e| e.to_string())?,
+            );
             for obj in program.program.into_values() {
                 for tx in obj.txs.into_iter() {
                     let SapioStudioFormat::LinkedPSBT {
@@ -350,33 +354,37 @@ pub(crate) async fn process_psbt_fail_ok(
             format!("emit_by:{}:psbt_hash:{}", emitter, psbt_hash),
         )),
     );
+    let mut handle = msg_db.get_handle_all().await;
     let mut accessor = evlog.get_accessor().await;
-    let mut handle = msg_db.get_handle().await;
-    let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
-    let v2 = v?;
-    match v2 {
-        Err(Idempotent::AlreadyExists) => Ok(()),
-        Ok((_oid, txn)) => {
-            handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
-                ParticipantAction::PsbtSigningCoordination(Multiplexed {
-                    channel: txid_s,
-                    data: PsbtString(signed),
-                }),
-                &keypair,
-                &secp,
-                None,
-                TipControl::NoTips,
-            )?;
-            // Technically there is a tiny risk that we succeed at inserting the
-            // Signed PSBT but do not succeed at committing the event log entry.
-            // In this case, we will see a second entry for the same psbt, which
-            // is still not a logic error, fortunately.
-            //
-            // This could be fixed with some more clever logic in both DBs.
-            txn.commit()?;
-            Ok(())
+
+    spawn_blocking(move || {
+        let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
+        let v2 = v?;
+        match v2 {
+            Err(Idempotent::AlreadyExists) => Ok(()),
+            Ok((_oid, txn)) => {
+                handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
+                    ParticipantAction::PsbtSigningCoordination(Multiplexed {
+                        channel: txid_s,
+                        data: PsbtString(signed),
+                    }),
+                    &keypair,
+                    &secp,
+                    None,
+                    TipControl::NoTips,
+                )?;
+                // Technically there is a tiny risk that we succeed at inserting the
+                // Signed PSBT but do not succeed at committing the event log entry.
+                // In this case, we will see a second entry for the same psbt, which
+                // is still not a logic error, fortunately.
+                //
+                // This could be fixed with some more clever logic in both DBs.
+                txn.commit()?;
+                Ok(())
+            }
         }
-    }
+    })
+    .await?
 }
 
 pub(crate) fn extract_keys_for_simp(

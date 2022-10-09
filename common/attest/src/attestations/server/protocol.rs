@@ -1,10 +1,9 @@
 use self::authentication_handshake::MessageExt;
-
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
 use crate::attestations::client::AnySender;
-use crate::attestations::client::ProtocolReceiver;
 use crate::attestations::client::ProtocolReceiverMut;
+use crate::attestations::client::ServiceUrl;
 use crate::control::query::Outcome;
 use crate::globals::Globals;
 use attest_database::connection::MsgDB;
@@ -19,11 +18,12 @@ use std;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::sync::Arc;
-
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
+use tokio::task::spawn_blocking;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tracing;
+use tracing::debug;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
@@ -139,6 +139,7 @@ pub enum AttestProtocolError {
     ResponseTypeIncorrect,
     UnrequestedResponse,
     InvalidChallengeHashString,
+    SelfConnection,
 }
 
 unsafe impl Send for AttestProtocolError {}
@@ -227,15 +228,52 @@ pub const MAX_MESSAGE_DEFECIT: i64 = 10;
 
 pub async fn run_protocol<W: WebSocketFunctionality>(
     g: Arc<Globals>,
-    socket: W,
+    mut socket: W,
+    gss: GlobalSocketState,
+    db: MsgDB,
+    role: Role,
+    peer_name_in: Option<ServiceUrl>,
+) -> Result<&'static str, AttestProtocolError> {
+    let res = run_protocol_inner(g, &mut socket, gss, db, role, peer_name_in).await;
+    // THis never runs I think because of the top recv
+    trace!(error=?res, ?role, "websocket quit: Internal Connection Dropped");
+    socket.t_close().await.ok();
+    res
+}
+pub async fn run_protocol_inner<W: WebSocketFunctionality>(
+    g: Arc<Globals>,
+    socket: &mut W,
     mut gss: GlobalSocketState,
     mut db: MsgDB,
     role: Role,
-    new_request: Option<ProtocolReceiver>,
+    peer_name_in: Option<ServiceUrl>,
 ) -> Result<&'static str, AttestProtocolError> {
-    let (mut socket, mut receiver) =
-        authentication_handshake::handshake_protocol(g, socket, &mut gss, role, new_request)
-            .await?;
+    let peer_name =
+        authentication_handshake::handshake_protocol(g.clone(), socket, &mut gss, role).await?;
+
+    let peer_name = match (role, peer_name, peer_name_in) {
+        (Role::Server, Some(p), None) | (Role::Client, None, Some(p)) => p,
+        _ => {
+            warn!(
+                protocol = "handshake",
+                "Invalid Combo of Client/Server Role and Channel"
+            );
+            return Err(AttestProtocolError::InvalidSetup);
+        }
+    };
+
+    let client = g.get_client().await?;
+    let prefer_role = preferred_role(g, &peer_name).await?;
+    let mut receiver = {
+        // We're in a session, and we only know now the peer name to register
+        // a pending conn for. Since we're already handshaken, if we're still in Pending,
+        // cancel the other pending job and take it over.
+        // If we're no longer pending, then we're already connected elsewhere as a client.
+        client
+            .set_conn_open_prob(&peer_name, prefer_role, role)
+            .await
+            .ok_or(AttestProtocolError::AlreadyConnected)?
+    };
     let ProtocolReceiverMut {
         latest_tips,
         specific_tips,
@@ -252,7 +290,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                 if let Some(Ok(msg)) = msg {
                     handle_message_from_peer(
                         &mut defecit,
-                        &mut socket,
+                        socket,
                         &mut gss,
                         &mut db,
                         &mut inflight_requests,
@@ -261,14 +299,14 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                     )
                     .await?;
                 } else {
-                    trace!(seq, ?role, "socket quit: TCP Socket is Disconnected");
+                    debug!(seq, ?role, "socket quit: TCP Socket is Disconnected");
                     return Ok("Peer Disconnected from us");
                 }
             }
             Some((request, chan)) = post.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
                 handle_internal_request(
                     &mut defecit,
-                    &mut socket,
+                    socket,
                     &mut inflight_requests,
                     seq,
                     request,
@@ -279,7 +317,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
             Some((request, chan)) = specific_tips.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
                 handle_internal_request(
                     &mut defecit,
-                    &mut socket,
+                    socket,
                     &mut inflight_requests,
                     seq,
                     request,
@@ -290,7 +328,7 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
             Some((request, chan)) = latest_tips.recv(), if defecit < MAX_MESSAGE_DEFECIT => {
                 handle_internal_request(
                     &mut defecit,
-                    &mut socket,
+                    socket,
                     &mut inflight_requests,
                     seq,
                     request,
@@ -299,12 +337,37 @@ pub async fn run_protocol<W: WebSocketFunctionality>(
                 .await?;
             }
             else => {
-                trace!(seq, ?role, "socket quit: Internal Connection Dropped");
-                socket.t_close().await.ok();
                 return Ok("Exiting...");
             }
         }
     }
+}
+
+pub async fn preferred_role(
+    g: Arc<Globals>,
+    peer_name: &ServiceUrl,
+) -> Result<Role, AttestProtocolError> {
+    let my_name = get_my_name(&g).await?;
+    let prefer_role = if my_name < *peer_name {
+        Role::Client
+    } else if my_name == *peer_name {
+        return Err(AttestProtocolError::SelfConnection);
+    } else {
+        Role::Server
+    };
+    Ok(prefer_role)
+}
+
+pub async fn get_my_name(g: &Arc<Globals>) -> Result<ServiceUrl, AttestProtocolError> {
+    let my_name = if let Some(conf) = g.config.tor.as_ref().map(|conf| conf.get_hostname()) {
+        let p = conf
+            .await
+            .map_err(|_| AttestProtocolError::HostnameUnknown)?;
+        ServiceUrl(p.0.into(), p.1)
+    } else {
+        ServiceUrl(Arc::new("127.0.0.1".into()), g.config.attestation_port)
+    };
+    Ok(my_name)
 }
 async fn handle_internal_request<W, IChan, IReq>(
     defecit: &mut i64,
@@ -414,10 +477,14 @@ where
     }
     let mut outcomes = Vec::with_capacity(authed.len());
     {
-        let mut locked = db.get_handle().await;
         for envelope in authed {
             trace!("Inserting Into Database");
-            match locked.try_insert_authenticated_envelope(envelope, false) {
+            let mut locked = db.get_handle_all().await;
+            let res =
+                spawn_blocking(move || locked.try_insert_authenticated_envelope(envelope, false))
+                    .await
+                    .expect("DB Panic");
+            match res {
                 Ok(i) => match i {
                     Ok(()) => {
                         outcomes.push(Outcome { success: true });
@@ -459,8 +526,11 @@ where
     tips.tips.dedup();
     trace!(method = "GET /tips", ?tips);
     let all_tips = {
-        let handle = db.get_handle().await;
-        if let Ok(r) = handle.messages_by_hash(tips.tips.iter()) {
+        let handle = db.get_handle_read().await;
+        if let Ok(r) = spawn_blocking(move || handle.messages_by_hash(tips.tips.iter()))
+            .await
+            .expect("DB Panic")
+        {
             r
         } else {
             return Err(AttestProtocolError::DatabaseError);
@@ -489,8 +559,10 @@ where
 {
     info!(method = "GET", item = "/latest_tips");
     let r = {
-        let handle = db.get_handle().await;
-        handle.get_tips_for_all_users()
+        let handle = db.get_handle_read().await;
+        spawn_blocking(move || handle.get_tips_for_all_users())
+            .await
+            .expect("DB Error")
     };
     if let Ok(v) = r {
         let msg = AttestResponse::LatestTips(LatestTipsResponse(v)).into_protocol_and_log(seq)?;

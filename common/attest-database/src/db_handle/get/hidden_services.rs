@@ -2,7 +2,7 @@ use super::PeerInfo;
 use crate::db_handle::{handle_type, sql::SQL_GET_ALL_HIDDEN_SERVICES, MsgDBHandle};
 use fallible_iterator::FallibleIterator;
 
-impl<'a, T> MsgDBHandle<'a, T>
+impl<T> MsgDBHandle<T>
 where
     T: handle_type::Get,
 {

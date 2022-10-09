@@ -13,5 +13,14 @@
     "attestation_port": $APP_PORT,
     "control": {
         "port": $CONTROL_PORT
+    },
+    "peer_service": {
+        "timer_override" : {
+            "reconnect_rate": {"secs": 10, "nanos": 500000000},
+            "scan_for_unsent_tips_rate": {"secs": 1, "nanos": 500000000},
+            "attach_tip_while_busy_rate": {"secs": 1, "nanos": 500000000},
+            "tip_fetch_rate": {"secs": 1, "nanos": 500000000},
+            "entropy_range": {"secs": 1, "nanos": 10000000}
+        }
     }
 }

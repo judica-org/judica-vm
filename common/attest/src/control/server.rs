@@ -25,7 +25,10 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
-use tokio::sync::{mpsc::Sender, oneshot};
+use tokio::{
+    sync::{mpsc::Sender, oneshot},
+    task::spawn_blocking,
+};
 use tower_http::cors::{Any, CorsLayer};
 
 use super::query::{NewGenesis, Outcome, PushMsg, Subscribe};
@@ -47,14 +50,19 @@ pub struct Status {
 async fn get_expensive_db_snapshot(
     db: Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<HashMap<CanonicalEnvelopeHash, Envelope>>), (StatusCode, String)> {
-    let handle = db.get_handle().await;
-    let mut map = Default::default();
-    let mut newer = None;
-    handle
-        .get_all_messages_collect_into_inconsistent_skip_invalid::<Envelope, WrappedJson>(
-            &mut newer, &mut map, false,
-        )
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let handle = db.get_handle_read().await;
+    let map = spawn_blocking(move || {
+        let mut map = Default::default();
+        let mut newer = None;
+        handle
+            .get_all_messages_collect_into_inconsistent_skip_invalid::<Envelope, WrappedJson>(
+                &mut newer, &mut map, false,
+            )
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        Ok(map)
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
     Ok((
         Response::builder()
             .status(200)
@@ -75,26 +83,28 @@ async fn chain_commit_groups(
     Json(key): Json<CanonicalEnvelopeHash>,
     db: Extension<MsgDB>,
 ) -> Result<(Response<()>, Json<ChainCommitGroupInfo>), (StatusCode, String)> {
-    let resp = async {
-        let handle = db.0.get_handle().await;
-        let genesis = &handle.messages_by_hash::<_, Envelope, _>(std::iter::once(&key))?[0];
-        let _groups = handle.get_all_chain_commit_groups_for_chain(key)?;
-        let group_members = handle.get_all_chain_commit_group_members_for_chain(key)?;
-        let group_tips = handle.messages_by_ids::<_, Envelope, _>(group_members.iter())?;
-        let mut map = Default::default();
-        let mut newer = 0;
-        handle
-        .get_all_chain_commit_group_members_new_envelopes_for_chain_into_inconsistent::<Envelope, WrappedJson>(
-            genesis.header().key(),
-            &mut newer,
-            &mut map)?;
-        Ok::<_, rusqlite::Error>(ChainCommitGroupInfo{
-            genesis: key,
-            members: group_tips,
-            all_msgs: map
-        })
-    }.await
+    let handle = db.0.get_handle_read().await;
+    let resp = spawn_blocking(move || {
+            let genesis = &handle.messages_by_hash::<_, Envelope, _>(std::iter::once(&key))?[0];
+            let _groups = handle.get_all_chain_commit_groups_for_chain(key)?;
+            let group_members = handle.get_all_chain_commit_group_members_for_chain(key)?;
+            let group_tips = handle.messages_by_ids::<_, Envelope, _>(group_members.iter())?;
+            let mut map = Default::default();
+            let mut newer = 0;
+            handle
+            .get_all_chain_commit_group_members_new_envelopes_for_chain_into_inconsistent::<Envelope, WrappedJson>(
+                genesis.header().key(),
+                &mut newer,
+                &mut map)?;
+            Ok::<_, rusqlite::Error>(ChainCommitGroupInfo{
+                genesis: key,
+                members: group_tips,
+                all_msgs: map
+            })
+        }).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
     Ok((
         Response::builder()
             .status(200)
@@ -110,37 +120,41 @@ async fn get_status(
     peer_status: Extension<Sender<PeerQuery>>,
 ) -> Result<(Response<()>, Json<Status>), (StatusCode, String)> {
     let (tips, peers, all_users) = {
-        let handle = db.0.get_handle().await;
-        let peers = handle
-            .get_all_hidden_services()
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let tips = handle
-            .get_tips_for_all_users::<Authenticated<Envelope>, WrappedJson>()
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let tips = tips
-            .into_iter()
-            .map(|t| TipData {
-                hash: t.canonicalized_hash_ref(),
-                envelope: t.inner(),
-            })
-            .collect();
-        let users = handle.get_all_users().map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("User List query failed: {}", e),
-            )
-        })?;
-        let known_keys = handle.get_keymap().map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("KeyMap query failed: {}", e),
-            )
-        })?;
-        let all_users: Vec<_> = users
-            .into_iter()
-            .map(|(k, v)| (k, v, known_keys.contains_key(&k)))
-            .collect();
-        (tips, peers, all_users)
+        let handle = db.0.get_handle_read().await;
+        spawn_blocking(move || {
+            let peers = handle
+                .get_all_hidden_services()
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            let tips = handle
+                .get_tips_for_all_users::<Authenticated<Envelope>, WrappedJson>()
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            let tips = tips
+                .into_iter()
+                .map(|t| TipData {
+                    hash: t.canonicalized_hash_ref(),
+                    envelope: t.inner(),
+                })
+                .collect();
+            let users = handle.get_all_users().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("User List query failed: {}", e),
+                )
+            })?;
+            let known_keys = handle.get_keymap().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("KeyMap query failed: {}", e),
+                )
+            })?;
+            let all_users: Vec<_> = users
+                .into_iter()
+                .map(|(k, v)| (k, v, known_keys.contains_key(&k)))
+                .collect();
+            Ok::<_, (StatusCode, String)>((tips, peers, all_users))
+        })
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??
     };
     let (tx, rx) = oneshot::channel();
     peer_status
@@ -190,10 +204,13 @@ async fn listen_to_service(
     }): Json<Subscribe>,
     peer_status: Extension<Sender<PeerQuery>>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
-    db.0.get_handle()
-        .await
-        .upsert_hidden_service(url, port, fetch_from, push_to, allow_unsolicited_tips)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let h = db.0.get_handle_all().await;
+    spawn_blocking(move || {
+        h.upsert_hidden_service(url, port, fetch_from, push_to, allow_unsolicited_tips)
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     peer_status.send(PeerQuery::RefreshTasks).await.ok();
     Ok((
         Response::builder()
@@ -211,32 +228,37 @@ async fn push_message_dangerous(
     bitcoin_tipcache: Extension<Arc<BitcoinCheckPointCache>>,
     Json(PushMsg { msg, key }): Json<PushMsg>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
-    let mut handle = db.0.get_handle().await;
-    let keys = handle.get_keymap().map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("KeyMap failed: {}", e),
-        )
-    })?;
-    let kp = keys
-        .get(&key)
-        .map(|k| KeyPair::from_secret_key(&secp, k))
-        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
+    let mut handle = db.0.get_handle_all().await;
     let tips = bitcoin_tipcache.0.read_cache().await;
-    handle
-        .retry_insert_authenticated_envelope_atomic::<WrappedJson, _, _>(
-            msg,
-            &kp,
-            &secp.0,
-            Some(tips),
-            TipControl::AllTips,
-        )
-        .map_err(|e| {
+    spawn_blocking(move || {
+        let keys = handle.get_keymap().map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Wrapping Message and Inserting failed: {}", e),
+                format!("KeyMap failed: {}", e),
             )
         })?;
+        let kp = keys
+            .get(&key)
+            .map(|k| KeyPair::from_secret_key(&secp, k))
+            .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
+        handle
+            .retry_insert_authenticated_envelope_atomic::<WrappedJson, _, _>(
+                msg,
+                &kp,
+                &secp.0,
+                Some(tips),
+                TipControl::AllTips,
+            )
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Wrapping Message and Inserting failed: {}", e),
+                )
+            })?;
+        Ok::<_, (StatusCode, String)>(())
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
     Ok((
         Response::builder()
             .status(200)
@@ -257,23 +279,31 @@ async fn make_genesis(
             format!("Creating Genesis Message failed: {}", e),
         )
     })?;
-    let mut handle = db.0.get_handle().await;
-    handle
-        .save_keypair(kp)
-        .and_then(|()| handle.save_nonce_for_user_by_key(pre, &secp.0, kp.x_only_public_key().0))
-        .and_then(|_| {
-            handle.insert_user_by_genesis_envelope(
-                nickname,
-                genesis.self_authenticate(&secp.0).unwrap(),
-            )
-        })
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Creating Genesis Message failed: {}", e),
-            )
-        })?
-        .expect("Should always succeed at inserting a fresh Genesis");
+    let mut handle = db.0.get_handle_all().await;
+    let genesis_cpy = genesis.clone();
+    spawn_blocking(move || {
+        handle
+            .save_keypair(kp)
+            .and_then(|()| {
+                handle.save_nonce_for_user_by_key(pre, &secp.0, kp.x_only_public_key().0)
+            })
+            .and_then(|_| {
+                handle.insert_user_by_genesis_envelope(
+                    nickname,
+                    genesis_cpy.self_authenticate(&secp.0).unwrap(),
+                )
+            })
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Creating Genesis Message failed: {}", e),
+                )
+            })?
+            .expect("Should always succeed at inserting a fresh Genesis");
+        Ok::<_, (StatusCode, String)>(())
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))??;
 
     Ok((
         Response::builder()

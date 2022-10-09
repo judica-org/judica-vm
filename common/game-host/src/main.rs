@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 use tokio::spawn;
-use tokio::task::JoinHandle;
+use tokio::task::{spawn_blocking, JoinHandle};
 use tor::TorConfig;
 use tracing::{debug, info, warn};
 mod app;
@@ -71,8 +71,10 @@ async fn game_server(config: Arc<Config>, db: MsgDB) -> Result<(), Box<dyn Error
     let secp = Arc::new(Secp256k1::new());
     loop {
         info!("Task Creator Starting Jobs for each key");
-        let handle = db.get_handle().await;
-        let keymap = handle.get_keymap()?;
+        let keymap = {
+            let handle = db.get_handle_read().await;
+            spawn_blocking(move || handle.get_keymap()).await??
+        };
         for (key, value) in keymap {
             match task_set.entry(key) {
                 std::collections::btree_map::Entry::Vacant(e) => {
@@ -119,9 +121,13 @@ async fn game(
     // First we get all of the old messages for the Oracle itself, so that we
     // can know which messages we've sequenced previously.
     {
-        let handle = db.get_handle().await;
-        let v: Vec<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>> =
-            handle.load_all_messages_for_user_by_key_connected(&oracle_publickey)?;
+        let v: Vec<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>> = {
+            let handle = db.get_handle_read().await;
+            spawn_blocking(move || {
+                handle.load_all_messages_for_user_by_key_connected(&oracle_publickey)
+            })
+            .await??
+        };
         let sequencer = game_sequencer::RawSequencer {
             sequencer_envelopes: v,
             msg_cache: Default::default(),
@@ -147,13 +153,28 @@ async fn game(
     //
     // Only fetch the messages for our groups though
     {
-        let handle = db.get_handle().await;
-        handle
+        let handle = db.get_handle_read().await;
+        let mut all_unprocessed_messages_tmp_in = Default::default();
+        std::mem::swap(
+            &mut all_unprocessed_messages,
+            &mut all_unprocessed_messages_tmp_in,
+        );
+        let mut seq_tmp_in = seq;
+        let (mut all_unprocessed_messages_tmp_out, seq_tmp_out) =  spawn_blocking(move ||
+            {handle
                 .get_all_chain_commit_group_members_new_envelopes_for_chain_into_inconsistent::<Authenticated<Envelope>, WrappedJson>(
                     oracle_publickey,
-                    &mut seq,
-                    &mut all_unprocessed_messages,
-                )?
+                    &mut seq_tmp_in,
+                    &mut all_unprocessed_messages_tmp_in,
+                ).and( Ok((all_unprocessed_messages_tmp_in, seq_tmp_in)))
+
+            }
+            ).await??;
+        seq = seq_tmp_out;
+        std::mem::swap(
+            &mut all_unprocessed_messages,
+            &mut all_unprocessed_messages_tmp_out,
+        );
     }
     // Only on the first pass, remove the messages that have already been sequenced
     //
@@ -182,14 +203,30 @@ async fn game(
         //
         // Only fetch the messages for our groups though
         {
-            let handle = db.get_handle().await;
-            handle
-                .get_all_chain_commit_group_members_new_envelopes_for_chain_into_inconsistent::<Authenticated<Envelope>, WrappedJson>(
-                    oracle_publickey,
-                    &mut seq,
-                    &mut all_unprocessed_messages,
-                )?
+            let handle = db.get_handle_read().await;
+            let mut all_unprocessed_messages_tmp_in = Default::default();
+            std::mem::swap(
+                &mut all_unprocessed_messages,
+                &mut all_unprocessed_messages_tmp_in,
+            );
+            let mut seq_tmp_in = seq;
+            let (mut all_unprocessed_messages_tmp_out, seq_tmp_out) =  spawn_blocking(move ||
+                {
+                    handle
+                    .get_all_chain_commit_group_members_new_envelopes_for_chain_into_inconsistent::<Authenticated<Envelope>, WrappedJson>(
+                        oracle_publickey,
+                        &mut seq_tmp_in,
+                        &mut all_unprocessed_messages_tmp_in,
+                    ).and(Ok((all_unprocessed_messages_tmp_in, seq_tmp_in)))
+                }
+                ).await??;
+            seq = seq_tmp_out;
+            std::mem::swap(
+                &mut all_unprocessed_messages,
+                &mut all_unprocessed_messages_tmp_out,
+            );
         }
+
         info!(
             n = all_unprocessed_messages.len(),
             "Got New Messages to Sequence"
@@ -284,18 +321,23 @@ async fn game(
                 channel: "default".into(),
             };
             {
-                let mut handle = db.get_handle().await;
+                let mut handle = db.get_handle_all().await;
                 // TODO: Run a tipcache
 
                 // try to insert and handle
-                handle
+                let keypair = keypair;
+                let secp = secp.clone();
+                spawn_blocking(move || {
+                    handle
                 .retry_insert_authenticated_envelope_atomic::<Channelized<BroadcastByHost>, _, _>(
                     msg,
                     &keypair,
                     &secp,
                     None,
                     TipControl::GroupsOnly,
-                )?;
+                )
+                })
+                .await??;
             }
         }
         tokio::time::sleep(Duration::from_secs(1)).await;

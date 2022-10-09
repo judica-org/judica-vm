@@ -24,7 +24,7 @@ use tracing::debug;
 async fn test_setup_db() {
     let conn = setup_db().await;
     // Tests that setup can be called more than once...
-    conn.get_handle().await.setup_tables();
+    conn.get_handle_all().await.setup_tables();
 }
 
 #[test(tokio::test)]
@@ -32,7 +32,7 @@ async fn test_add_user() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
     let test_user = "TestUser".into();
-    make_test_user(&secp, &mut conn.get_handle().await, test_user);
+    make_test_user(&secp, &mut conn.get_handle_all().await, test_user);
 }
 
 #[test(tokio::test)]
@@ -40,7 +40,7 @@ async fn test_reused_nonce() {
     let conn = setup_db().await;
     let secp = Secp256k1::new();
     let test_user = "TestUser".into();
-    let mut handle = conn.get_handle().await;
+    let mut handle = conn.get_handle_all().await;
     let kp = make_test_user(&secp, &mut handle, test_user);
     let envelope_1 = handle
         .wrap_message_in_envelope_for_user_by_key(
@@ -190,7 +190,7 @@ async fn test_envelope_creation() {
     };
     let secp = Secp256k1::new();
     let conn = setup_db().await;
-    let mut handle = conn.get_handle().await;
+    let mut handle = conn.get_handle_all().await;
     const N_USERS: usize = 10;
     for user_id in 0..N_USERS {
         let test_user = format!("Test_User_{}", user_id);
@@ -367,7 +367,7 @@ async fn test_envelope_creation() {
 
 fn make_test_user(
     secp: &Secp256k1<All>,
-    handle: &mut db_handle::MsgDBHandle<'_>,
+    handle: &mut db_handle::MsgDBHandle,
     name: String,
 ) -> KeyPair {
     let (kp, nonce, envelope) =
@@ -385,15 +385,13 @@ fn make_test_user(
 }
 
 async fn setup_db() -> MsgDB {
-    let conn = MsgDB::new(Arc::new(Mutex::new(Connection::open_in_memory().unwrap())));
-    conn.get_handle().await.setup_tables();
-    conn
+    setup_test_db().await
 }
 
 #[test(tokio::test)]
 async fn test_chain_commit_groups() {
     let conn = setup_db().await;
-    let mut handle = conn.get_handle().await;
+    let mut handle = conn.get_handle_all().await;
     let secp = Secp256k1::new();
     let mut rng = thread_rng();
     let users = (0..100)
@@ -519,7 +517,7 @@ async fn test_chain_commit_groups() {
 #[test(tokio::test)]
 async fn test_tables() {
     let conn = setup_db().await;
-    let handle = conn.get_handle().await;
+    let handle = conn.get_handle_all().await;
     let mut it = handle
         .0
         .prepare(

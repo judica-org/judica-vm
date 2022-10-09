@@ -2,6 +2,7 @@ use futures::FutureExt;
 use tokio::{
     spawn,
     sync::{mpsc::Receiver, oneshot::Sender},
+    task::spawn_blocking,
 };
 
 use attest_util::INFER_UNIT;
@@ -48,9 +49,13 @@ pub fn startup(
             async move {
                 while !g.shutdown.should_quit() {
                     interval.tick().await;
-                    let handle = db.get_handle().await;
-                    let n_attached = handle.attach_tips();
-                    info!(?n_attached, "Attached Tips");
+                    let handle = db.get_handle_all().await;
+                    spawn_blocking(move || {
+                        let n_attached = handle.attach_tips();
+                        info!(?n_attached, "Attached Tips");
+                    })
+                    .await
+                    .ok();
                 }
             }
         });
@@ -78,24 +83,25 @@ pub fn startup(
                 }
             };
             info!("Scanning for service reboot");
-            let mut create_services: HashSet<_> = db
-                .get_handle()
-                .await
-                .get_all_hidden_services()?
-                .into_iter()
-                .flat_map(|p| {
-                    let mut v = [None, None];
-                    let service = ServiceUrl(p.service_url.into(), p.port);
-                    if p.fetch_from {
-                        v[0] = Some((service.clone(), PeerType::Fetch, p.allow_unsolicited_tips))
-                    }
-                    if p.push_to {
-                        v[1] = Some((service, PeerType::Push, p.allow_unsolicited_tips))
-                    }
-                    v
-                })
-                .flatten()
-                .collect();
+            let handle = db.get_handle_read().await;
+            let mut create_services: HashSet<_> =
+                spawn_blocking(move || handle.get_all_hidden_services())
+                    .await??
+                    .into_iter()
+                    .flat_map(|p| {
+                        let mut v = [None, None];
+                        let service = ServiceUrl(p.service_url.into(), p.port);
+                        if p.fetch_from {
+                            v[0] =
+                                Some((service.clone(), PeerType::Fetch, p.allow_unsolicited_tips))
+                        }
+                        if p.push_to {
+                            v[1] = Some((service, PeerType::Push, p.allow_unsolicited_tips))
+                        }
+                        v
+                    })
+                    .flatten()
+                    .collect();
             // Drop anything that is finished, we will re-add it later if still in create_services
             task_set.retain(|k, v| {
                 if !v.is_finished() {

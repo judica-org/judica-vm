@@ -1,13 +1,13 @@
 use rusqlite::Connection;
 use std::marker::PhantomData;
-use tokio::sync::MutexGuard;
+use tokio::sync::OwnedMutexGuard;
 
 pub mod accessors;
 pub mod setup;
 
 pub struct EventLogAccessor<'a, T = accessor_type::All>(
-    pub MutexGuard<'a, Connection>,
-    pub PhantomData<T>,
+    pub OwnedMutexGuard<Connection>,
+    pub PhantomData<&'a T>,
 );
 
 pub struct Setup<D: ?Sized>(PhantomData<D>);

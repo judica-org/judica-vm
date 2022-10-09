@@ -127,9 +127,8 @@ async fn connect_and_test_nodes() {
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         // TODO: Guarantee all clients are started?
-        let base = Client::new();
-        let client = AttestationClient::new(base.clone(), test_node);
-        let control_client = ControlClient(base.clone());
+        let client = test_node.get_client().await.unwrap();
+        let control_client = ControlClient(client.client().clone());
         // Initial fetch should show no tips posessed
         loop {
             let it = ports.iter().map(|(port, _ctrl)| {
@@ -179,7 +178,7 @@ async fn connect_and_test_nodes() {
 
         info!(checkpoint = "Created Genesis for each Node");
         // Check that each node knows about it's own genesis envelope
-        {
+        loop {
             let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
                 async move {
@@ -190,12 +189,14 @@ async fn connect_and_test_nodes() {
             });
             let resp = join_all(it).await;
             debug!("Got {:?}", resp);
-            assert_eq!(
-                resp.into_iter()
-                    .flat_map(|r| r.unwrap())
-                    .collect::<Vec<_>>(),
-                genesis_envelopes
-            );
+            if (resp
+                .into_iter()
+                .flat_map(|r| r.unwrap())
+                .collect::<Vec<_>>()
+                == genesis_envelopes)
+            {
+                break;
+            }
         }
         info!(checkpoint = "Each Node Has Own Genesis");
 

@@ -28,7 +28,7 @@ pub enum TipControl {
 }
 use tracing::debug;
 use tracing::warn;
-impl<'a, T> MsgDBHandle<'a, T>
+impl<T> MsgDBHandle<T>
 where
     T: handle_type::Get + handle_type::Insert,
 {

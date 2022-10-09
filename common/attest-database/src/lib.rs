@@ -9,6 +9,8 @@ use sapio_bitcoin::{
     KeyPair,
 };
 use std::{error::Error, path::PathBuf, sync::Arc};
+use tokio::sync::Mutex;
+use tracing::trace;
 
 pub mod connection;
 pub mod db_handle;
@@ -30,9 +32,14 @@ pub async fn setup_db_at(dir: PathBuf, name: &str) -> Result<MsgDB, Box<dyn Erro
     db_file.push(name);
     db_file.set_extension("sqlite3");
     tracing::debug!("Opening Message DB at: {}", db_file.display());
-    let conn = Connection::open(db_file).unwrap();
-    let mdb = MsgDB::new(Arc::new(tokio::sync::Mutex::new(conn)));
-    mdb.get_handle().await.setup_tables();
+    let conn = || Connection::open(&db_file).unwrap();
+    let mdb = MsgDB::new(
+        (0..10)
+            .map(|_| Arc::new(tokio::sync::Mutex::new(conn())))
+            .collect(),
+    );
+    mdb.map_all_sequential(|mut h| Box::pin(async move { h.setup_tables() }))
+        .await;
     Ok(mdb)
 }
 pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgDB, Box<dyn Error>> {
@@ -47,6 +54,19 @@ pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgD
     setup_db_at(data_dir, "attestations").await
 }
 
+pub async fn setup_test_db() -> MsgDB {
+    trace!("Setting up Test DB");
+    let first = Arc::new(Mutex::new(Connection::open(":memory:").unwrap()));
+    let conn = MsgDB::new(vec![
+        first.clone(),
+        first.clone(),
+        first.clone(),
+        first.clone(),
+    ]);
+    conn.map_all_sequential(|mut h| Box::pin(async move { h.setup_tables() }))
+        .await;
+    conn
+}
 pub fn generate_new_user<C: Signing, M: AttestEnvelopable, Im: Into<M>>(
     secp: &Secp256k1<C>,
     init: Im,
