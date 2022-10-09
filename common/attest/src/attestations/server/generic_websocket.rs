@@ -31,7 +31,6 @@ where
     /// Gracefully close this WebSocket.
     #[must_use]
     fn t_close(self) -> Pin<Box<dyn Future<Output = Result<(), axum::Error>> + Send>>;
-
 }
 
 impl WebSocketFunctionality for WebSocket {

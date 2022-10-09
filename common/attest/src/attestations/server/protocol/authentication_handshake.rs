@@ -2,8 +2,7 @@ use super::super::generic_websocket::WebSocketFunctionality;
 use super::AttestProtocolError;
 use super::GlobalSocketState;
 use super::ServiceIDBuilder;
-use crate::attestations::client::OpenState;
-use crate::attestations::client::ProtocolReceiver;
+
 use crate::attestations::client::ServiceUrl;
 use crate::globals::Globals;
 use axum::extract::ws::Message;
@@ -13,12 +12,12 @@ use sapio_bitcoin::hashes::sha256;
 use sapio_bitcoin::hashes::Hash;
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
-use tracing::debug;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::debug;
 
 use tokio_tungstenite::tungstenite::protocol::Role;
-use tracing::{trace, warn};
+use tracing::trace;
 
 fn new_cookie() -> [u8; 32] {
     let mut rng = rand::thread_rng();
@@ -168,8 +167,8 @@ pub async fn handshake_protocol<W: WebSocketFunctionality>(
 ) -> Result<Option<ServiceUrl>, AttestProtocolError> {
     trace!(protocol = "handshake", ?role, "Starting Handshake");
     let res = match role {
-        (Role::Server) => handshake_protocol_server(g, socket, gss).await.map(Some),
-        (Role::Client) => handshake_protocol_client(g, socket, gss)
+        Role::Server => handshake_protocol_server(g, socket, gss).await.map(Some),
+        Role::Client => handshake_protocol_client(g, socket, gss)
             .await
             .map(|()| None),
     };

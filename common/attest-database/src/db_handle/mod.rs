@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use super::sql_serializers::{self};
 use rusqlite::{types::FromSql, Connection, ToSql};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{MutexGuard, OwnedMutexGuard};
+use tokio::sync::OwnedMutexGuard;
 
 pub mod create;
 pub mod get;

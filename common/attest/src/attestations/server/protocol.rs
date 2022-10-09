@@ -2,10 +2,10 @@ use self::authentication_handshake::MessageExt;
 
 use super::super::query::Tips;
 use super::generic_websocket::WebSocketFunctionality;
-use crate::attestations::client::new_protocol_chan;
+
 use crate::attestations::client::AnySender;
 use crate::attestations::client::OpenState;
-use crate::attestations::client::ProtocolReceiver;
+
 use crate::attestations::client::ProtocolReceiverMut;
 use crate::attestations::client::ServiceUrl;
 use crate::control::query::Outcome;
@@ -252,7 +252,7 @@ pub async fn run_protocol_inner<W: WebSocketFunctionality>(
     role: Role,
     peer_name_in: Option<ServiceUrl>,
 ) -> Result<&'static str, AttestProtocolError> {
-    let mut peer_name =
+    let peer_name =
         authentication_handshake::handshake_protocol(g.clone(), socket, &mut gss, role).await?;
 
     let peer_name = match (role, peer_name, peer_name_in) {

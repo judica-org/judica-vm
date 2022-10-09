@@ -5,7 +5,7 @@ use super::AttestationClient;
 use super::OpenState;
 use super::PeerState;
 use super::ProtocolChan;
-use super::ProtocolReceiver;
+
 use super::ServiceUrl;
 use crate::globals::Globals;
 use reqwest::Client;
@@ -43,7 +43,7 @@ impl AttestationClient {
     pub async fn set_conn_pending(&self, svc: &ServiceUrl) -> bool {
         let mut f = self.connections.write().await;
         let x = f.get_mut(svc);
-        match  x {
+        match x {
             Some(v @ PeerState::Closed) => {
                 trace!(?svc, "Client Connection Closed");
                 *v = PeerState::Pending;
@@ -123,9 +123,7 @@ impl AttestationClient {
             let s = self.conn_already_exists(svc).await;
             match s {
                 PeerState::Open(s) => return s,
-                PeerState::Pending => {
-                    tokio::time::sleep(Duration::from_secs(1)).await
-                }
+                PeerState::Pending => tokio::time::sleep(Duration::from_secs(1)).await,
                 PeerState::Closed => {
                     if !self.set_conn_pending(svc).await {
                         continue;

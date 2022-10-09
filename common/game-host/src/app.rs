@@ -20,7 +20,7 @@ use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{error::Error, net::SocketAddr, sync::Arc, thread::spawn};
+use std::{error::Error, net::SocketAddr, sync::Arc};
 use tokio::{sync::Mutex, task::spawn_blocking};
 use tower_http::cors::{Any, CorsLayer};
 mod routes;

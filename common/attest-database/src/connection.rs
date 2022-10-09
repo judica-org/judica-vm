@@ -1,12 +1,12 @@
 use super::db_handle::MsgDBHandle;
 use crate::db_handle::handle_type::{self, All};
 use rusqlite::Connection;
-use sapio_bitcoin::secp256k1::rand::{seq::SliceRandom, thread_rng, Rng, ThreadRng};
+use sapio_bitcoin::secp256k1::rand::{seq::SliceRandom, thread_rng};
 use std::{marker::PhantomData, pin::Pin, sync::Arc};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 #[derive(Clone)]
-pub struct MsgDB(Arc<(Vec<Arc<Mutex<Connection>>>)>);
+pub struct MsgDB(Arc<Vec<Arc<Mutex<Connection>>>>);
 
 impl MsgDB {
     pub fn new(db: Vec<Arc<Mutex<Connection>>>) -> Self {
@@ -38,7 +38,7 @@ impl MsgDB {
         let conns = &self.0;
         tracing::trace!("Getting Read Handle to DB");
         // try N random locks
-        for lock in 1..conns.len() {
+        for _lock in 1..conns.len() {
             let lock = SliceRandom::choose(&conns[1..], &mut thread_rng())
                 .expect("conns known to be >= 2 in length");
             if let Ok(l) = lock.clone().try_lock_owned() {

@@ -2,7 +2,7 @@ use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_database::setup_test_db;
 use attest_util::bitcoin::BitcoinConfig;
-use rusqlite::Connection;
+
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::Rng;
 use serde::Deserialize;
@@ -11,7 +11,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
+
 use tokio::time::{Interval, MissedTickBehavior};
 
 pub(crate) const fn default_port() -> u16 {

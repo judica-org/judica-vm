@@ -10,10 +10,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::{
-    mpsc::{
-        channel, error::SendError, unbounded_channel, Receiver, Sender, UnboundedReceiver,
-        UnboundedSender,
-    },
+    mpsc::{error::SendError, unbounded_channel, UnboundedReceiver, UnboundedSender},
     oneshot, Mutex, Notify, RwLock,
 };
 use tracing::warn;
@@ -101,7 +98,7 @@ impl ProtocolReceiver {
     }
 }
 
-pub fn new_protocol_chan(p: usize) -> (ProtocolChan, ProtocolReceiver) {
+pub fn new_protocol_chan(_p: usize) -> (ProtocolChan, ProtocolReceiver) {
     let (latest_tips_tx, latest_tips_rx) = unbounded_channel();
     let (specific_tips_tx, specific_tips_rx) = unbounded_channel();
     let (post_tx, post_rx) = unbounded_channel();
