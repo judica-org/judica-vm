@@ -42,7 +42,6 @@ use crate::MoveEnvelope;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use std::any::Any;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -59,8 +58,7 @@ use tracing::trace;
 pub enum LogEvent {
     GameMove(GameMove),
     MoveRejectReason(MoveRejectReason),
-    // TradeError(TradeError),
-    // Other(serde_json::Value)
+    Other(serde_json::Value),
 }
 
 #[derive(Serialize, Clone, Debug, JsonSchema)]
