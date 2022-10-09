@@ -11,7 +11,7 @@ export function ChatLog({ chat_log }: { chat_log: [number, string, string][] }) 
     }, [chat_messages])
 
     return <div>
-        <Typography variant="h4" sx={{ textDecoration: 'underline' }}>Chat</Typography>
+        <Typography className="ChatTitle" variant="h4" >Chat</Typography>
         <Divider />
         <div className="ChatLogScrollBox">
             {chat_messages && chat_messages.map(([a, b, c]) => {

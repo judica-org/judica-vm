@@ -26,6 +26,16 @@ pub enum SanitizationError {
     InvalidUser(EntityID),
     MintScaleIsZero,
 }
+
+impl JsonSchema for SanitizationError {
+    fn schema_name() -> String {
+        "SanitizationError".into()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        String::json_schema(gen)
+    }
+}
 pub trait Sanitizable {
     type Output;
     type Context;

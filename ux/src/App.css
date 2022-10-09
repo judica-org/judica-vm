@@ -2,8 +2,18 @@
     text-align: center;
     display: flex;
     flex-direction: column;
-    /* grid-template-columns: 1fr 1fr; */
+    width: fit-content;
     height: 100%;
+}
+
+.InventoryTitle {
+    padding: 1em;
+    background-color: lightgreen;
+}
+
+.MaterialsMarketTitle {
+    padding: 1em;
+    background-color: coral;
 }
 
 .Content {
@@ -49,4 +59,17 @@
 .PlantTypes {
     display: flex;
     flex-direction: row;
+}
+
+.ticker {
+    display: flex;
+    background-color: greenyellow;
+    position: relative;
+    bottom: 0;
+    right: 0;
+    width: 100%
+}
+
+.StatusTickerText {
+    white-space: nowrap;
 }

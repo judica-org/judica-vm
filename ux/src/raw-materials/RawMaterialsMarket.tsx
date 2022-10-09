@@ -15,11 +15,12 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
       <div className='materials-market-container'>
         <Card className={'card'}>
           <CardHeader
-            className={'root'}
+            className={"MaterialsMarketTitle"}
             title={'Raw Meterials Market'}
             subheader={'Buy and sell resources to build power plants'}
           />
           <CardContent className={'content'}>
+            <Divider/>
             <Table>
               <TableHead>
                 <TableRow>

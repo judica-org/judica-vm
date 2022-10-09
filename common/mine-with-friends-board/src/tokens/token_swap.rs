@@ -163,7 +163,7 @@ pub(crate) struct ConstantFunctionMarketMaker {
     pub(crate) markets: BTreeMap<TradingPairID, ConstantFunctionMarketMakerPair>,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, JsonSchema)]
 pub enum TradeError {
     InvalidTrade(String),
     InsufficientTokens(String),

@@ -1,13 +1,56 @@
+import { BuyNFTs, MintPowerPlantNFT, PurchaseMaterialsThenMintPowerPlantNFT, RemoveTokens, SellNFTs, SendALoggedChatMessageToAllPlayers, SendCoins, TradeCoins } from "./GameMove"
+
 /**
  * an EntityID is just a "pointer" we assign to all different types of things in our game, e.g. - Users - Token Contracts - NFTs - etc
  *
  * EntityIDs are global and unique within the game state
  */
 export type EntityID = string
+export type LogEvent =
+   | (
+       | {
+           heartbeat: Heartbeat
+         }
+       | TradeCoins
+       | BuyNFTs
+       | SellNFTs
+       | SendCoins
+       | RemoveTokens
+       | SendALoggedChatMessageToAllPlayers
+       | MintPowerPlantNFT
+       | PurchaseMaterialsThenMintPowerPlantNFT
+     )
+   | (
+       | "NoSuchUser"
+       | {
+           GameIsFinished: FinishReason
+         }
+       | {
+           MoveSanitizationError: SanitizationError
+         }
+       | {
+           TradeRejected: TradeError
+         }
+     )
 /**
  * Allocator which can assign IDs sequentially
  */
 export type EntityIDAllocator = number
+export type Heartbeat = []
+export type FinishReason =
+   | "TimeExpired"
+   | {
+       DominatingPlayer: EntityID
+     }
+ export type SanitizationError = string
+ export type TradeError =
+   | "MarketSlipped"
+   | {
+       InvalidTrade: string
+     }
+   | {
+       InsufficientTokens: string
+     }
 export type PlantType = "Solar" | "Hydro" | "Flare"
 export type TradingPairID = string
 export type SteelVariety = "Structural"
@@ -62,6 +105,8 @@ export interface GameBoard {
      */
     concrete_token_id: EntityID
     elapsed_time: number
+    event_log: [number, EntityID, LogEvent][]
+    event_log_counter: number
     finish_time: number
     mining_subsidy: number
     nft_sales: NFTSaleRegistry
