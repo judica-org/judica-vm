@@ -105,7 +105,7 @@ export interface GameBoard {
      */
     concrete_token_id: EntityID
     elapsed_time: number
-    event_log: [number, LogEvent][]
+    event_log: [number, EntityID, LogEvent][]
     event_log_counter: number
     finish_time: number
     mining_subsidy: number

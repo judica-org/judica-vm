@@ -110,7 +110,7 @@ pub struct GameBoard {
     pub ticks: BTreeMap<EntityID, Tick>,
     pub chat: VecDeque<(u64, EntityID, String)>,
     pub chat_counter: u64,
-    pub event_log: VecDeque<(u64, LogEvent)>,
+    pub event_log: VecDeque<(u64, EntityID, LogEvent)>,
     pub event_log_counter: u64,
     pub(crate) plant_prices: PowerPlantPrices,
 }
@@ -483,11 +483,11 @@ impl GameBoard {
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         trace!(?mv, "Attempting Inner Move");
-        self.add_to_event_log(LogEvent::GameMove(mv.clone()));
+        self.add_to_event_log(from, LogEvent::GameMove(mv.clone()));
         match self.play_inner(mv, from) {
             Ok(_) => info!("Move Successfully Made"),
             Err(e) => {
-                self.add_to_event_log(LogEvent::MoveRejectReason(e.clone()));
+                self.add_to_event_log(from, LogEvent::MoveRejectReason(e.clone()));
                 return Err(e);
             }
         }
@@ -644,16 +644,16 @@ impl GameBoard {
         self.chat.clone()
     }
 
-    pub fn get_ux_event_log(&self) -> VecDeque<(u64, LogEvent)> {
+    pub fn get_ux_event_log(&self) -> VecDeque<(u64, EntityID, LogEvent)> {
         self.event_log.clone()
     }
 
-    pub(crate) fn add_to_event_log(&mut self, e: LogEvent) {
+    pub(crate) fn add_to_event_log(&mut self, from: EntityID, e: LogEvent) {
         self.event_log_counter += 1;
         if self.event_log.len() >= 1000 {
             self.event_log.pop_front();
         }
-        self.event_log.push_back((self.event_log_counter, e))
+        self.event_log.push_back((self.event_log_counter, from, e))
     }
 
     pub fn get_ux_materials_prices(&mut self) -> Vec<UXMaterialsPriceData> {
