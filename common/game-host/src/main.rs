@@ -169,7 +169,6 @@ async fn game(
                 ).and( Ok((all_unprocessed_messages_tmp_in, seq_tmp_in)))
 
             }
-            
             ).await??;
         seq = seq_tmp_out;
         std::mem::swap(

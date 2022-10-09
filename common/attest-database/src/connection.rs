@@ -18,7 +18,7 @@ impl MsgDB {
 
     pub async fn map_all_sequential<F>(&self, f: F)
     where
-        F: Fn(MsgDBHandle<All>) -> Pin<Box<dyn std::future::Future<Output = ()>+Send>>,
+        F: Fn(MsgDBHandle<All>) -> Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
     {
         for conn in self.0.iter() {
             let h = MsgDBHandle(conn.clone().lock_owned().await, PhantomData::default());
