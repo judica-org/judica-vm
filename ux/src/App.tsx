@@ -1,7 +1,6 @@
-import { appWindow } from '@tauri-apps/api/window';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect} from 'react';
 import './App.css';
-import EnergyExchange, { NFTSale } from './energy-exchange/EnergyExchange';
+import EnergyExchange from './energy-exchange/EnergyExchange';
 import WorkingGlobe from './WorkingGlobe';
 import RawMaterialsMarket from './raw-materials/RawMaterialsMarket';
 import { tauri_host } from './tauri_host';
@@ -12,10 +11,11 @@ import { listen } from '@tauri-apps/api/event';
 import { Box, Tab, Tabs } from '@mui/material';
 import React from 'react';
 import DrawerAppBar from './menu-bar/MenuDrawer';
-import { EntityID, TradingPairID } from './Types/GameMove';
-import { ManagePlant, PlantLabel } from './manage-plant/ManagePlant';
+import { EntityID } from './Types/GameMove';
+import { ManagePlant} from './manage-plant/ManagePlant';
 import MoveForm from './move-form/MoveForm';
 import { EmittedAppState, GameBoard, UXPlantData } from './Types/Gameboard';
+import { EventLog } from './event-log/EventLog';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export const PLANT_SELECTED_EVENT = "PlantSelected";
@@ -122,7 +122,9 @@ function App() {
   useEffect(() => {
     let cancel = setTimeout(() => { }, 0);
     const callback = async () => {
-      set_root_state(await tauri_host.game_synchronizer());
+      const newLocal = await tauri_host.game_synchronizer();
+      set_root_state(newLocal);
+      console.log(["root-state"], newLocal);
       cancel = setTimeout(callback, 5000);
     };
     callback();
@@ -154,10 +156,12 @@ function App() {
   const game_host_service = root_state?.game_host_service ?? null;
   const power_plants = root_state?.power_plants ?? [];
   const chat_log = root_state?.chat_log ?? [];
+  const game_event_log = root_state?.game_board?.event_log ?? [];
   const game_board = root_state?.game_board ?? null;
   const user_inventory = root_state?.user_inventory ?? null;
   const listings = root_state?.energy_exchange ?? [];
 
+  console.log(["game-event-log"], root_state?.game_board?.event_log || "event log is empty");
 
   useEffect(() => {
     listen("globe-location", (ev: { payload: any }) => {
@@ -192,8 +196,9 @@ function App() {
                 <Tab value={4} label="Inventory"></Tab>
                 <Tab value={5} label="Raw Move"></Tab>
                 <Tab value={6} label="Chat"></Tab>
-                <Tab value={7} label="Board JSON"></Tab>
+                <Tab value={7} label="Event Log"></Tab>
                 <Tab value={8} label="Manage Plant"></Tab>
+                <Tab value={9} label="Board JSON"></Tab>
               </Tabs>
             </Box>
             <Panel index={1} current_index={current_tab} >
@@ -215,7 +220,7 @@ function App() {
               <Chat chat_log={chat_log}></Chat>
             </Panel>
             <Panel index={7} current_index={current_tab}>
-              <ListGameBoard g={game_board}></ListGameBoard>
+              <EventLog game_event_log={game_event_log}></EventLog>
             </Panel>
             <Panel index={8} current_index={current_tab}>
               <ManagePlant
@@ -225,6 +230,9 @@ function App() {
                 power_plants={power_plants}
                 user_inventory={user_inventory}
               />
+            </Panel>
+            <Panel index={9} current_index={current_tab}>
+              <ListGameBoard g={game_board}></ListGameBoard>
             </Panel>
           </Box>
         </div>
