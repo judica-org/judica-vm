@@ -81,7 +81,7 @@ impl AttestationClient {
                         {
                             break socket;
                         }
-                        tokio::time::sleep(Duration::from_secs(1));
+                        tokio::time::sleep(Duration::from_secs(1)).await;
                     };
                     let res =
                         protocol::run_protocol(g, socket, gss, db, Role::Client, Some(rx)).await;
