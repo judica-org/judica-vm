@@ -22,7 +22,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::task::spawn_blocking;
 #[cfg(feature = "has_async")]
 use tokio::{
     spawn,
@@ -31,7 +30,7 @@ use tokio::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         Mutex, Notify,
     },
-    task::{JoinError, JoinHandle},
+    task::{spawn_blocking, JoinError, JoinHandle},
     time::sleep,
 };
 use tracing::debug;
