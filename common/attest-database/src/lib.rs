@@ -10,6 +10,7 @@ use sapio_bitcoin::{
 };
 use std::{error::Error, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
+use tracing::trace;
 
 pub mod connection;
 pub mod db_handle;
@@ -54,13 +55,18 @@ pub async fn setup_db(application: &str, prefix: Option<PathBuf>) -> Result<MsgD
 }
 
 pub async fn setup_test_db() -> MsgDB {
-    let a = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
-    let conn = MsgDB::new(vec![a.clone(), a.clone()]);
+    trace!("Setting up Test DB");
+    let first = Arc::new(Mutex::new(Connection::open(":memory:").unwrap()));
+    let conn = MsgDB::new(vec![
+        first.clone(),
+        first.clone(),
+        first.clone(),
+        first.clone(),
+    ]);
     conn.map_all_sequential(|mut h| Box::pin(async move { h.setup_tables() }))
         .await;
     conn
 }
-
 pub fn generate_new_user<C: Signing, M: AttestEnvelopable, Im: Into<M>>(
     secp: &Secp256k1<C>,
     init: Im,

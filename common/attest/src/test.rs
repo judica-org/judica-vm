@@ -178,7 +178,7 @@ async fn connect_and_test_nodes() {
 
         info!(checkpoint = "Created Genesis for each Node");
         // Check that each node knows about it's own genesis envelope
-        {
+        loop {
             let it = ports.iter().map(|(port, _ctrl)| {
                 let client = client.clone();
                 async move {
@@ -189,12 +189,14 @@ async fn connect_and_test_nodes() {
             });
             let resp = join_all(it).await;
             debug!("Got {:?}", resp);
-            assert_eq!(
-                resp.into_iter()
-                    .flat_map(|r| r.unwrap())
-                    .collect::<Vec<_>>(),
-                genesis_envelopes
-            );
+            if (resp
+                .into_iter()
+                .flat_map(|r| r.unwrap())
+                .collect::<Vec<_>>()
+                == genesis_envelopes)
+            {
+                break
+            }
         }
         info!(checkpoint = "Each Node Has Own Genesis");
 

@@ -385,11 +385,7 @@ fn make_test_user(
 }
 
 async fn setup_db() -> MsgDB {
-    let a = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
-    let conn = MsgDB::new(vec![a.clone(), a.clone()]);
-    conn.map_all_sequential(|mut h| Box::pin(async move { h.setup_tables() }))
-        .await;
-    conn
+    setup_test_db().await
 }
 
 #[test(tokio::test)]
