@@ -29,7 +29,6 @@ use sapio_bitcoin::secp256k1::Secp256k1;
 use sapio_bitcoin::KeyPair;
 use sapio_bitcoin::XOnlyPublicKey;
 use std::sync::Arc;
-use tauri::async_runtime::spawn_blocking;
 use tauri::async_runtime::Mutex;
 use tauri::State;
 use tokio::spawn;
@@ -106,17 +105,19 @@ pub(crate) async fn make_new_chain_genesis(
     .err_to_string()?;
     let msgdb = db.get().await.err_to_string()?;
     let mut handle = msgdb.get_handle_all().await;
+    let secp = secp.inner().clone();
     spawn_blocking(move || {
         // TODO: Transaction?
         handle.save_keypair(kp).err_to_string()?;
         let k = kp.public_key().x_only_public_key().0;
-        handle.save_nonce_for_user_by_key(next_nonce, secp.inner(), k);
+        handle.save_nonce_for_user_by_key(next_nonce, &secp, k);
 
-        let envelope = genesis.self_authenticate(secp.inner()).err_to_string()?;
+        let envelope = genesis.self_authenticate(&secp).err_to_string()?;
         handle.insert_user_by_genesis_envelope(nickname, envelope.clone());
-        envelope
+        Ok::<_, String>(envelope)
     })
     .await
+    .map_err(|e| e.to_string())?
     .map_err(|e| e.to_string())
 }
 pub(crate) async fn make_new_chain_inner(
@@ -241,7 +242,7 @@ pub(crate) async fn switch_to_game_inner(
                     .ok_or("No Genesis found for selected Key")
             })
             .await
-            .or(Err("DB Panic"))?
+            .or(Err("DB Panic"))??
         };
         tracing::trace!(?genesis, "Found Genesis");
         let game_setup = {

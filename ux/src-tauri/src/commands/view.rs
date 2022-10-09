@@ -113,9 +113,15 @@ async fn game_synchronizer_inner_loop(
     window: &Window,
 ) -> Result<EmittedAppState, SyncError> {
     let (db_connection, available_sequencers, user_keys) = {
-        let l = d.state.lock().await;
-        if let Some(g) = l.as_ref() {
-            let handle = g.db.get_handle_read().await;
+        let handle = if let Some(l) = d.state.lock().await.as_ref() {
+            let name: String = l.name.clone();
+            let path_buf: Option<PathBuf> = l.prefix.clone();
+            let fut = l.db.get_handle_read();
+            Some((fut.await, name, path_buf))
+        } else {
+            None
+        };
+        if let Some((handle, name, prefix)) = handle {
             spawn_blocking(move || {
                 let sequencer_keys: Vec<(XOnlyPublicKey, GameSetup)> = handle
                     .get_all_genesis::<Channelized<BroadcastByHost>>()
@@ -136,14 +142,10 @@ async fn game_synchronizer_inner_loop(
                     .map(|e| e.header().key())
                     .filter(|k| v.contains_key(k))
                     .collect();
-                (
-                    Some((g.name.clone(), g.prefix.clone())),
-                    sequencer_keys,
-                    user_keys,
-                )
+                Ok::<_, SyncError>((Some((name, prefix)), sequencer_keys, user_keys))
             })
             .await
-            .map_err(|_| SyncError::DatabaseError)?
+            .map_err(|_| SyncError::DatabaseError)??
         } else {
             (None, vec![], vec![])
         }
