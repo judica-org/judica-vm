@@ -195,7 +195,7 @@ async fn connect_and_test_nodes() {
                 .collect::<Vec<_>>()
                 == genesis_envelopes)
             {
-                break
+                break;
             }
         }
         info!(checkpoint = "Each Node Has Own Genesis");

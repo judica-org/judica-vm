@@ -343,7 +343,10 @@ pub async fn run_protocol_inner<W: WebSocketFunctionality>(
     }
 }
 
-pub async fn preferred_role(g: Arc<Globals>, peer_name: &ServiceUrl) -> Result<Role, AttestProtocolError> {
+pub async fn preferred_role(
+    g: Arc<Globals>,
+    peer_name: &ServiceUrl,
+) -> Result<Role, AttestProtocolError> {
     let my_name = get_my_name(&g).await?;
     let prefer_role = if my_name < *peer_name {
         Role::Client
