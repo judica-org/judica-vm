@@ -42,6 +42,7 @@ use crate::MoveEnvelope;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
+use std::any::Any;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -52,6 +53,15 @@ use tokens::TokenPointer;
 use tokens::TokenRegistry;
 use tracing::info;
 use tracing::trace;
+
+#[derive(Debug, Serialize, Clone, JsonSchema)]
+#[serde(tag = "event_type")]
+pub enum LogEvent {
+    GameMove(GameMove),
+    MoveRejectReason(MoveRejectReason),
+    // TradeError(TradeError),
+    // Other(serde_json::Value)
+}
 
 #[derive(Serialize, Clone, Debug, JsonSchema)]
 pub struct UXUserInventory {
@@ -100,6 +110,8 @@ pub struct GameBoard {
     pub ticks: BTreeMap<EntityID, Tick>,
     pub chat: VecDeque<(u64, EntityID, String)>,
     pub chat_counter: u64,
+    pub event_log: VecDeque<(u64, LogEvent)>,
+    pub event_log_counter: u64,
     pub(crate) plant_prices: PowerPlantPrices,
 }
 
@@ -147,13 +159,13 @@ impl GameSetup {
     }
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, JsonSchema)]
 pub enum FinishReason {
     TimeExpired,
     DominatingPlayer(EntityID),
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, JsonSchema)]
 pub enum MoveRejectReason {
     NoSuchUser,
     GameIsFinished(FinishReason),
@@ -272,6 +284,8 @@ impl GameBoard {
             ticks: Default::default(),
             chat: VecDeque::with_capacity(1000),
             chat_counter: 0,
+            event_log: VecDeque::with_capacity(1000),
+            event_log_counter: 0,
             plant_prices,
         };
         setup.setup_game(&mut g);
@@ -469,8 +483,11 @@ impl GameBoard {
 
         // TODO: verify the key/sig/d combo (or it happens during deserialization of Verified)
         trace!(?mv, "Attempting Inner Move");
-        self.play_inner(mv, from)?;
-        info!("Move Successfully Made");
+        self.add_to_event_log(LogEvent::GameMove(mv.clone()));
+        match self.play_inner(mv, from) {
+            Ok(_) => info!("Move Successfully Made"),
+            Err(e) => self.add_to_event_log(LogEvent::MoveRejectReason(e)),
+        }
         Ok(())
     }
 
@@ -622,6 +639,18 @@ impl GameBoard {
 
     pub fn get_ux_chat_log(&self) -> VecDeque<(u64, EntityID, String)> {
         self.chat.clone()
+    }
+
+    pub fn get_ux_event_log(&self) -> VecDeque<(u64, LogEvent)> {
+        self.event_log.clone()
+    }
+
+    pub(crate) fn add_to_event_log(&mut self, e: LogEvent) {
+        self.event_log_counter += 1;
+        if self.event_log.len() >= 1000 {
+            self.event_log.pop_front();
+        }
+        self.event_log.push_back((self.event_log_counter, e))
     }
 
     pub fn get_ux_materials_prices(&mut self) -> Vec<UXMaterialsPriceData> {
