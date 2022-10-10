@@ -428,10 +428,24 @@ impl GameBoard {
                     })
                     .collect::<Vec<_>>();
                 let total = balances.iter().map(|(_, v)| v).sum::<u128>();
-                let mut rewards: Vec<(String, u64)> = balances
-                    .into_iter()
-                    .map(|(k, v)| (k, ((v * bounty as u128) / total) as u64))
-                    .collect();
+                let mut rewards: Vec<(String, u64)> = if total == 0 {
+                    let players = balances.len() as u64;
+                    balances
+                        .into_iter()
+                        .map(|(k, v)| {
+                            #[allow(clippy::integer_division)]
+                            (k, bounty / players)
+                        })
+                        .collect()
+                } else {
+                    balances
+                        .into_iter()
+                        .map(|(k, v)| {
+                            #[allow(clippy::integer_division)]
+                            (k, ((v * bounty as u128) / total) as u64)
+                        })
+                        .collect()
+                };
                 let excess = bounty - rewards.iter().map(|(_, v)| v).sum::<u64>();
                 if let Some(m) = rewards.first_mut() {
                     m.1 += excess;
@@ -441,6 +455,7 @@ impl GameBoard {
             FinishReason::DominatingPlayer(id) => {
                 let key = self.users[&id].key.clone();
                 // 75%
+                #[allow(clippy::integer_division)]
                 let twentyfivepercent = bounty / 4;
                 v.push((key, (bounty - twentyfivepercent)));
                 // 25%
