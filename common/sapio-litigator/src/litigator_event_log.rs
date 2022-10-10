@@ -3,8 +3,8 @@ use super::OK_T;
 use crate::LitigatedContractInstanceState;
 use crate::{config, events, ext::CompiledExt, universe::extractors::sequencer::get_game_setup};
 use attest_database::db_handle::create::TipControl;
-use bitcoin::consensus::Encodable;
 use bitcoin::consensus::serialize as btc_ser;
+use bitcoin::consensus::Encodable;
 use bitcoin::hashes::hex::ToHex;
 use bitcoin::{
     blockdata::script::Script,
@@ -25,6 +25,8 @@ use event_log::{
 };
 use events::convert_setup_to_contract_args;
 use events::ModuleRepo;
+use futures::stream::FuturesOrdered;
+use futures::stream::FuturesUnordered;
 use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
@@ -68,12 +70,23 @@ pub(crate) async fn event_loop(
         match rx.recv().await {
             Some(events::Event::EmittedPSBTVia(psbt, b)) => {
                 info!(?instance, emitter = b.to_hex(), "EmittedPSBTVia");
-                trace!(?instance, emitter = b.to_hex(), ?psbt,  "EmittedPSBTVia");
+                trace!(?instance, emitter = b.to_hex(), ?psbt, "EmittedPSBTVia");
                 // Nothing to do -- this action is mostly here for de-deuplication
             }
             Some(events::Event::TransactionFinalized(s, tx)) => {
-                info!(?instance, s, tx = tx.txid().to_hex(), "TransactionFinalized");
-                trace!(?instance, s, ?tx, tx = btc_ser(&tx).to_hex(), "TransactionFinalized");
+                info!(
+                    ?instance,
+                    s,
+                    tx = tx.txid().to_hex(),
+                    "TransactionFinalized"
+                );
+                trace!(
+                    ?instance,
+                    s,
+                    ?tx,
+                    tx = btc_ser(&tx).to_hex(),
+                    "TransactionFinalized"
+                );
                 // Nothing to do -- could broadcast txn if we want, but not required
             }
             Some(events::Event::SyntheticPeriodicActions(time)) => {
@@ -316,9 +329,6 @@ pub(crate) async fn process_psbt_fail_ok(
     metadata: sapio::template::TemplateMetadata,
     evlog_group_id: OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let broadcast_key = keys
-        .get(&globals.config.psbt_broadcast_key)
-        .ok_or("Broadcast Key Unknown")?;
     let psbt = PartiallySignedTransaction::from_str(&psbt)?;
     let skeys = extract_keys_for_simp(metadata, keys.clone())?;
     let signing_key = SigningKey(skeys);
@@ -332,53 +342,75 @@ pub(crate) async fn process_psbt_fail_ok(
     if signed == psbt {
         return OK_T;
     }
-    let keypair = KeyPair::from_secret_key(&globals.secp, broadcast_key);
+    // TODO: Separate broadcast_keys from skeys
+    // let broadcast_key = keys
+    //     .get(&globals.config.psbt_broadcast_key)
+    //     .ok_or("Broadcast Key Unknown")?;
+    // let keypair = KeyPair::from_secret_key(&globals.secp, broadcast_key);
 
     let tx = signed.clone().extract_tx();
     let txid = tx.txid();
     let txid_s = txid.to_string();
 
-    let emitter = keypair.x_only_public_key().0;
-    // TODO: confirm serialization is deterministic?
-    let psbt_hash = sha256::Hash::hash(signed.to_string().as_bytes());
-    let o = events::TaggedEvent(
-        events::Event::EmittedPSBTVia(PsbtString(signed.clone()), emitter),
-        Some(events::Tag::ScopedValue(
-            "signed_psbt".into(),
-            format!("emit_by:{}:psbt_hash:{}", emitter, psbt_hash),
-        )),
-    );
-    let mut handle = globals.msg_db.get_handle_all().await;
-    let mut accessor = globals.evlog.get_accessor().await;
+    let data = signed.to_string();
+    let psbt_hash = sha256::Hash::hash(&data.as_bytes());
+    let tasks = FuturesUnordered::new();
+    for epk in signing_key.0 {
+        // BEGIN ERROR FREE SECTION:
+        let keypair = epk.to_keypair(&globals.secp);
+        let emitter = keypair.x_only_public_key().0;
+        // TODO: confirm serialization is deterministic?
+        let o = events::TaggedEvent(
+            events::Event::EmittedPSBTVia(PsbtString(signed.clone()), emitter),
+            Some(events::Tag::ScopedValue(
+                "signed_psbt".into(),
+                format!("emit_by:{}:psbt_hash:{}", emitter, psbt_hash),
+            )),
+        );
+        let mut handle = globals.msg_db.get_handle_all().await;
+        let mut accessor = globals.evlog.get_accessor().await;
 
-    spawn_blocking(move || {
-        let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
-        let v2 = v?;
-        match v2 {
-            Err(Idempotent::AlreadyExists) => Ok(()),
-            Ok((_oid, txn)) => {
-                handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
-                    ParticipantAction::PsbtSigningCoordination(Multiplexed {
-                        channel: txid_s,
-                        data: PsbtString(signed),
-                    }),
-                    &keypair,
-                    &globals.secp,
-                    None,
-                    TipControl::NoTips,
-                )?;
-                // Technically there is a tiny risk that we succeed at inserting the
-                // Signed PSBT but do not succeed at committing the event log entry.
-                // In this case, we will see a second entry for the same psbt, which
-                // is still not a logic error, fortunately.
-                //
-                // This could be fixed with some more clever logic in both DBs.
-                txn.commit()?;
-                Ok(())
-            }
-        }
-    })
-    .await?
+        let globals = globals.clone();
+        let signed = signed.clone();
+        let txid_s = txid_s.clone();
+        // END ERROR FREE SECTION:
+        tasks.push(
+            spawn_blocking(move || {
+                let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
+                let v2 = v?;
+                match v2 {
+                    Err(Idempotent::AlreadyExists) => Ok(()),
+                    Ok((_oid, txn)) => {
+                        handle
+                            .retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
+                                ParticipantAction::PsbtSigningCoordination(Multiplexed {
+                                    channel: txid_s,
+                                    data: PsbtString(signed),
+                                }),
+                                &keypair,
+                                &globals.secp,
+                                None,
+                                TipControl::NoTips,
+                            )?;
+                        // Technically there is a tiny risk that we succeed at inserting the
+                        // Signed PSBT but do not succeed at committing the event log entry.
+                        // In this case, we will see a second entry for the same psbt, which
+                        // is still not a logic error, fortunately.
+                        //
+                        // This could be fixed with some more clever logic in both DBs.
+                        txn.commit()?;
+                        Ok::<(), Box<dyn Error + Sync + Send>>(())
+                    }
+                }
+            }),
+        );
+    }
+    for task in tasks {
+        let r = task.await?;
+        trace!(?r, "Error From Task Joining");
+        r.map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// extract all the keys named via the AutoBroadcast SIMP and their roles within

@@ -172,6 +172,7 @@ async fn litigate_contract(globals: Arc<GlobalLitigatorState>, key: XOnlyPublicK
     };
 
     start_extractors(
+        key,
         globals.clone(),
         state.new_synthetic_event.clone(),
         evlog_group_id,
@@ -212,6 +213,7 @@ pub type TaskSet = FuturesUnordered<
     >,
 >;
 async fn start_extractors(
+    sequencer_key: XOnlyPublicKey,
     globals: Arc<GlobalLitigatorState>,
     new_synthetic_event: Arc<Notify>,
     evlog_group_id: OccurrenceGroupID,
@@ -235,7 +237,7 @@ async fn start_extractors(
         ),
     ));
     universe::extractors::sequencer::sequencer_extractor(
-        config.oracle_key,
+        sequencer_key,
         msg_db.clone(),
         evlog.clone(),
         evlog_group_id,

@@ -8,9 +8,6 @@
     "app_instance": "testing-$PLAYER",
     "event_log": {
         "app_name": "testing-$PLAYER",
-        "group": "$PLAYER-event-group"
     },
     "db_app_name": "testing-$PLAYER",
-    "contract_location": "$WASM_MODULE",
-    "oracle_key": "$SEQUENCER_KEY"
 }

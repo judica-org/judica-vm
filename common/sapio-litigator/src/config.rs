@@ -18,9 +18,6 @@ pub(crate) struct Config {
     pub(crate) bitcoin: BitcoinConfig,
     pub(crate) app_instance: String,
     pub(crate) event_log: EventLogConfig,
-    // TODO: Delete
-    pub(crate) oracle_key: XOnlyPublicKey,
-    pub(crate) psbt_broadcast_key: XOnlyPublicKey,
 }
 
 #[derive(Deserialize)]
