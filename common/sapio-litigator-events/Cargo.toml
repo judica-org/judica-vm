@@ -33,3 +33,5 @@ path = "../simps"
 
 [dependencies.game-player-messages]
 path = "../game-player-messages"
+[dependencies.mine-with-friends-board]
+path = "../mine-with-friends-board"

@@ -1,3 +1,6 @@
+use std::str::FromStr;
+
+use bitcoin::Amount;
 use bitcoin::OutPoint;
 use bitcoin::Transaction;
 use bitcoin::XOnlyPublicKey;
@@ -7,11 +10,17 @@ use event_log::db_handle::accessors::occurrence::OccurrenceConversionError;
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
 use game_player_messages::PsbtString;
 use ruma_serde::CanonicalJsonValue;
+use sapio::util::amountrange::AmountF64;
+use sapio_base::plugin_args::ContextualArguments;
+use sapio_base::plugin_args::CreateArgs;
 use sapio_base::serialization_helpers::SArc;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use simps::EventKey;
+use simps::GameKernel;
+use simps::GameStarted;
+use simps::PK;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Event {
@@ -73,4 +82,30 @@ impl ToOccurrence for TaggedEvent {
             .map_err(OccurrenceConversionError::DeserializationError)?;
         Ok(TaggedEvent(v, tag))
     }
+}
+
+pub fn convert_setup_to_contract_args(
+    setup: mine_with_friends_board::game::GameSetup,
+    oracle_key: &XOnlyPublicKey,
+) -> Result<CreateArgs<Value>, bitcoin::secp256k1::Error> {
+    let amt_per_player: AmountF64 =
+        AmountF64::from(Amount::from_sat(100000 / setup.players.len() as u64));
+    let g = GameKernel {
+        game_host: PK(*oracle_key),
+        players: setup
+            .players
+            .iter()
+            .map(|p| Ok((PK(XOnlyPublicKey::from_str(p)?), amt_per_player)))
+            .collect::<Result<_, bitcoin::secp256k1::Error>>()?,
+        timeout: setup.finish_time,
+    };
+    let args = CreateArgs {
+        arguments: serde_json::to_value(&GameStarted { kernel: g }).unwrap(),
+        context: ContextualArguments {
+            network: bitcoin::network::constants::Network::Bitcoin,
+            amount: Amount::from_sat(100000),
+            effects: Default::default(),
+        },
+    };
+    Ok(args)
 }

@@ -8,17 +8,17 @@ use bitcoin::{
     psbt::PartiallySignedTransaction,
     secp256k1::{All, Secp256k1},
     util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint},
-    Amount, KeyPair, OutPoint, XOnlyPublicKey,
+    KeyPair, OutPoint, XOnlyPublicKey,
 };
 use emulator_connect::CTVEmulator;
 use event_log::{
     connection::EventLog,
     db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
 };
+use events::convert_setup_to_contract_args;
 use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
-use sapio::util::amountrange::AmountF64;
 use sapio_base::{
     effects::{EditableMapEffectDB, PathFragment},
     serialization_helpers::SArc,
@@ -29,10 +29,9 @@ use sapio_psbt::SigningKey;
 use sapio_wasm_plugin::{
     host::{plugin_handle::ModuleLocator, WasmPluginHandle},
     plugin_handle::PluginHandle,
-    ContextualArguments, CreateArgs,
 };
 use serde_json::Value;
-use simps::{self, EventKey, GameKernel, GameStarted, PK};
+use simps::{self, EventKey, PK};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::rc::Rc;
@@ -208,36 +207,7 @@ pub(crate) async fn handle_module_bytes(
         }
     };
     info!(?setup, "Game Setup");
-    let amt_per_player: AmountF64 =
-        AmountF64::from(Amount::from_sat(100000 / setup.players.len() as u64));
-    let g = GameKernel {
-        game_host: PK(config.oracle_key),
-        players: setup
-            .players
-            .iter()
-            .map(|p| Ok((PK(XOnlyPublicKey::from_str(p)?), amt_per_player)))
-            .collect::<Result<_, bitcoin::secp256k1::Error>>()
-            .map_err(|e| {
-                format!(
-                    "Failed To Make JSON {}:{}\n    Error: {:?}",
-                    file!(),
-                    line!(),
-                    e
-                )
-            })?,
-        timeout: setup.finish_time,
-    };
-    info!(?g, "Game Kernel");
-    // TODO: Make the GameStarted type unified with the first message in the
-    // sequencer / first message of all initial users?
-    let args = CreateArgs {
-        arguments: serde_json::to_value(&GameStarted { kernel: g }).unwrap(),
-        context: ContextualArguments {
-            network: bitcoin::network::constants::Network::Bitcoin,
-            amount: Amount::from_sat(100000),
-            effects: Default::default(),
-        },
-    };
+    let args = convert_setup_to_contract_args(setup, &config.oracle_key)?;
     info!(?args, "Contract Args Ready");
     state.contract = match module.call(root, &args) {
         Ok(c) => {

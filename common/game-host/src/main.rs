@@ -1,14 +1,18 @@
 use attest_database::setup_db;
-
 use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_messages::{
     Authenticated, CanonicalEnvelopeHash, Envelope, GenericEnvelope, WrappedJson,
 };
+use attest_util::bitcoin::BitcoinConfig;
+use emulator_connect::{CTVAvailable, CTVEmulator};
 use game_host_messages::{BroadcastByHost, Channelized};
+use sapio::contract::Compiled;
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::seq::SliceRandom;
 use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair};
+use sapio_wasm_plugin::host::plugin_handle::ModuleLocator;
+use sapio_wasm_plugin::host::WasmPluginHandle;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use std::{
@@ -29,16 +33,46 @@ pub struct Config {
     #[serde(default)]
     prefix: Option<PathBuf>,
     game_host_name: String,
+    pub(crate) bitcoin: BitcoinConfig,
+    pub(crate) contract_location: String,
+    app_instance: String,
 }
 
 fn get_config() -> Result<Arc<Config>, Box<dyn Error + Send + Sync>> {
     let config = std::env::var("GAME_HOST_CONFIG_JSON").map(|s| serde_json::from_str(&s))??;
     Ok(Arc::new(config))
 }
+
+pub(crate) fn data_dir_modules(app_instance: &str) -> PathBuf {
+    let typ = "org";
+    let org = "judica";
+    let proj = format!("sapio-game-host.{}", app_instance);
+    let proj =
+        directories::ProjectDirs::from(typ, org, &proj).expect("Failed to find config directory");
+    let mut data_dir = proj.data_dir().to_owned();
+    data_dir.push("modules");
+    data_dir
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
     let config = get_config()?;
+
+    let client = config.bitcoin.get_new_client().await?;
+    // get location of project directory modules
+    let data_dir = data_dir_modules(&config.app_instance);
+    let locator: ModuleLocator = ModuleLocator::FileName(config.contract_location.clone());
+    let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
+    let module = WasmPluginHandle::<Compiled>::new_async(
+        &data_dir,
+        &emulator,
+        locator,
+        sapio_bitcoin::Network::Bitcoin,
+        Default::default(),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
     let db = setup_db(
         &format!("attestations.{}", config.game_host_name),
         config.prefix.clone(),
