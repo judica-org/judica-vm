@@ -78,7 +78,5 @@ export const tauri_host = {
 export type FinishArgs = {
   passcode: string,
   code: string,
-  finish_time: number,
   start_amount: number,
-
 }

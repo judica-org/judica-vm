@@ -199,6 +199,9 @@ impl GameStarted {
                 .map(|PK(k)| k.to_string())
                 .collect(),
             // TODO: Should this be something else?
+            // NOTE: IF YOU CHANGE THIS YOU MUST ALSO CHANGE NewGame.tsx This
+            // should be read dynamically from somewhere, but this is a hack
+            // workaround for now
             start_amount: 100_000_000,
             finish_time: self.kernel.timeout,
         });

@@ -56,8 +56,8 @@ export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps
       await tauri_host.finalize_game({
         passcode: join_password,
         code: join_code,
-        finish_time: 60 /*minutes */ * 60 /*seconds*/ * 1000,
-        start_amount: 1_000_000
+        // NOTE: IF YOU CHANGE THIS YOU MUST ALSO CHANGE mining_game.rs
+        start_amount: 100000000
       });
 
     } catch (e) {
