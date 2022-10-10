@@ -5,12 +5,21 @@ import { UserInventory } from '../App';
 import SaleListingForm from '../sale-listing/SaleListingForm';
 import { EntityID } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
-import { UXUserInventory } from '../Types/Gameboard';
+import { UXPlantData, UXUserInventory } from '../Types/Gameboard';
+import { MoveHashboards } from '../move-hashboards/MoveHashboards';
 
 
-export const Inventory = ({ userInventory, currency }: { userInventory: UXUserInventory | null, currency: EntityID | null }) => {
-  const [selected_plant_id, set_selected_plant_id] = useState<string | null>(null);
+export const Inventory = ({ userInventory, currency, hashboard_pointer }: { userInventory: UXUserInventory | null, currency: EntityID | null, hashboard_pointer: EntityID | null }) => {
+  const [selected_plant_id_sale, set_selected_plant_id_sale] = useState<string | null>(null);
+  const [selected_plant_hashboards, set_selected_plant_hashboards] = useState<UXPlantData | null>(null);
+  const [user_hashboards, set_user_hashboards] = useState<number>(0);
 
+  useEffect(() => {
+    if (userInventory) {
+      const hashboards = userInventory.user_token_balances.find(([name, _number]) => name === "ASIC Gen 1") ?? ["ASIC Gen 1", 0];
+      set_user_hashboards(hashboards[1]);
+    }
+  }, [userInventory])
 
   return (
     <div>
@@ -21,7 +30,7 @@ export const Inventory = ({ userInventory, currency }: { userInventory: UXUserIn
             <Typography variant='h4'>Inventory</Typography>
             <Typography variant='body1'>All Assets Owned</Typography>
           </div>
-            <Divider />
+          <Divider />
 
           <Typography variant='h6'>Power Plants</Typography>
           <Table>
@@ -46,14 +55,20 @@ export const Inventory = ({ userInventory, currency }: { userInventory: UXUserIn
                   </TableCell>
                   <TableCell align="right">{plant.hashrate}</TableCell>
                   <TableCell align="right">{plant.miners}</TableCell>
-                  <TableCell align="right"><Button onClick={() => {
-                    set_selected_plant_id(plant.id);
-                  }}>List For Sale</Button></TableCell>
+                  <TableCell align="right">
+                    <Button onClick={() => {
+                      set_selected_plant_id_sale(plant.id);
+                    }}>List For Sale</Button>
+                    <Button onClick={() => {
+                      set_selected_plant_hashboards(plant);
+                    }}>Move Hashboards</Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          {selected_plant_id && currency ? <SaleListingForm nft_id={selected_plant_id} currency={currency} /> : null}
+          {selected_plant_id_sale && currency ? <SaleListingForm nft_id={selected_plant_id_sale} currency={currency} /> : null}
+          {selected_plant_hashboards && hashboard_pointer ? <MoveHashboards action={'ADD'} plant={selected_plant_hashboards} user_hashboards={user_hashboards} hashboard_pointer={hashboard_pointer}></MoveHashboards> : null}
           <Divider />
           <Typography variant='h6'>Tokens</Typography>
           <Table>

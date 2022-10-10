@@ -150,7 +150,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
           <Typography>
             {formula_result}
           </Typography>
-          <TextField label={"Slip Tolerance (e.g. 0.1 => 10%)"} type="number"
+          <TextField label={"Slip Tolerance (e.g. 10 => 10%)"} type="number"
             value={limit_pct} onChange={parse_limit_pct}></TextField>
           <Button type="submit" onClick={handle_click}>Execute {action}</Button>
         </FormControl>

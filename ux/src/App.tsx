@@ -167,7 +167,7 @@ function App() {
   const game_host_service = root_state?.game_host_service ?? null;
   const power_plants = root_state?.power_plants ?? [];
   const chat_log = root_state?.chat_log ?? [];
-  const game_event_log = root_state?.game_board?.event_log.filter(([_num, _player, logEvent]) => !JSON.stringify(logEvent).includes("heartbeat")) ?? [];
+  const game_event_log = root_state?.game_board?.event_log ?? [];
   const game_board = root_state?.game_board ?? null;
   const user_inventory = root_state?.user_inventory ?? null;
   const listings = root_state?.energy_exchange ?? [];
@@ -224,7 +224,7 @@ function App() {
               <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
             </Panel>
             <Panel index={4} current_index={current_tab}>
-              <Inventory userInventory={user_inventory} currency={game_board?.bitcoin_token_id ?? null}></Inventory>
+              <Inventory userInventory={user_inventory} currency={game_board?.bitcoin_token_id ?? null} hashboard_pointer={game_board?.asic_token_id ?? null}></Inventory>
             </Panel>
             <Panel index={5} current_index={current_tab}>
               <MoveForm></MoveForm>
