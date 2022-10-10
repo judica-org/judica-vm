@@ -7,7 +7,7 @@
     },
     "app_instance": "testing-$PLAYER",
     "event_log": {
-        "app_name": "testing-$PLAYER",
+        "app_name": "testing-$PLAYER"
     },
-    "db_app_name": "testing-$PLAYER",
+    "db_app_name": "testing-$PLAYER"
 }
