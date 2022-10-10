@@ -763,14 +763,14 @@ impl GameBoard {
         });
         Ok(UXForSaleList { listings })
     }
-    pub fn get_user_hashrate_share(&self) -> BTreeMap<EntityID, (u64, u64)> {
-        let denominator = 100000u64;
+    pub fn get_user_hashrate_share(&self) -> BTreeMap<EntityID, (u128, u128)> {
+        let denominator = 100000u128;
         let reg = &self.nfts;
         let mut res = BTreeMap::new();
-        let mut total = 0u64;
+        let mut total = 0u128;
         // accumulation step
         for (ptr, plant) in reg.power_plants.iter() {
-            let rate = plant.compute_hashrate(self) as u64;
+            let rate = plant.compute_hashrate(self);
             let player = reg.nfts[ptr].owner();
             match res.get_mut(&player) {
                 None => {
