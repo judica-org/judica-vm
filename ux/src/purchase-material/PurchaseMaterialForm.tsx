@@ -123,7 +123,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
             color="warning"
             value={action}
             exclusive
-            onChange={(ev, v) => v && set_action(v)}
+            onChange={(_ev, v) => v && set_action(v)}
             aria-label="buy or sell"
           >
             <ToggleButton value="BUY" aria-label="buy">

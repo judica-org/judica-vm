@@ -1,6 +1,4 @@
-import { ContentCopy } from '@mui/icons-material';
-import { Button, FormControl, FormGroup, FormLabel, IconButton, InputLabel, MenuItem, Select } from '@mui/material';
-import { appWindow } from '@tauri-apps/api/window';
+import { Button, FormGroup, FormLabel, MenuItem, Select } from '@mui/material';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
 import { GameSetup } from '../Types/Gameboard';

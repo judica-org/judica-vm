@@ -24,7 +24,6 @@ interface Props extends SwitchToGameProps, KeySelectorProps, NewGameProps, Switc
 
 const settingsDrawerWidth = '100vw';
 
-
 export default function DrawerAppBar({ db_name_loaded,
   which_game_loaded,
   available_sequencers,

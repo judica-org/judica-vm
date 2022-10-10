@@ -1,7 +1,7 @@
 import { Card, CardHeader, CardContent, Typography, Table, TableBody, TableCell, TableHead, TableRow, Divider } from "@mui/material";
 import FactoryIcon from '@mui/icons-material/Factory';
 import { useEffect, useState } from "react"
-import { UserPowerPlant, UserInventory } from "../App";
+import { UserPowerPlant } from "../App";
 import { plant_type_color_map } from "../util";
 import { MoveHashboards } from "../move-hashboards/MoveHashboards";
 import { EntityID } from "../Types/GameMove";

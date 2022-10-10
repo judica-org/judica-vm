@@ -1,6 +1,5 @@
 import { Key, Add, RemoveCircleOutline, ContentCopy, Check, Pending } from '@mui/icons-material';
-import { Button, FormControl, FormControlLabel, FormGroup, FormLabel, IconButton, Slider, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
-import { appWindow } from '@tauri-apps/api/window';
+import { Button, FormGroup, FormLabel, IconButton, TextField, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
 
