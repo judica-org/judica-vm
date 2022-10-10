@@ -167,7 +167,7 @@ function App() {
   const game_host_service = root_state?.game_host_service ?? null;
   const power_plants = root_state?.power_plants ?? [];
   const chat_log = root_state?.chat_log ?? [];
-  const game_event_log = root_state?.game_board?.event_log.filter(([_num, _player, logEvent]) => !JSON.stringify(logEvent).includes("heartbeat")) ?? [];
+  const game_event_log = root_state?.game_board?.event_log ?? [];
   const game_board = root_state?.game_board ?? null;
   const user_inventory = root_state?.user_inventory ?? null;
   const listings = root_state?.energy_exchange ?? [];
