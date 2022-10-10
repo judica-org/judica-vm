@@ -1,7 +1,11 @@
+use attest_database::connection::MsgDB;
+use bitcoin::hashes::hex::ToHex;
 use bitcoin::psbt::PartiallySignedTransaction;
-use bitcoin::secp256k1::Secp256k1;
-use bitcoin::{OutPoint, Transaction, Txid};
+use bitcoin::secp256k1::{All, Secp256k1};
+use bitcoin::{OutPoint, Transaction, Txid, XOnlyPublicKey};
+use bitcoincore_rpc_async::Client;
 use emulator_connect::{CTVAvailable, CTVEmulator};
+use event_log::connection::EventLog;
 use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID;
 use futures::stream::FuturesUnordered;
 use sapio::contract::Compiled;
@@ -11,25 +15,39 @@ use sapio_wasm_plugin::CreateArgs;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::error::Error;
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
-use tracing::{info, trace};
+use tracing::{debug, trace};
 mod universe;
 
 pub use sapio_litigator_events as events;
 pub mod litigator_event_log;
 
-struct AppState {
+struct GlobalLitigatorState {
+    config: Arc<config::Config>,
+    emulator: Arc<dyn CTVEmulator>,
+    evlog: EventLog,
+    msg_db: MsgDB,
+    bitcoin: Arc<Client>,
+    data_dir: PathBuf,
+    secp: Arc<Secp256k1<All>>,
+    running_instances: Mutex<BTreeMap<XOnlyPublicKey, InstanceRuntime>>,
+    scan_for_new_contracts: Duration,
+}
+
+struct LitigatedContractInstanceState {
     bound_to: Option<OutPoint>,
     psbt_db: Arc<PSBTDatabase>,
-    event_counter: u64,
     // Initialized after first move
     module: Arc<Mutex<Result<WasmPluginHandle<Compiled>, String>>>,
     args: Result<CreateArgs<Value>, String>,
     contract: Result<Compiled, String>,
+    event_counter: u64,
 }
 
 pub mod ext;
@@ -54,14 +72,66 @@ impl PSBTDatabase {
 
 pub mod config;
 
+struct InstanceRuntime {
+    task: Option<JoinHandle<TaskType>>,
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let mut args = std::env::args();
-    let config = config::Config::from_env()?;
+    let config = Arc::new(config::Config::from_env()?);
+    let globals = Arc::new(GlobalLitigatorState {
+        // initialize db connection to the event log
+        evlog: config.get_event_log().await?,
+        // get location of project directory modules
+        msg_db: config.get_db().await?,
+        // allocate a CTV Emulator
+        bitcoin: config.get_bitcoin_rpc().await?,
+        data_dir: config::data_dir_modules(&config.app_instance),
+        config,
+        emulator: Arc::new(CTVAvailable),
+        secp: Arc::new(Secp256k1::new()),
+        running_instances: Mutex::new(BTreeMap::<XOnlyPublicKey, InstanceRuntime>::new()),
+        scan_for_new_contracts: Duration::from_secs(10),
+    });
     match args.nth(1) {
         None => Err("Must have init or run")?,
-        Some(s) if &s == "run" => Ok(litigate_contract(config).await?),
+        Some(s) if &s == "run" => loop {
+            // First shut down all crashed events...
+            {
+                let mut instances = globals.running_instances.lock().await;
+                for (key, instance) in instances.iter_mut() {
+                    if Some(true) == instance.task.as_ref().map(|t| t.is_finished()) {
+                        let finished = instance.task.take().expect("CHecked on if condition").await;
+                        debug!(result=?finished, ?key, "Quit Task");
+                    }
+                }
+
+                // TODO: Remove crashed tasks/ log so they can restart?
+            }
+            {
+                let accessor = globals.evlog.get_accessor().await;
+                let groups = accessor.get_all_occurrence_groups()?;
+                let mut instances = globals.running_instances.lock().await;
+                let new_instances: Vec<_> = groups
+                    .iter()
+                    .filter_map(|(id, k)| XOnlyPublicKey::from_str(&k).ok())
+                    // TODO: Remove crashed tasks/ log so they can restart? maybe also do if is none task?
+                    .filter(|k| !instances.contains_key(k))
+                    .collect();
+                for new_instance in new_instances {
+                    let cglobals = globals.clone();
+                    instances.insert(
+                        new_instance,
+                        InstanceRuntime {
+                            task: Some(spawn(litigate_contract(cglobals, new_instance))),
+                        },
+                    );
+                }
+            }
+
+            tokio::time::sleep(globals.scan_for_new_contracts).await;
+        },
         Some(s) => {
             println!("Invalid argument: {}", s);
             Ok(())
@@ -69,54 +139,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {
-    // initialize db connection to the event log
-    let evlog = config.get_event_log().await?;
-    let msg_db = config.get_db().await?;
-    let _bitcoin = config.get_bitcoin_rpc().await?;
-
-    // get location of project directory modules
-    let data_dir = config::data_dir_modules(&config.app_instance);
-
-    // allocate a CTV Emulator
-    let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
-
-    // create wasm plugin handle from contract initialization data at beginning of the event log
-    let _ogid = evlog
-        .get_accessor()
-        .await
-        .get_occurrence_group_by_key(&config.event_log.group)?;
-
+type TaskType = Result<(), Box<dyn std::error::Error + Send + Sync + 'static>>;
+async fn litigate_contract(globals: Arc<GlobalLitigatorState>, key: XOnlyPublicKey) -> TaskType {
     // check which continuation points need attest message routing
-
     let (tx, rx) = tokio::sync::mpsc::channel(1);
-    let key = &config.event_log.group;
+    let group_key = key.to_hex();
     let evlog_group_id = {
-        let accessor = evlog.get_accessor().await;
-        let evlog_group_id = accessor.get_occurrence_group_by_key(key);
-
-        evlog_group_id.or_else(|_| accessor.insert_new_occurrence_group(key))?
+        let accessor = globals.evlog.get_accessor().await;
+        accessor
+            .get_occurrence_group_by_key(&group_key)
+            .expect("Must already exist if being litigated")
     };
     // This should be in notify_one mode, which means that only the db reader
     // should be calling notified and wakers should call notify_one.
     let new_synthetic_event = Arc::new(Notify::new());
-    let config = Arc::new(config);
 
     let tasks = FuturesUnordered::new();
     start_extractors(
-        evlog.clone(),
+        globals.clone(),
         evlog_group_id,
         tx,
         new_synthetic_event,
-        config.clone(),
-        msg_db.clone(),
         &tasks,
     )
     .await
     .map_err(|e| e.to_string())?;
 
     let root = PathFragment::Root.into();
-    let state = AppState {
+    let state = LitigatedContractInstanceState {
         args: Err("No Args Loaded".into()),
         module: Arc::new(Mutex::new(Err("No Module Loaded".into()))),
         contract: Err("No Compiled Object".into()),
@@ -124,19 +174,13 @@ async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::er
         psbt_db: Arc::new(PSBTDatabase::new()),
         event_counter: 0,
     };
-    let secp = Arc::new(Secp256k1::new());
     let evl = spawn(litigator_event_log::event_loop(
         rx,
         litigator_event_log::EventLoopContext {
-            secp,
             state,
-            emulator,
-            data_dir,
-            msg_db,
-            config,
+            globals: globals.clone(),
             root,
             evlog_group_id,
-            evlog: evlog.clone(),
         },
     ));
 
@@ -161,14 +205,15 @@ pub type TaskSet = FuturesUnordered<
     >,
 >;
 async fn start_extractors(
-    evlog: event_log::connection::EventLog,
+    globals: Arc<GlobalLitigatorState>,
     evlog_group_id: OccurrenceGroupID,
     tx: tokio::sync::mpsc::Sender<events::Event>,
     new_synthetic_event: Arc<Notify>,
-    config: Arc<config::Config>,
-    msg_db: attest_database::connection::MsgDB,
     tasks: &TaskSet,
 ) -> Result<(), Box<dyn Error + Sync + Send + 'static>> {
+    let evlog: event_log::connection::EventLog = globals.evlog.clone();
+    let msg_db: attest_database::connection::MsgDB = globals.msg_db.clone();
+    let config: Arc<config::Config> = globals.config.clone();
     tasks.push(tokio::spawn(universe::linearized::event_log_processor(
         evlog.clone(),
         evlog_group_id,

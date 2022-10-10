@@ -28,8 +28,6 @@ pub(crate) struct EventLogConfig {
     pub(crate) app_name: String,
     #[serde(default)]
     pub(crate) prefix: Option<PathBuf>,
-    // TODO: Delete
-    pub(crate) group: OccurrenceGroupKey,
 }
 
 impl Config {

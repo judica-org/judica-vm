@@ -1,5 +1,6 @@
-use super::AppState;
+use super::GlobalLitigatorState;
 use super::OK_T;
+use crate::LitigatedContractInstanceState;
 use crate::{config, events, ext::CompiledExt, universe::extractors::sequencer::get_game_setup};
 use attest_database::db_handle::create::TipControl;
 use bitcoin::{
@@ -49,15 +50,10 @@ use tracing::debug;
 use tracing::info;
 
 pub(crate) struct EventLoopContext {
-    pub(crate) state: AppState,
-    pub(crate) emulator: Arc<dyn CTVEmulator>,
-    pub(crate) data_dir: std::path::PathBuf,
-    pub(crate) msg_db: attest_database::connection::MsgDB,
-    pub(crate) config: Arc<config::Config>,
+    pub(crate) globals: Arc<GlobalLitigatorState>,
+    pub state: LitigatedContractInstanceState,
     pub(crate) root: sapio_base::reverse_path::ReversePath<PathFragment>,
     pub(crate) evlog_group_id: OccurrenceGroupID,
-    pub(crate) evlog: EventLog,
-    pub(crate) secp: Arc<Secp256k1<All>>,
 }
 
 pub(crate) async fn event_loop(
@@ -215,19 +211,15 @@ pub(crate) async fn handle_module_bytes(
     tag: &String,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let EventLoopContext {
+        ref mut globals,
         ref mut state,
-        ref emulator,
-        ref data_dir,
-        ref msg_db,
-        ref config,
         ref root,
-        ref evlog,
         ..
     } = e;
     info!("ModuleBytes");
 
     let bytes = {
-        let accessor = evlog.get_accessor().await;
+        let accessor = globals.evlog.get_accessor().await;
         let gid = accessor.get_occurrence_group_by_key(group)?;
         let o = accessor.get_occurrence_for_group_by_tag(gid, &tag)?;
         let mr = ModuleRepo::from_occurrence(o.1)?;
@@ -236,8 +228,8 @@ pub(crate) async fn handle_module_bytes(
 
     let locator: ModuleLocator = ModuleLocator::Bytes(bytes);
     let module = WasmPluginHandle::<Compiled>::new_async(
-        &data_dir,
-        emulator,
+        &globals.data_dir,
+        &globals.emulator,
         locator,
         bitcoin::Network::Bitcoin,
         Default::default(),
@@ -255,22 +247,18 @@ pub(crate) async fn handle_synthetic_periodic(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let EventLoopContext {
         ref mut state,
-        ref emulator,
-        ref secp,
-        ref msg_db,
-        ref config,
+        ref mut globals,
         ref evlog_group_id,
-        ref evlog,
         ..
     } = e;
     info!(time, "SyntehticPeriodicActions");
     if let Some(out) = state.bound_to.as_ref() {
         let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
-        if let Ok(program) = bind_psbt(c, out, emulator) {
+        if let Ok(program) = bind_psbt(c, out, &globals.emulator) {
             // TODO learn available keys through an extractor...
             let keys = Arc::new(
                 {
-                    let handle = msg_db.get_handle_read().await;
+                    let handle = globals.msg_db.get_handle_read().await;
                     spawn_blocking(move || handle.get_keymap()).await
                 }?
                 .map_err(|e| e.to_string())?,
@@ -285,19 +273,13 @@ pub(crate) async fn handle_synthetic_periodic(
                         added_output_metadata: _,
                     } = tx;
                     let keys = keys.clone();
-                    let secp = secp.clone();
-                    let config = config.clone();
-                    let msg_db = msg_db.clone();
                     // put this in an async block to simplify error handling
                     let r = process_psbt_fail_ok(
+                        globals.clone(),
                         keys,
-                        config,
                         psbt,
                         metadata,
-                        secp,
-                        msg_db,
                         *evlog_group_id,
-                        evlog.clone(),
                     )
                     .await;
                     if let Err(r) = r {
@@ -311,17 +293,14 @@ pub(crate) async fn handle_synthetic_periodic(
 }
 
 pub(crate) async fn process_psbt_fail_ok(
+    globals: Arc<GlobalLitigatorState>,
     keys: Arc<BTreeMap<XOnlyPublicKey, bitcoin::secp256k1::SecretKey>>,
-    config: Arc<config::Config>,
     psbt: String,
     metadata: sapio::template::TemplateMetadata,
-    secp: Arc<Secp256k1<bitcoin::secp256k1::All>>,
-    msg_db: attest_database::connection::MsgDB,
     evlog_group_id: OccurrenceGroupID,
-    evlog: EventLog,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let broadcast_key = keys
-        .get(&config.psbt_broadcast_key)
+        .get(&globals.config.psbt_broadcast_key)
         .ok_or("Broadcast Key Unknown")?;
     let psbt = PartiallySignedTransaction::from_str(&psbt)?;
     let skeys = extract_keys_for_simp(metadata, keys.clone())?;
@@ -329,14 +308,14 @@ pub(crate) async fn process_psbt_fail_ok(
     let signed = signing_key
         .sign_psbt(
             psbt.clone(),
-            &secp,
+            &globals.secp,
             bitcoin::SchnorrSighashType::AllPlusAnyoneCanPay,
         )
         .map_err(|(_old, e)| e)?;
     if signed == psbt {
         return OK_T;
     }
-    let keypair = KeyPair::from_secret_key(&secp, broadcast_key);
+    let keypair = KeyPair::from_secret_key(&globals.secp, broadcast_key);
 
     let tx = signed.clone().extract_tx();
     let txid = tx.txid();
@@ -352,8 +331,8 @@ pub(crate) async fn process_psbt_fail_ok(
             format!("emit_by:{}:psbt_hash:{}", emitter, psbt_hash),
         )),
     );
-    let mut handle = msg_db.get_handle_all().await;
-    let mut accessor = evlog.get_accessor().await;
+    let mut handle = globals.msg_db.get_handle_all().await;
+    let mut accessor = globals.evlog.get_accessor().await;
 
     spawn_blocking(move || {
         let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
@@ -367,7 +346,7 @@ pub(crate) async fn process_psbt_fail_ok(
                         data: PsbtString(signed),
                     }),
                     &keypair,
-                    &secp,
+                    &globals.secp,
                     None,
                     TipControl::NoTips,
                 )?;
