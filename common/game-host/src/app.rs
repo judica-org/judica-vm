@@ -15,8 +15,10 @@ use axum::{
 };
 use game_host_messages::{BroadcastByHost, Channelized, CreatedNewChain, Peer};
 use mine_with_friends_board::game::GameSetup;
+use sapio::contract::Compiled;
 use sapio_bitcoin::hashes::hex::ToHex;
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
+use sapio_wasm_plugin::{plugin_handle::PluginHandle, CreateArgs};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -131,6 +133,7 @@ pub async fn create_new_attestation_chain(
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, ""))?;
     let genesis_hash = e.get_genesis_hash();
     let nickname = e.get_genesis_hash().to_hex();
+    let sequencer_key = e.header().key();
     let group_name = {
         let mut handle = db.get_handle_all().await;
         let secp = secp.clone();
@@ -161,6 +164,7 @@ pub async fn create_new_attestation_chain(
             .body(())
             .expect("Response<()> should always be valid"),
         Json(CreatedNewChain {
+            sequencer_key,
             genesis_hash,
             group_name,
         }),
@@ -224,9 +228,12 @@ pub async fn add_chain_to_group(
     ))
 }
 
+pub type CompilerModule =
+    Arc<Mutex<dyn PluginHandle<Input = CreateArgs<Value>, Output = Compiled> + Send>>;
 pub fn run(
     config: Arc<Config>,
     db: MsgDB,
+    module: CompilerModule,
 ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + Send + Sync + 'static>>> {
     let secp = Arc::new(Secp256k1::new());
     tokio::spawn(async move {
@@ -247,6 +254,7 @@ pub fn run(
             .layer(Extension(db))
             .layer(Extension(secp))
             .layer(Extension(Arc::new(Mutex::new(NewGameDB::new()))))
+            .layer(Extension(module))
             .layer(
                 CorsLayer::new()
                     .allow_methods([Method::GET, Method::OPTIONS, Method::POST])

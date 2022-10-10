@@ -4,6 +4,7 @@ use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::{
     hashes::hex::{FromHex, ToHex},
     secp256k1::rand::{thread_rng, Rng},
+    XOnlyPublicKey,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -128,6 +129,7 @@ mod tests {
 
 #[derive(Serialize, Deserialize)]
 pub struct CreatedNewChain {
+    pub sequencer_key: XOnlyPublicKey,
     pub genesis_hash: CanonicalEnvelopeHash,
     pub group_name: String,
 }

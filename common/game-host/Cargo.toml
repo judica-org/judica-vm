@@ -32,6 +32,11 @@ path = "../attest-database"
 version = "0.28.1"
 features=['use-serde', 'rand', 'use-serde', 'rand', 'base64', 'bitcoinconsensus']
 
+
+[dependencies.event-log]
+path = "../event-log"
+[dependencies.sapio-litigator-events]
+path = "../sapio-litigator-events"
 [dependencies.game-host-messages]
 path = "../game-host-messages"
 [dependencies.game-player-messages]

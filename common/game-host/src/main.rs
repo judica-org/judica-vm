@@ -1,3 +1,4 @@
+use app::CompilerModule;
 use attest_database::setup_db;
 use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_messages::{
@@ -13,7 +14,10 @@ use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair};
 use sapio_wasm_plugin::host::plugin_handle::ModuleLocator;
 use sapio_wasm_plugin::host::WasmPluginHandle;
+use sapio_wasm_plugin::plugin_handle::PluginHandle;
+use sapio_wasm_plugin::CreateArgs;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::Duration;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -22,6 +26,7 @@ use std::{
     sync::Arc,
 };
 use tokio::spawn;
+use tokio::sync::Mutex;
 use tokio::task::{spawn_blocking, JoinHandle};
 use tor::TorConfig;
 use tracing::{debug, info, warn};
@@ -63,15 +68,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let data_dir = data_dir_modules(&config.app_instance);
     let locator: ModuleLocator = ModuleLocator::FileName(config.contract_location.clone());
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
-    let module = WasmPluginHandle::<Compiled>::new_async(
-        &data_dir,
-        &emulator,
-        locator,
-        sapio_bitcoin::Network::Bitcoin,
-        Default::default(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    let module: CompilerModule = Arc::new(Mutex::new(
+        WasmPluginHandle::<Compiled>::new_async(
+            &data_dir,
+            &emulator,
+            locator,
+            sapio_bitcoin::Network::Bitcoin,
+            Default::default(),
+        )
+        .await
+        .map_err(|e| e.to_string())?,
+    ));
 
     let db = setup_db(
         &format!("attestations.{}", config.game_host_name),
@@ -84,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let host = config.tor.get_hostname().await?;
     info!("Hosting Onion Service At: {}", host);
 
-    let app_instance = app::run(config.clone(), db.clone());
+    let app_instance = app::run(config.clone(), db.clone(), module);
     let game_instance = game_server(config, db.clone());
     tokio::select! {
         a =  game_instance =>{

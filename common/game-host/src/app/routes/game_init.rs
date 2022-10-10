@@ -11,13 +11,15 @@
 //!
 //! finish_setup(password, join, ... params) -> CreatedNewChain {genesis: Envelope, name: String}
 
-use crate::app::{create_new_attestation_chain, CreatedNewChain};
+use crate::app::{create_new_attestation_chain, CompilerModule, CreatedNewChain};
 use attest_database::connection::MsgDB;
 use attest_messages::{AuthenticationError, GenericEnvelope};
 use axum::{
     http::{Response, StatusCode},
     Extension, Json,
 };
+use bitcoincore_rpc_async::{json::WalletCreateFundedPsbtOptions, Client, RpcApi};
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
 use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
@@ -25,10 +27,19 @@ use mine_with_friends_board::{
     sanitize::Unsanitized,
     MoveEnvelope,
 };
-use sapio_bitcoin::secp256k1::{All, Secp256k1};
+use sapio::sapio_base::effects::{EffectPath, PathFragment};
+use sapio_bitcoin::{
+    hashes::Hash,
+    psbt::PartiallySignedTransaction,
+    secp256k1::{All, Secp256k1},
+    Address, Script,
+};
+use sapio_litigator_events::{Event, Tag, TaggedEvent};
+use serde::Deserialize;
 
 use std::{
     collections::{HashMap, VecDeque},
+    str::FromStr,
     sync::{Arc, Weak},
 };
 use tokio::{sync::Mutex, task::spawn_blocking};
@@ -190,6 +201,9 @@ pub async fn finish_setup(
         start_amount,
     }): Json<FinishArgs>,
     Extension(db): Extension<Arc<Mutex<NewGameDB>>>,
+    Extension(module): Extension<CompilerModule>,
+    Extension(rpc): Extension<Arc<Client>>,
+    Extension(evlog): Extension<event_log::connection::EventLog>,
 ) -> Result<(Response<()>, Json<CreatedNewChain>), (StatusCode, String)> {
     if let Some(v) = db.lock().await.states.get(&code) {
         if passcode == v.admin {
@@ -222,7 +236,7 @@ pub async fn finish_setup(
                             .ok();
                         }
                     }
-                    return create_new_attestation_chain(
+                    let resp = create_new_attestation_chain(
                         Json((
                             envelopes
                                 .iter()
@@ -235,6 +249,128 @@ pub async fn finish_setup(
                     )
                     .await
                     .map_err(|e| (e.0, e.1.to_owned()));
+                    if let Ok((_, Json(ref b))) = resp {
+                        let args = sapio_litigator_events::convert_setup_to_contract_args(
+                            gs.to_owned(),
+                            &b.sequencer_key,
+                        )
+                        .map_err(|_e| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Error Creating Sapio Args".to_string(),
+                            )
+                        })?;
+                        let compiled = {
+                            let module = module.lock().await;
+                            module
+                                .call(&EffectPath::from(PathFragment::Root), &args)
+                                .map_err(|_e| {
+                                    (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        "Error Compiling Sapio Contract".to_string(),
+                                    )
+                                })?
+                        };
+                        let address = Address::from_script(
+                            &Script::from(compiled.address),
+                            sapio_bitcoin::network::constants::Network::Bitcoin,
+                        )
+                        .ok_or((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Error Converting Into Address".to_string(),
+                        ))?;
+
+                        let amount = compiled.amount_range.max();
+                        let psbt = rpc
+                            .wallet_create_funded_psbt(
+                                &[],
+                                &HashMap::from_iter([(address.to_string(), amount)].into_iter()),
+                                None,
+                                Some(WalletCreateFundedPsbtOptions {
+                                    change_address: None,
+                                    change_position: Some(1),
+                                    change_type: None,
+                                    include_watching: None,
+                                    lock_unspent: Some(true),
+                                    fee_rate: None,
+                                    subtract_fee_from_outputs: vec![],
+                                    replaceable: Some(true),
+                                    conf_target: Some(1),
+                                    estimate_mode: None,
+                                }),
+                                Some(true),
+                            )
+                            .await
+                            .map_err(|_| {
+                                (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    "Error Making PSBTs".to_string(),
+                                )
+                            })?;
+                        #[derive(Deserialize)]
+                        struct R {
+                            psbt: String,
+                            complete: bool,
+                        }
+                        let r = rpc
+                            .call::<R>("walletprocesspsbt", &[serde_json::Value::String(psbt.psbt)])
+                            .await
+                            .map_err(|_| {
+                                (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    "Error Signing PSBTs".to_string(),
+                                )
+                            })?;
+                        if !r.complete {
+                            return Err((
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "PSBT NOT DONE".into(),
+                            ));
+                        }
+
+                        let psbt = PartiallySignedTransaction::from_str(&r.psbt).map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "PSBT Invalid".to_string(),
+                            )
+                        })?;
+
+                        let tx = psbt.extract_tx();
+
+                        let seq_str = b.sequencer_key.to_string();
+                        let evt = TaggedEvent(
+                            Event::TransactionFinalized("default".into(), tx.clone()),
+                            Some(Tag::ScopedValue(seq_str.clone(), "funding_tx".into())),
+                        );
+                        {
+                            let accessor = evlog.get_accessor().await;
+                            // TODO: SPAWN_BLOCKING
+                            let gid = accessor
+                                .insert_new_occurrence_group(&seq_str)
+                                .or_else(|_| accessor.get_occurrence_group_by_key(&seq_str))
+                                .map_err(|_| {
+                                    (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        "Could not get group by key".into(),
+                                    )
+                                })?;
+                            accessor
+                                .insert_new_occurrence_now_from(gid, &evt)
+                                .map_err(|_| {
+                                    (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        "Could not insert tx evt".into(),
+                                    )
+                                })?
+                                .ok();
+                            // lastly send the tx...
+                            rpc.send_raw_transaction(&tx).await.ok();
+                        }
+
+                        return resp;
+                    } else {
+                        return resp;
+                    }
                 }
             }
         } else {
