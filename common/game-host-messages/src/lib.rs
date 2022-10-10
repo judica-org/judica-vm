@@ -18,9 +18,14 @@ use std::{
 pub struct FinishArgs {
     pub passcode: JoinCode,
     pub code: JoinCode,
-    pub finish_time: u64,
     pub start_amount: u64,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NewGameArgs {
+    pub duration_minutes: u16,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewGame {
     pub password: JoinCode,

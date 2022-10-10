@@ -26,7 +26,7 @@ use event_log::db_handle::accessors::{
     occurrence::sql::Idempotent,
     occurrence_group::{OccurrenceGroupID, OccurrenceGroupKey},
 };
-use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame};
+use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame, NewGameArgs};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
     game::{game_move::GameMove, GameSetup},
@@ -47,6 +47,7 @@ use std::{
     collections::{HashMap, VecDeque},
     str::FromStr,
     sync::{Arc, Weak},
+    time::Duration,
 };
 use tokio::{sync::Mutex, task::spawn_blocking};
 
@@ -54,6 +55,7 @@ struct Metadata {
     state: Mutex<GameStartingState>,
     code: Arc<JoinCode>,
     admin: JoinCode,
+    duration: Duration,
 }
 
 type MetadataRc = Arc<Metadata>;
@@ -78,11 +80,12 @@ impl NewGameDB {
 }
 
 impl NewGameDB {
-    fn add_new_game(&mut self) -> (JoinCode, Arc<JoinCode>) {
+    fn add_new_game(&mut self, duration: Duration) -> (JoinCode, Arc<JoinCode>) {
         let m = Arc::new(Metadata {
             state: Mutex::new(GameStartingState::new()),
             code: Arc::new(Default::default()),
             admin: Default::default(),
+            duration,
         });
         let code = (m.admin, m.code.clone());
 
@@ -135,7 +138,7 @@ impl GameStartingState {
     }
     fn finalize_setup(
         &mut self,
-        finish_time: u64,
+        finish_time: Duration,
         start_amount: u64,
     ) -> Result<(), AddPlayerError> {
         match self {
@@ -144,7 +147,8 @@ impl GameStartingState {
                 let game = GameSetup {
                     players,
                     start_amount,
-                    finish_time,
+                    // TODO: maybe bounds check? But should be safe from before
+                    finish_time: finish_time.as_millis() as u64,
                 };
 
                 let mut clr = vec![];
@@ -158,9 +162,19 @@ impl GameStartingState {
 }
 
 pub async fn create_new_game_instance(
+    Json(minutes): Json<NewGameArgs>,
     Extension(db): Extension<Arc<Mutex<NewGameDB>>>,
 ) -> Result<(Response<()>, Json<NewGame>), (StatusCode, &'static str)> {
-    let code = db.lock().await.add_new_game();
+    if minutes.duration_minutes > 300 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Duration too long, must be <= 300 minutes",
+        ));
+    }
+    let code = db
+        .lock()
+        .await
+        .add_new_game(Duration::from_secs(minutes.duration_minutes as u64 * 60));
     let new = NewGame {
         password: code.0,
         join: *code.1,
@@ -203,7 +217,6 @@ pub async fn finish_setup(
     Json(FinishArgs {
         passcode,
         code,
-        finish_time,
         start_amount,
     }): Json<FinishArgs>,
     Extension(db): Extension<Arc<Mutex<NewGameDB>>>,
@@ -214,7 +227,7 @@ pub async fn finish_setup(
     if let Some(v) = db.lock().await.states.get(&code) {
         if passcode == v.admin {
             let mut game = v.state.lock().await;
-            game.finalize_setup(finish_time, start_amount)
+            game.finalize_setup(v.duration, start_amount)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
             match &*game {
                 GameStartingState::AddingPlayers(_) | GameStartingState::WaitingForSetup(_) => {

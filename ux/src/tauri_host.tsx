@@ -48,8 +48,8 @@ export const tauri_host = {
   join_existing_game: async (nickname: string, code: string) => {
     return invoke("make_new_chain", { nickname, code });
   },
-  make_new_game: async (nickname: string) => {
-    return invoke("make_new_game", { nickname });
+  make_new_game: async (nickname: string, minutes: number) => {
+    return invoke("make_new_game", { nickname, minutes});
   },
   mint_power_plant_cost: async (scale: number, location: [number, number], plantType: PlantType) => {
     return invoke("mint_power_plant_cost", { scale, location, plantType });
