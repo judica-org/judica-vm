@@ -31,7 +31,7 @@ export function PlantTypeSelect({ handleChange, plantTypes }: { handleChange: (e
   );
 }
 
-export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwners }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantOwners: Record<EntityID, true>, selectedPlantOwners: Record<EntityID, boolean> }) {
+export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwners, user_id }: { handleChange: (event: React.ChangeEvent<HTMLInputElement>) => void, plantOwners: Record<EntityID, true>, selectedPlantOwners: Record<EntityID, boolean>, user_id: EntityID | null }) {
   // for each owner, add a checkbox.
   return (
     <div>
@@ -47,7 +47,7 @@ export function PlantOwnerSelect({ handleChange, plantOwners, selectedPlantOwner
               '&.Mui-checked': {
                 color: lightGreen[600],
               },
-            }} />} label={owner} key={owner} />
+            }} />} label={owner === user_id ? `${owner} (ME)`: owner} key={owner} />
           })
         }
       </FormGroup>

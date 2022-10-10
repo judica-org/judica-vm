@@ -1,7 +1,6 @@
 import FactoryIcon from '@mui/icons-material/Factory';
-import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Typography, Divider, Button, Paper } from '@mui/material';
+import { Table, TableHead, TableRow, TableCell, TableBody, Typography, Divider, Button, Paper } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { UserInventory } from '../App';
 import SaleListingForm from '../sale-listing/SaleListingForm';
 import { EntityID } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';

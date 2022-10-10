@@ -171,7 +171,8 @@ function App() {
   const game_board = root_state?.game_board ?? null;
   const user_inventory = root_state?.user_inventory ?? null;
   const listings = root_state?.energy_exchange ?? [];
-
+  const user_id = (signing_key && root_state?.game_board?.users_by_key) ? root_state?.game_board?.users_by_key[signing_key] : null;
+  const elapsed_time = root_state?.game_board?.elapsed_time ?? null;
   const player_status = game_event_log.length ? getLastMovesByPlayer(game_event_log) : ["No moves to show"];
 
   console.log(["game-event-log"], root_state?.game_board?.event_log || "event log is empty");
@@ -196,10 +197,12 @@ function App() {
           available_sequencers, which_game_loaded,
           signing_key, available_keys,
           join_code, join_password,
-          game_host_service
+          game_host_service,
+          user_id,
+          elapsed_time
         }}></DrawerAppBar>
         <div className="Content">
-          <WorkingGlobe power_plants={power_plants}></WorkingGlobe>
+          <WorkingGlobe power_plants={power_plants} user_id={user_id}></WorkingGlobe>
           <Box className="DataDisplay">
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }} className="DisplayContents">
               <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
@@ -256,4 +259,3 @@ function App() {
 }
 
 export default App;
-

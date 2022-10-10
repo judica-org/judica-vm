@@ -55,13 +55,7 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
             <TableCell >{plantDetail.hashrate}</TableCell>
           </TableRow>
           <TableCell >Miners Allocated</TableCell>
-          <TableCell align="right">{plantDetail.miners}</TableCell>
-
-          <TableRow>
-            <TableCell >More Actions</TableCell>
-            <TableCell align="right"></TableCell>
-
-          </TableRow>
+          <TableCell >{plantDetail.miners}</TableCell>
         </TableBody>
       </Table>}
       <div>
