@@ -97,6 +97,13 @@ async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn s
     Ok(())
 }
 
+// TODO: Move this init code *into* the game host.
+// Also Add to it the Init Args and other goodies...
+// Then we'll have the lit able to read:
+// 1. module_bytes
+// 2. init args
+// 3. first txn
+// 4. Rebind(first txn . 0)
 async fn insert_init(
     location: &str,
     _config: &config::Config,
