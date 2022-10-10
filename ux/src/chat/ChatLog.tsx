@@ -8,7 +8,7 @@ export function ChatLog({ chat_log }: { chat_log: [number, string, string][] }) 
     useEffect(() => {
         set_chat_messages(chat_log as [number, string, string][]);
         bottomEl.current?.scrollIntoView(false)
-    }, [chat_messages])
+    }, [chat_log])
 
     return <div>
         <Typography className="ChatTitle" variant="h4" >Chat</Typography>
