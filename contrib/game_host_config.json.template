@@ -17,5 +17,6 @@
     "event_log": {
         "app_name": "testing-$PLAYER",
         "group": "$PLAYER-event-group"
-    }
+    },
+    "contract_location": "$WASM_MODULE"
 }
