@@ -1,6 +1,6 @@
 import { Card, CardHeader, CardContent, FormControl, TextField, Button, Typography, ToggleButtonGroup, ToggleButton } from "@mui/material";
 import React from "react";
-import { MaterialPriceDisplay} from "../App";
+import { MaterialPriceDisplay } from "../App";
 import { SuccessfulTradeOutcome, tauri_host, UnsuccessfulTradeOutcome } from "../tauri_host";
 import { RawMaterialsActions } from "../util";
 
@@ -11,7 +11,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
   const [action, set_action] = React.useState<RawMaterialsActions>(action_in);
   const [market_flipped, set_market_flipped] = React.useState<boolean>(false);
   const [trade_amt, set_trade_amt] = React.useState<number>(0);
-  const [limit_pct, set_limit_pct] = React.useState<number | undefined>(undefined);
+  const [limit_pct, set_limit_pct] = React.useState<number | null>(null);
   const [formula_result, set_formula_result] = React.useState("");
   const handle_error = (e: UnsuccessfulTradeOutcome) => {
     switch (typeof e) {
@@ -88,8 +88,8 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
       let ok = outcome.Ok;
       if (ok) {
         // TODO: Add a flexible Cap for Limit Orders, fixed to +/- 10%.
-        let cap = limit_pct === undefined ? undefined :
-          Math.round(action === "SELL" ? (ok.amount_player_purchased * (1 - limit_pct)) : (ok.amount_player_sold * (1 + limit_pct)));
+        let cap = limit_pct === null ? null :
+          Math.round(action === "SELL" ? (ok.amount_player_purchased * (1 - limit_pct / 100)) : (ok.amount_player_sold * (1 + limit_pct / 100)));
         if (confirm((action === "SELL" ?
           `Sell Will trade ${ok.amount_player_sold} ${ok.asset_player_sold} for at least ${cap} ${ok.asset_player_purchased}` :
           `Buy Will get ${ok.amount_player_purchased} ${ok.asset_player_purchased} for at most ${cap} ${ok.asset_player_sold}`)
@@ -103,7 +103,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
   };
   const parse_limit_pct = (ev: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void => {
     let f = parseFloat(ev.target.value);
-    set_limit_pct(isNaN(f) ? undefined : f);
+    set_limit_pct(isNaN(f) ? null : f);
   };
   // for creater should be extracted out into a form util
   return <Card>

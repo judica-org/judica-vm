@@ -24,6 +24,7 @@ export const tauri_host = {
     return await invoke("get_move_schema");
   },
   make_move_inner: async (nextMove: GameMove) => {
+    console.log(["make-move-inner"], nextMove);
     return await invoke("make_move_inner", { nextMove });
   },
   game_synchronizer: async (): Promise<EmittedAppState> => {

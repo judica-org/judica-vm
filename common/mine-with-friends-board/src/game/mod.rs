@@ -460,13 +460,19 @@ impl GameBoard {
         }: MoveEnvelope,
         signed_by: String,
     ) -> Result<(), MoveRejectReason> {
-        if let Some(finish_reason) = self.game_is_finished() {
-            return Err(MoveRejectReason::GameIsFinished(finish_reason));
-        }
         let from = *self
             .users_by_key
             .get(&signed_by)
             .ok_or(MoveRejectReason::NoSuchUser)?;
+
+        if let Some(finish_reason) = self.game_is_finished() {
+            self.add_to_event_log(
+                from,
+                LogEvent::MoveRejectReason(MoveRejectReason::GameIsFinished(finish_reason.clone())),
+            );
+            return Err(MoveRejectReason::GameIsFinished(finish_reason));
+        }
+
         info!(key = signed_by, ?from, "Got Move {} From Player", sequence);
         // TODO: check that sequence is the next sequence for that particular user
         let current_move = self.player_move_sequence.entry(from).or_default();
