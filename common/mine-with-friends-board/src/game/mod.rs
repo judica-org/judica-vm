@@ -202,10 +202,16 @@ impl GameBoard {
             &mut alloc,
             "Real World Sats".into(),
         ));
-        let concrete = Box::new(TokenBase::new_from_alloc(&mut alloc, "Concrete".into()));
+        let concrete = Box::new(TokenBase::new_from_alloc(
+            &mut alloc,
+            "Concrete (1mt)".into(),
+        ));
         let asic = Box::new(TokenBase::new_from_alloc(&mut alloc, "ASIC Gen 1".into()));
-        let steel = Box::new(TokenBase::new_from_alloc(&mut alloc, "Steel".into()));
-        let silicon = Box::new(TokenBase::new_from_alloc(&mut alloc, "Silicon".into()));
+        let steel = Box::new(TokenBase::new_from_alloc(&mut alloc, "Steel (1mt)".into()));
+        let silicon = Box::new(TokenBase::new_from_alloc(
+            &mut alloc,
+            "Silicon (10kg)".into(),
+        ));
         let mut tokens = TokenRegistry::default();
         let bitcoin_token_id = tokens.new_token(btc);
         let real_sats_token_id = tokens.new_token(real_sats);
@@ -216,7 +222,7 @@ impl GameBoard {
         tokens.hashboards.insert(
             asic_token_id,
             HashBoardData {
-                hash_per_watt: (3.0 * 10e12) as u128,
+                hash_per_watt: 3 * 10e10 as u128,
                 reliability: 100,
             },
         );
@@ -224,37 +230,37 @@ impl GameBoard {
             steel_token_id,
             Steel {
                 variety: tokens::instances::steel::SteelVariety::Structural,
-                weight_in_kg: 1,
+                weight_in_kg: 1000,
             },
         );
         tokens
             .silicon
-            .insert(silicon_token_id, Silicon { weight_in_kg: 1 });
+            .insert(silicon_token_id, Silicon { weight_in_kg: 10 });
 
         let root_user = alloc.make();
         let mut plant_prices = HashMap::new();
         plant_prices.insert(
             PlantType::Solar,
             Vec::from([
-                (steel_token_id, 57),
-                (silicon_token_id, 437),
-                (concrete_token_id, 62),
+                (steel_token_id, 2),
+                (silicon_token_id, 400),
+                (concrete_token_id, 2),
             ]),
         );
         plant_prices.insert(
             PlantType::Hydro,
             Vec::from([
-                (steel_token_id, 247),
-                (silicon_token_id, 96),
-                (concrete_token_id, 144),
+                (steel_token_id, 5),
+                (silicon_token_id, 10),
+                (concrete_token_id, 1000),
             ]),
         );
         plant_prices.insert(
             PlantType::Flare,
             Vec::from([
-                (steel_token_id, 76),
-                (silicon_token_id, 84),
-                (concrete_token_id, 54),
+                (steel_token_id, 10),
+                (silicon_token_id, 10),
+                (concrete_token_id, 10),
             ]),
         );
 
@@ -549,7 +555,7 @@ impl GameBoard {
         if self.elapsed_time >= self.finish_time {
             trace!(self.elapsed_time, self.finish_time, "Game Time Expired");
             Some(FinishReason::TimeExpired)
-        } else if self.elapsed_time >= (self.finish_time / 4) {
+        } else if self.elapsed_time >= (self.finish_time / 4 * 3) {
             // After 25 % of the game is finished...
             self.get_user_hashrate_share()
                 .iter()

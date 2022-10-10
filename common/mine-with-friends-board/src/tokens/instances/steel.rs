@@ -25,7 +25,7 @@ pub struct Steel {
     // currently stainless steel only
     pub variety: SteelVariety,
     // the weight in kg of this steel token
-    pub weight_in_kg: u8,
+    pub weight_in_kg: u64,
 }
 
 #[derive(Serialize, Clone, Debug)]
