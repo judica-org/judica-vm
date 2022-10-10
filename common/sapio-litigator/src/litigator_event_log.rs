@@ -3,6 +3,9 @@ use super::OK_T;
 use crate::LitigatedContractInstanceState;
 use crate::{config, events, ext::CompiledExt, universe::extractors::sequencer::get_game_setup};
 use attest_database::db_handle::create::TipControl;
+use bitcoin::consensus::Encodable;
+use bitcoin::consensus::serialize as btc_ser;
+use bitcoin::hashes::hex::ToHex;
 use bitcoin::{
     blockdata::script::Script,
     hashes::{sha256, sha512, Hash, Hmac, HmacEngine},
@@ -48,11 +51,11 @@ use tokio::sync::mpsc::Receiver;
 use tokio::task::spawn_blocking;
 use tracing::debug;
 use tracing::info;
+use tracing::trace;
 
 pub(crate) struct EventLoopContext {
     pub(crate) globals: Arc<GlobalLitigatorState>,
     pub state: LitigatedContractInstanceState,
-    pub(crate) root: sapio_base::reverse_path::ReversePath<PathFragment>,
     pub(crate) evlog_group_id: OccurrenceGroupID,
 }
 
@@ -60,25 +63,39 @@ pub(crate) async fn event_loop(
     mut rx: Receiver<events::Event>,
     mut e: EventLoopContext,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    let instance = e.evlog_group_id;
     loop {
         match rx.recv().await {
-            Some(events::Event::EmittedPSBTVia(_a, _b)) => {}
-            Some(events::Event::TransactionFinalized(_s, _tx)) => {
-                info!("Transaction Finalized");
+            Some(events::Event::EmittedPSBTVia(psbt, b)) => {
+                info!(?instance, emitter = b.to_hex(), "EmittedPSBTVia");
+                trace!(?instance, emitter = b.to_hex(), ?psbt,  "EmittedPSBTVia");
+                // Nothing to do -- this action is mostly here for de-deuplication
+            }
+            Some(events::Event::TransactionFinalized(s, tx)) => {
+                info!(?instance, s, tx = tx.txid().to_hex(), "TransactionFinalized");
+                trace!(?instance, s, ?tx, tx = btc_ser(&tx).to_hex(), "TransactionFinalized");
+                // Nothing to do -- could broadcast txn if we want, but not required
             }
             Some(events::Event::SyntheticPeriodicActions(time)) => {
+                info!(?instance, "SyntehticPeriodicActions({})", time);
                 handle_synthetic_periodic(&mut e, time).await?;
             }
             Some(events::Event::ModuleBytes(ref group_key, ref tag)) => {
+                info!(?instance, group_key, tag, "ModuleBytes");
                 handle_module_bytes(&mut e, group_key, tag).await?;
             }
             Some(events::Event::CreateArgs(args)) => {
+                info!(?instance, "CreateArgs");
+                trace!(?instance, args=?serde_json::to_string(&args), "CreateArgs");
                 handle_create_args(&mut e, args).await?;
             }
             Some(events::Event::Rebind(o)) => {
+                info!(?instance, ?o, "Rebind");
                 handle_rebind(&mut e, o);
             }
             Some(events::Event::NewRecompileTriggeringObservation(new_info_as_v, filter)) => {
+                info!(?instance, for_=?filter, "NewRecompileTriggeringObservation");
+                trace!(?instance, for_=?filter, new_info=new_info_as_v.to_string(), "NewRecompileTriggeringObservation");
                 handle_new_information(&mut e, filter, new_info_as_v).await?;
             }
             None => (),
@@ -149,7 +166,7 @@ pub(crate) async fn handle_new_information(
                 .as_ref()
                 .map_err(|e| e.as_str())?
                 .fresh_clone()?
-                .call(&PathFragment::Root.into(), &new_args)
+                .call(&state.root, &new_args)
                 .map_err(|e| debug!(error=?e, "Module did not like the new argument"))
         };
 
@@ -183,16 +200,12 @@ pub(crate) async fn handle_create_args(
     e: &mut EventLoopContext,
     args: CreateArgs<Value>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let EventLoopContext {
-        ref mut state,
-        ref root,
-        ..
-    } = e;
+    let EventLoopContext { ref mut state, .. } = e;
     info!(?args, "Contract Args Ready");
     let module_lock = state.module.lock().await;
     let module = module_lock.as_ref().map_err(|e| e.to_string())?;
 
-    state.contract = match module.call(root, &args) {
+    state.contract = match module.call(&state.root, &args) {
         Ok(c) => {
             info!(address=?c.address,"Contract Compilation Successful");
             Ok(c)
@@ -213,7 +226,6 @@ pub(crate) async fn handle_module_bytes(
     let EventLoopContext {
         ref mut globals,
         ref mut state,
-        ref root,
         ..
     } = e;
     info!("ModuleBytes");
@@ -251,7 +263,6 @@ pub(crate) async fn handle_synthetic_periodic(
         ref evlog_group_id,
         ..
     } = e;
-    info!(time, "SyntehticPeriodicActions");
     if let Some(out) = state.bound_to.as_ref() {
         let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
         if let Ok(program) = bind_psbt(c, out, &globals.emulator) {
@@ -292,6 +303,12 @@ pub(crate) async fn handle_synthetic_periodic(
     Ok(())
 }
 
+/// processes a psbt
+///
+/// # Errors
+///
+/// This function will return an error if the psbt does not properly get
+/// inserted, however failure is OK and we should ignore it.
 pub(crate) async fn process_psbt_fail_ok(
     globals: Arc<GlobalLitigatorState>,
     keys: Arc<BTreeMap<XOnlyPublicKey, bitcoin::secp256k1::SecretKey>>,
@@ -364,6 +381,16 @@ pub(crate) async fn process_psbt_fail_ok(
     .await?
 }
 
+/// extract all the keys named via the AutoBroadcast SIMP and their roles within
+/// this contract, that we have.
+///
+/// TODO: Some amount of safety to only use approved keys / restrict?
+/// TODO: Determinism on keys at a given point in time (maybe queried as an
+/// extractor?)
+///
+/// # Errors
+///
+/// This function will return an error if  the data is not properly formatted.
 pub(crate) fn extract_keys_for_simp(
     metadata: sapio::template::TemplateMetadata,
     keys: Arc<BTreeMap<XOnlyPublicKey, bitcoin::secp256k1::SecretKey>>,

@@ -1,7 +1,6 @@
 use rusqlite::Connection;
 use std::marker::PhantomData;
 use tokio::sync::OwnedMutexGuard;
-
 pub mod accessors;
 pub mod setup;
 
@@ -53,7 +52,6 @@ impl $RowType {
     }
 }
 const _:() = {
-
     use rusqlite::types::FromSql;
     use rusqlite::types::ToSql;
     impl ToSql for $RowType {

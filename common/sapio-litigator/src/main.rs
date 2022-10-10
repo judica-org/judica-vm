@@ -9,7 +9,8 @@ use event_log::connection::EventLog;
 use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID;
 use futures::stream::FuturesUnordered;
 use sapio::contract::Compiled;
-use sapio_base::effects::PathFragment;
+use sapio_base::effects::{EffectPath, PathFragment};
+pub use sapio_litigator_events as events;
 use sapio_wasm_plugin::host::WasmPluginHandle;
 use sapio_wasm_plugin::CreateArgs;
 use serde_json::Value;
@@ -23,10 +24,8 @@ use tokio::spawn;
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
 use tracing::{debug, trace};
-mod universe;
-
-pub use sapio_litigator_events as events;
 pub mod litigator_event_log;
+mod universe;
 
 struct GlobalLitigatorState {
     config: Arc<config::Config>,
@@ -48,6 +47,8 @@ struct LitigatedContractInstanceState {
     args: Result<CreateArgs<Value>, String>,
     contract: Result<Compiled, String>,
     event_counter: u64,
+    root: EffectPath,
+    new_synthetic_event: Arc<Notify>,
 }
 
 pub mod ext;
@@ -97,13 +98,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args.nth(1) {
         None => Err("Must have init or run")?,
         Some(s) if &s == "run" => loop {
+            trace!(instance = "Global", "Scanning for Tasks");
             // First shut down all crashed events...
             {
                 let mut instances = globals.running_instances.lock().await;
                 for (key, instance) in instances.iter_mut() {
+                    trace!(instance = key.to_hex(), "Scanning for Tasks");
                     if Some(true) == instance.task.as_ref().map(|t| t.is_finished()) {
                         let finished = instance.task.take().expect("CHecked on if condition").await;
-                        debug!(result=?finished, ?key, "Quit Task");
+                        debug!(result=?finished, instance=?key, "Quit Task");
+                    } else {
+                        trace!(instance = key.to_hex(), "Healthy");
                     }
                 }
 
@@ -120,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .filter(|k| !instances.contains_key(k))
                     .collect();
                 for new_instance in new_instances {
+                    trace!(instance = new_instance.to_hex(), "New Instance");
                     let cglobals = globals.clone();
                     instances.insert(
                         new_instance,
@@ -152,20 +158,8 @@ async fn litigate_contract(globals: Arc<GlobalLitigatorState>, key: XOnlyPublicK
     };
     // This should be in notify_one mode, which means that only the db reader
     // should be calling notified and wakers should call notify_one.
-    let new_synthetic_event = Arc::new(Notify::new());
-
     let tasks = FuturesUnordered::new();
-    start_extractors(
-        globals.clone(),
-        evlog_group_id,
-        tx,
-        new_synthetic_event,
-        &tasks,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
 
-    let root = PathFragment::Root.into();
     let state = LitigatedContractInstanceState {
         args: Err("No Args Loaded".into()),
         module: Arc::new(Mutex::new(Err("No Module Loaded".into()))),
@@ -173,13 +167,25 @@ async fn litigate_contract(globals: Arc<GlobalLitigatorState>, key: XOnlyPublicK
         bound_to: None,
         psbt_db: Arc::new(PSBTDatabase::new()),
         event_counter: 0,
+        root: PathFragment::Root.into(),
+        new_synthetic_event: Arc::new(Notify::new()),
     };
+
+    start_extractors(
+        globals.clone(),
+        state.new_synthetic_event.clone(),
+        evlog_group_id,
+        tx,
+        &tasks,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
     let evl = spawn(litigator_event_log::event_loop(
         rx,
         litigator_event_log::EventLoopContext {
             state,
             globals: globals.clone(),
-            root,
             evlog_group_id,
         },
     ));
@@ -191,6 +197,7 @@ async fn litigate_contract(globals: Arc<GlobalLitigatorState>, key: XOnlyPublicK
         trace!(?r, "Error From Task Joining");
         r.map_err(|e| e.to_string())?;
     }
+    // This can only be reached if all sub-tasks did not return an error
     Ok(())
 }
 
@@ -206,9 +213,9 @@ pub type TaskSet = FuturesUnordered<
 >;
 async fn start_extractors(
     globals: Arc<GlobalLitigatorState>,
+    new_synthetic_event: Arc<Notify>,
     evlog_group_id: OccurrenceGroupID,
     tx: tokio::sync::mpsc::Sender<events::Event>,
-    new_synthetic_event: Arc<Notify>,
     tasks: &TaskSet,
 ) -> Result<(), Box<dyn Error + Sync + Send + 'static>> {
     let evlog: event_log::connection::EventLog = globals.evlog.clone();
