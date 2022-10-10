@@ -556,7 +556,7 @@ impl GameBoard {
             trace!(self.elapsed_time, self.finish_time, "Game Time Expired");
             Some(FinishReason::TimeExpired)
         } else if self.elapsed_time >= (self.finish_time / 4 * 3) {
-            // After 25 % of the game is finished...
+            // After 75 % of the game is finished...
             self.get_user_hashrate_share()
                 .iter()
                 .find_map(|(k, v)| if v.0 * 2 >= v.1 { Some(*k) } else { None })
