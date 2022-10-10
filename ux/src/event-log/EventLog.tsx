@@ -8,6 +8,8 @@ export function EventLog({ game_event_log }: { game_event_log: [number, EntityID
     const [event_messages, set_event_messages] = useState<[number, EntityID, LogEvent][]>([]);
 
     useEffect(() => {
+        // const filtered = game_event_log.filter(([_num, _player, logEvent]) => !JSON.stringify(logEvent).includes("heartbeat"))
+        // set_event_messages(filtered as [number, EntityID, LogEvent][]);
         set_event_messages(game_event_log as [number, EntityID, LogEvent][]);
         bottomEl.current?.scrollIntoView(false)
     }, [event_messages])
@@ -16,10 +18,10 @@ export function EventLog({ game_event_log }: { game_event_log: [number, EntityID
         <Typography className="EventsTitle" variant="h4" >Game Events</Typography>
         <Divider />
         <div className="EventLogScrollBox">
-            {event_messages && event_messages.map(([_, a, b]) => {
+            {event_messages && event_messages.map(([a, b, c]) => {
                 return <div key={a} className="EventMessage">
-                    <Typography className="LogUserName" variant="body1" sx={{ textDecoration: 'underline' }} display="inline">{a}:</Typography>
-                    <Typography className="LogEvent" variant="body2" sx={{ wordBreak: "break-word" }}>  {JSON.stringify(b)}</Typography>
+                    <Typography className="LogUserName" variant="body1" sx={{ textDecoration: 'underline' }} display="inline">{b}:</Typography>
+                    <Typography className="LogEvent" variant="body2" sx={{ wordBreak: "break-word" }}>  {JSON.stringify(c)}</Typography>
                 </div>
             })}
             <div ref={bottomEl}></div>

@@ -1,4 +1,3 @@
-
 .EventLogScrollBox {
     display: flex;
     flex-direction: column;
@@ -8,7 +7,6 @@
     overflow-x: hidden;
     word-break: break-word;
     padding: 1em;
-    margin:auto;
 }
 
 .EventMessage {
@@ -26,5 +24,6 @@
 }
 
 .LogUserName {
-    margin: 2px;
+    width: 100px;
+    flex-wrap: nowrap;
 }
