@@ -125,6 +125,12 @@ const getLastMovesByPlayer = (log: [number, EntityID, LogEvent][]): string[] => 
   }, {});
   return Object.entries(recent_moves).map(([player, event]) => `${player} last move: ${event}`);
 }
+
+const findFinishLog = (game_event_log: [number, string, LogEvent][]): boolean => {
+  const finish_event = game_event_log.find(([_num, _player, event]) => JSON.stringify(event).includes("GameIsFinished"));
+  return !!finish_event;
+}
+
 function App() {
   const [location, setLocation] = useState<[number, number]>([0, 0]);
   const [selected_plant, set_selected_plant] = useState<EntityID | null>(null);
@@ -174,7 +180,7 @@ function App() {
   const user_id = (signing_key && root_state?.game_board?.users_by_key) ? root_state?.game_board?.users_by_key[signing_key] : null;
   const elapsed_time = root_state?.game_board?.elapsed_time ?? null;
   const player_status = game_event_log.length ? getLastMovesByPlayer(game_event_log) : ["No moves to show"];
-
+  const is_finished = game_event_log.length ? findFinishLog(game_event_log) : false;
   console.log(["game-event-log"], root_state?.game_board?.event_log || "event log is empty");
 
   useEffect(() => {
@@ -199,7 +205,8 @@ function App() {
           join_code, join_password,
           game_host_service,
           user_id,
-          elapsed_time
+          elapsed_time,
+          is_finished
         }}></DrawerAppBar>
         <div className="Content">
           <WorkingGlobe power_plants={power_plants} user_id={user_id}></WorkingGlobe>
