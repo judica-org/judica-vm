@@ -26,7 +26,7 @@ pub enum Event {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum Tag {
+pub enum Tag {
     InitModule,
     EvLoopCounter(u64),
     ScopedCounter(String, u64),
@@ -42,7 +42,7 @@ impl ToString for Tag {
 }
 
 #[derive(Serialize, Deserialize)]
-pub(crate) struct TaggedEvent(pub Event, pub Option<Tag>);
+pub struct TaggedEvent(pub Event, pub Option<Tag>);
 
 impl ToOccurrence for TaggedEvent {
     fn to_data(&self) -> CanonicalJsonValue {

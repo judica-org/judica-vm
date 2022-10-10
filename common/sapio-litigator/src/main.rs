@@ -19,7 +19,7 @@ use tokio::task::JoinHandle;
 use tracing::{info, trace};
 mod universe;
 
-pub mod events;
+pub use sapio_litigator_events as events;
 pub mod litigator_event_log;
 
 struct AppState {

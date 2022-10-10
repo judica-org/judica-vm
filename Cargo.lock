@@ -2445,6 +2445,7 @@ dependencies = [
  "sapio",
  "sapio-base",
  "sapio-bitcoin",
+ "sapio-litigator-events",
  "sapio-psbt",
  "sapio-wasm-plugin",
  "schemars",
@@ -2454,6 +2455,23 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "sapio-litigator-events"
+version = "0.1.0"
+dependencies = [
+ "event-log",
+ "game-player-messages",
+ "lazy_static",
+ "ruma-serde",
+ "sapio",
+ "sapio-base",
+ "sapio-bitcoin",
+ "schemars",
+ "serde",
+ "serde_json",
+ "simps",
 ]
 
 [[package]]

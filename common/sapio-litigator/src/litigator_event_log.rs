@@ -228,6 +228,8 @@ pub(crate) async fn handle_module_bytes(
         timeout: setup.finish_time,
     };
     info!(?g, "Game Kernel");
+    // TODO: Make the GameStarted type unified with the first message in the
+    // sequencer / first message of all initial users?
     let args = CreateArgs {
         arguments: serde_json::to_value(&GameStarted { kernel: g }).unwrap(),
         context: ContextualArguments {
