@@ -8,6 +8,7 @@ import { EntityID } from "../Types/GameMove";
 import SaleListingForm from "../sale-listing/SaleListingForm";
 import PurchaseOfferForm from "../purchase-offer/PurchaseOfferForm";
 import { UXUserInventory } from "../Types/Gameboard";
+import { COORDINATE_PRECISION } from "../mint-power-plant/MintingForm";
 
 export type PlantLabel = { readonly id: EntityID, readonly owner: EntityID, readonly watts: string, readonly for_sale: boolean };
 
@@ -48,7 +49,7 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
           </TableRow>
           <TableCell>Location</TableCell>
           <TableCell >
-            {plantDetail.coordinates}
+          {`${plantDetail.coordinates[0] / COORDINATE_PRECISION}, ${plantDetail.coordinates[1] / COORDINATE_PRECISION}`}
           </TableCell>
           <TableRow>
             <TableCell >Hashrate</TableCell>
