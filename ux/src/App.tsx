@@ -224,7 +224,7 @@ function App() {
               <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
             </Panel>
             <Panel index={4} current_index={current_tab}>
-              <Inventory userInventory={user_inventory} currency={game_board?.bitcoin_token_id ?? null}></Inventory>
+              <Inventory userInventory={user_inventory} currency={game_board?.bitcoin_token_id ?? null} hashboard_pointer={game_board?.asic_token_id ?? null}></Inventory>
             </Panel>
             <Panel index={5} current_index={current_tab}>
               <MoveForm></MoveForm>
