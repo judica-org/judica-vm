@@ -11,11 +11,16 @@ use bitcoin::{
     KeyPair, OutPoint, XOnlyPublicKey,
 };
 use emulator_connect::CTVEmulator;
+use event_log::db_handle::accessors::occurrence::OccurrenceID;
+use event_log::db_handle::accessors::occurrence::ToOccurrence;
+use event_log::db_handle::accessors::occurrence_group;
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
 use event_log::{
     connection::EventLog,
     db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
 };
 use events::convert_setup_to_contract_args;
+use events::ModuleRepo;
 use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
@@ -26,6 +31,7 @@ use sapio_base::{
     txindex::TxIndexLogger,
 };
 use sapio_psbt::SigningKey;
+use sapio_wasm_plugin::CreateArgs;
 use sapio_wasm_plugin::{
     host::{plugin_handle::ModuleLocator, WasmPluginHandle},
     plugin_handle::PluginHandle,
@@ -67,8 +73,11 @@ pub(crate) async fn event_loop(
             Some(events::Event::SyntheticPeriodicActions(time)) => {
                 handle_synthetic_periodic(&mut e, time).await?;
             }
-            Some(events::Event::ModuleBytes(contract_bytes)) => {
-                handle_module_bytes(&mut e, contract_bytes).await?;
+            Some(events::Event::ModuleBytes(ref group_key, ref tag)) => {
+                handle_module_bytes(&mut e, group_key, tag).await?;
+            }
+            Some(events::Event::CreateArgs(args)) => {
+                handle_create_args(&mut e, args).await?;
             }
             Some(events::Event::Rebind(o)) => {
                 handle_rebind(&mut e, o);
@@ -174,41 +183,19 @@ pub(crate) fn handle_rebind(e: &mut EventLoopContext, o: OutPoint) {
     state.bound_to.replace(o);
 }
 
-pub(crate) async fn handle_module_bytes(
+pub(crate) async fn handle_create_args(
     e: &mut EventLoopContext,
-    contract_bytes: Vec<u8>,
+    args: CreateArgs<Value>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let EventLoopContext {
         ref mut state,
-        ref emulator,
-        ref data_dir,
-        ref msg_db,
-        ref config,
         ref root,
         ..
     } = e;
-    info!("ModuleBytes");
-    let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
-    let module = WasmPluginHandle::<Compiled>::new_async(
-        &data_dir,
-        emulator,
-        locator,
-        bitcoin::Network::Bitcoin,
-        Default::default(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    info!("Module Loaded Successfully");
-    let setup = match get_game_setup(msg_db, config.oracle_key).await {
-        Ok(s) => s,
-        Err(e) => {
-            debug!(error=?e, "Error");
-            return Err(e)?;
-        }
-    };
-    info!(?setup, "Game Setup");
-    let args = convert_setup_to_contract_args(setup, &config.oracle_key)?;
     info!(?args, "Contract Args Ready");
+    let module_lock = state.module.lock().await;
+    let module = module_lock.as_ref().map_err(|e| e.to_string())?;
+
     state.contract = match module.call(root, &args) {
         Ok(c) => {
             info!(address=?c.address,"Contract Compilation Successful");
@@ -220,6 +207,45 @@ pub(crate) async fn handle_module_bytes(
         }
     };
     state.args = Ok(args);
+    Ok(())
+}
+pub(crate) async fn handle_module_bytes(
+    e: &mut EventLoopContext,
+    group: &OccurrenceGroupKey,
+    tag: &String,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let EventLoopContext {
+        ref mut state,
+        ref emulator,
+        ref data_dir,
+        ref msg_db,
+        ref config,
+        ref root,
+        ref evlog,
+        ..
+    } = e;
+    info!("ModuleBytes");
+
+    let bytes = {
+        let accessor = evlog.get_accessor().await;
+        let gid = accessor.get_occurrence_group_by_key(group)?;
+        let o = accessor.get_occurrence_for_group_by_tag(gid, &tag)?;
+        let mr = ModuleRepo::from_occurrence(o.1)?;
+        mr.0
+    };
+
+    let locator: ModuleLocator = ModuleLocator::Bytes(bytes);
+    let module = WasmPluginHandle::<Compiled>::new_async(
+        &data_dir,
+        emulator,
+        locator,
+        bitcoin::Network::Bitcoin,
+        Default::default(),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    *state.module.lock().await = Ok(module);
     Ok(())
 }
 

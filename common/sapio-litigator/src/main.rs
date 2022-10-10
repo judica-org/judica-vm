@@ -61,61 +61,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::Config::from_env()?;
     match args.nth(1) {
         None => Err("Must have init or run")?,
-        Some(s) if &s == "init" => Ok(init_contract_event_log(config).await?),
         Some(s) if &s == "run" => Ok(litigate_contract(config).await?),
         Some(s) => {
             println!("Invalid argument: {}", s);
             Ok(())
         }
     }
-}
-
-async fn init_contract_event_log(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {
-    let evlog = config.get_event_log().await?;
-    let accessor = evlog.get_accessor().await;
-    let group = config.event_log.group.clone();
-    let gid = match accessor.get_occurrence_group_by_key(&group) {
-        Ok(gid) => {
-            info!("Instance {} has already been initialized", group);
-            gid
-        }
-        Err(_) => {
-            info!("Initializing OccurenceGroupID for {:?}", group);
-
-            accessor.insert_new_occurrence_group(&group)?
-        }
-    };
-    let occurrences = accessor.get_occurrences_for_group(gid)?;
-    if occurrences.is_empty() {
-        info!(
-            "Initializing OccurrenceGroup with module at {:?}",
-            config.contract_location
-        );
-        let location = config.contract_location.to_str().unwrap();
-        insert_init(location, &config, &accessor, gid).await?;
-    }
-    Ok(())
-}
-
-// TODO: Move this init code *into* the game host.
-// Also Add to it the Init Args and other goodies...
-// Then we'll have the lit able to read:
-// 1. module_bytes
-// 2. init args
-// 3. first txn
-// 4. Rebind(first txn . 0)
-async fn insert_init(
-    location: &str,
-    _config: &config::Config,
-    accessor: &event_log::db_handle::EventLogAccessor<'_>,
-    gid: OccurrenceGroupID,
-) -> Result<(), Box<dyn Error>> {
-    let ev = events::Event::ModuleBytes(tokio::fs::read(&location).await?);
-    accessor.insert_new_occurrence_now_from(
-        gid,
-        &events::TaggedEvent(ev, Some(events::Tag::InitModule)),
-    )??;
-    Ok(())
 }
 
 async fn litigate_contract(config: config::Config) -> Result<(), Box<dyn std::error::Error>> {

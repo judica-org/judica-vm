@@ -1,5 +1,6 @@
 use crate::{
     app::routes::game_init::{add_player, create_new_game_instance, finish_setup, NewGameDB},
+    globals::Globals,
     Config,
 };
 use attest_database::{connection::MsgDB, db_handle::get::PeerInfo, generate_new_user};
@@ -233,7 +234,7 @@ pub type CompilerModule =
 pub fn run(
     config: Arc<Config>,
     db: MsgDB,
-    module: CompilerModule,
+    globals: Globals,
 ) -> tokio::task::JoinHandle<Result<(), Box<dyn Error + Send + Sync + 'static>>> {
     let secp = Arc::new(Secp256k1::new());
     tokio::spawn(async move {
@@ -254,7 +255,7 @@ pub fn run(
             .layer(Extension(db))
             .layer(Extension(secp))
             .layer(Extension(Arc::new(Mutex::new(NewGameDB::new()))))
-            .layer(Extension(module))
+            .layer(Extension(globals))
             .layer(
                 CorsLayer::new()
                     .allow_methods([Method::GET, Method::OPTIONS, Method::POST])

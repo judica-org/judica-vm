@@ -18,9 +18,9 @@ pub(crate) struct Config {
     pub(crate) bitcoin: BitcoinConfig,
     pub(crate) app_instance: String,
     pub(crate) event_log: EventLogConfig,
+    // TODO: Delete
     pub(crate) oracle_key: XOnlyPublicKey,
     pub(crate) psbt_broadcast_key: XOnlyPublicKey,
-    pub(crate) contract_location: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -28,6 +28,7 @@ pub(crate) struct EventLogConfig {
     pub(crate) app_name: String,
     #[serde(default)]
     pub(crate) prefix: Option<PathBuf>,
+    // TODO: Delete
     pub(crate) group: OccurrenceGroupKey,
 }
 

@@ -1,5 +1,8 @@
 use std::str::FromStr;
 
+use bitcoin::hashes::hex::ToHex;
+use bitcoin::hashes::sha256;
+use bitcoin::hashes::Hash;
 use bitcoin::Amount;
 use bitcoin::OutPoint;
 use bitcoin::Transaction;
@@ -7,7 +10,10 @@ use bitcoin::XOnlyPublicKey;
 use event_log::db_handle::accessors::occurrence::ApplicationTypeID;
 use event_log::db_handle::accessors::occurrence::Occurrence;
 use event_log::db_handle::accessors::occurrence::OccurrenceConversionError;
+use event_log::db_handle::accessors::occurrence::OccurrenceID;
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID;
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
 use game_player_messages::PsbtString;
 use ruma_serde::CanonicalJsonValue;
 use sapio::util::amountrange::AmountF64;
@@ -24,7 +30,8 @@ use simps::PK;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Event {
-    ModuleBytes(Vec<u8>),
+    ModuleBytes(OccurrenceGroupKey, String),
+    CreateArgs(CreateArgs<Value>),
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
@@ -37,6 +44,8 @@ pub enum Event {
 #[serde(rename_all = "snake_case")]
 pub enum Tag {
     InitModule,
+    CreateArgs,
+    FirstBind,
     EvLoopCounter(u64),
     ScopedCounter(String, u64),
     ScopedValue(String, String),
@@ -108,4 +117,30 @@ pub fn convert_setup_to_contract_args(
         },
     };
     Ok(args)
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ModuleRepo(pub Vec<u8>);
+
+impl ModuleRepo {
+    pub fn default_group_key() -> OccurrenceGroupKey {
+        ModuleRepo::stable_typeid().into_inner()
+    }
+}
+
+impl ToOccurrence for ModuleRepo {
+    fn to_data(&self) -> CanonicalJsonValue {
+        ruma_serde::to_canonical_value(self).unwrap()
+    }
+
+    fn stable_typeid() -> ApplicationTypeID
+    where
+        Self: Sized,
+    {
+        ApplicationTypeID::from_inner("ModuleRepo")
+    }
+
+    fn unique_tag(&self) -> Option<String> {
+        Some(sha256::Hash::hash(&self.0[..]).to_hex())
+    }
 }

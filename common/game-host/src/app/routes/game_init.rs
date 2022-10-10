@@ -11,7 +11,10 @@
 //!
 //! finish_setup(password, join, ... params) -> CreatedNewChain {genesis: Envelope, name: String}
 
-use crate::app::{create_new_attestation_chain, CompilerModule, CreatedNewChain};
+use crate::{
+    app::{create_new_attestation_chain, CompilerModule, CreatedNewChain},
+    globals::Globals,
+};
 use attest_database::connection::MsgDB;
 use attest_messages::{AuthenticationError, GenericEnvelope};
 use axum::{
@@ -19,7 +22,10 @@ use axum::{
     Extension, Json,
 };
 use bitcoincore_rpc_async::{json::WalletCreateFundedPsbtOptions, Client, RpcApi};
-use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
+use event_log::db_handle::accessors::{
+    occurrence::sql::Idempotent,
+    occurrence_group::{OccurrenceGroupID, OccurrenceGroupKey},
+};
 use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
@@ -34,7 +40,7 @@ use sapio_bitcoin::{
     secp256k1::{All, Secp256k1},
     Address, Script,
 };
-use sapio_litigator_events::{Event, Tag, TaggedEvent};
+use sapio_litigator_events::{Event, ModuleRepo, Tag, TaggedEvent};
 use serde::Deserialize;
 
 use std::{
@@ -201,9 +207,9 @@ pub async fn finish_setup(
         start_amount,
     }): Json<FinishArgs>,
     Extension(db): Extension<Arc<Mutex<NewGameDB>>>,
-    Extension(module): Extension<CompilerModule>,
+    // TODO: Add these to the layer in app.rs / move to globals?
     Extension(rpc): Extension<Arc<Client>>,
-    Extension(evlog): Extension<event_log::connection::EventLog>,
+    Extension(globals): Extension<Globals>,
 ) -> Result<(Response<()>, Json<CreatedNewChain>), (StatusCode, String)> {
     if let Some(v) = db.lock().await.states.get(&code) {
         if passcode == v.admin {
@@ -261,7 +267,7 @@ pub async fn finish_setup(
                             )
                         })?;
                         let compiled = {
-                            let module = module.lock().await;
+                            let module = globals.compiler_module.lock().await;
                             module
                                 .call(&EffectPath::from(PathFragment::Root), &args)
                                 .map_err(|_e| {
@@ -338,14 +344,14 @@ pub async fn finish_setup(
                         let tx = psbt.extract_tx();
 
                         let seq_str = b.sequencer_key.to_string();
-                        let evt = TaggedEvent(
+                        let tx_evt = TaggedEvent(
                             Event::TransactionFinalized("default".into(), tx.clone()),
                             Some(Tag::ScopedValue(seq_str.clone(), "funding_tx".into())),
                         );
                         {
-                            let accessor = evlog.get_accessor().await;
+                            let accessor = globals.evlog.get_accessor().await;
                             // TODO: SPAWN_BLOCKING
-                            let gid = accessor
+                            let sequencer_group = accessor
                                 .insert_new_occurrence_group(&seq_str)
                                 .or_else(|_| accessor.get_occurrence_group_by_key(&seq_str))
                                 .map_err(|_| {
@@ -355,7 +361,68 @@ pub async fn finish_setup(
                                     )
                                 })?;
                             accessor
-                                .insert_new_occurrence_now_from(gid, &evt)
+                                .insert_new_occurrence_now_from(
+                                    sequencer_group,
+                                    &TaggedEvent(
+                                        Event::ModuleBytes(
+                                            ModuleRepo::default_group_key(),
+                                            globals.module_tag.clone(),
+                                        ),
+                                        Some(Tag::InitModule),
+                                    ),
+                                )
+                                .map_err(|_| {
+                                    (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        "Could not Insert new Group".into(),
+                                    )
+                                })?
+                                // ignore idempotent error, safe if the library ever changes
+                                .map_err(|_: Idempotent| ())
+                                .ok();
+
+                            accessor
+                                .insert_new_occurrence_now_from(
+                                    sequencer_group,
+                                    &TaggedEvent(Event::CreateArgs(args), Some(Tag::CreateArgs)),
+                                )
+                                .map_err(|_| {
+                                    (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        "Could not insert create args".into(),
+                                    )
+                                })?
+                                .map_err(|_| {
+                                    (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        "Idempotent Key already inserted".into(),
+                                    )
+                                })?;
+                            accessor
+                                .insert_new_occurrence_now_from(
+                                    sequencer_group,
+                                    &TaggedEvent(
+                                        Event::Rebind(sapio_bitcoin::OutPoint {
+                                            txid: tx.txid(),
+                                            vout: 0,
+                                        }),
+                                        Some(Tag::FirstBind),
+                                    ),
+                                )
+                                .map_err(|_| {
+                                    (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        "Could not insert rebind args".into(),
+                                    )
+                                })?
+                                .map_err(|_| {
+                                    (
+                                        StatusCode::INTERNAL_SERVER_ERROR,
+                                        "Idempotent Key already inserted".into(),
+                                    )
+                                })?;
+                            accessor
+                                .insert_new_occurrence_now_from(sequencer_group, &tx_evt)
                                 .map_err(|_| {
                                     (
                                         StatusCode::INTERNAL_SERVER_ERROR,

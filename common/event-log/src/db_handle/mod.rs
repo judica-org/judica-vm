@@ -80,6 +80,9 @@ impl $RowType {
     pub fn inner(&self) -> &str {
         &self.0
     }
+    pub fn into_inner(self) -> String {
+        self.0
+    }
     pub fn from_inner(a:&str) -> Self {
         Self(a.to_owned())
 
