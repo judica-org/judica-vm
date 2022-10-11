@@ -3,7 +3,7 @@ import React from "react";
 import countries_data from "./countries.json";
 import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
-import { Card, CardHeader, CardContent, Icon, Divider } from '@mui/material';
+import { Card, CardHeader, CardContent, Icon, Divider, Typography } from '@mui/material';
 import { emit } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
 import { PlantSelected, PlantType } from './App';
@@ -142,96 +142,92 @@ export default (props: { power_plants: UXPlantData[], user_id: EntityID | null }
 
 
     return <div className='globe-container'>
-        <Card>
-            <CardHeader title={'World Energy Grid'}
-                subheader={location ? `Selected Location: ${location.lat}, ${location.lng}` : 'Click to select location'}
-            />
-            <CardContent  >
-                <div className='GlobeContent'>
-                    <Globe
-                        globeImageUrl={earth}
-                        width={600}
-                        height={600}
-                        htmlElementsData={selected_plants}
-                        htmlLat={(d: object) => (d as Plant).coordinates[0] / COORDINATE_PRECISION}
-                        htmlLng={(d: object) => (d as Plant).coordinates[1] / COORDINATE_PRECISION}
-                        htmlAltitude={0.02}
-                        htmlElement={(m: object) => {
-                            const d: Plant = m as Plant;
-                            const svg = d.plant_type === 'Hydro' ? hydroSvg : (d.plant_type === 'Flare' ? fireSvg : solarSvg);
-                            const el = document.createElement('div');
-                            el.innerHTML = svg;
-                            el.style.color = 'white';
-                            // can change size based on watts or hashrate
-                            el.style.width = '50px';
-                            // need this?
-                            el.style.pointerEvents = 'auto';
-                            el.style.cursor = 'pointer';
-                            // set to 
-                            el.onclick = () => PlantSelected(d.id);
-                            return el;
-                        }}
+        <div className='GlobeContent'>
+            <Globe
+                globeImageUrl={earth}
+                width={800}
+                height={600}
+                htmlElementsData={selected_plants}
+                htmlLat={(d: object) => (d as Plant).coordinates[0] / COORDINATE_PRECISION}
+                htmlLng={(d: object) => (d as Plant).coordinates[1] / COORDINATE_PRECISION}
+                htmlAltitude={0.02}
+                htmlElement={(m: object) => {
+                    const d: Plant = m as Plant;
+                    const svg = d.plant_type === 'Hydro' ? hydroSvg : (d.plant_type === 'Flare' ? fireSvg : solarSvg);
+                    const el = document.createElement('div');
+                    el.innerHTML = svg;
+                    el.style.color = 'white';
+                    // can change size based on watts or hashrate
+                    el.style.width = '50px';
+                    // need this?
+                    el.style.pointerEvents = 'auto';
+                    el.style.cursor = 'pointer';
+                    // set to 
+                    el.onclick = () => PlantSelected(d.id);
+                    return el;
+                }}
 
-                        hexPolygonsData={countries_data.features}
-                        hexPolygonResolution={3}
-                        hexPolygonMargin={0.3}
-                        hexPolygonColor={(d: object) => {
-                            type R = typeof countries_data.features[number];
-                            let accessor: R = d as R;
-                            return memoized_color(accessor.properties.NAME);
-                        }
-                        }
-                        onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
-                            setLocation({ lat, lng })
-                            console.log(['globe-click'], { lat, lng });
-                            emit('globe-click', [lat, lng]);
-                        }}
-                        pointsData={output_bars}
-                        pointLabel={(d: object) => {
-                            const p = d as BarData;
-                            let label = `<></>`;
-                            if (p.hashboards) {
-                                label = `
+                hexPolygonsData={countries_data.features}
+                hexPolygonResolution={3}
+                hexPolygonMargin={0.3}
+                hexPolygonColor={(d: object) => {
+                    type R = typeof countries_data.features[number];
+                    let accessor: R = d as R;
+                    return memoized_color(accessor.properties.NAME);
+                }
+                }
+                onHexPolygonClick={(_polygon, _ev, { lat, lng }) => {
+                    setLocation({ lat, lng })
+                    console.log(['globe-click'], { lat, lng });
+                    emit('globe-click', [lat, lng]);
+                }}
+                pointsData={output_bars}
+                pointLabel={(d: object) => {
+                    const p = d as BarData;
+                    let label = `<></>`;
+                    if (p.hashboards) {
+                        label = `
                                 <b>ID: ${p.id}</b> <br />
                                 Hashboards: <i>${p.hashboards}</i> <br />
                                 `
-                            }
-                            if (p.scale) {
-                                label = `
+                    }
+                    if (p.scale) {
+                        label = `
                                 <b>ID: ${p.id}</b> <br />
                                 Scale: <i>${p.scale}</i> <br />
                                 `
-                            }
-                            return label;
-                        }}
-                        pointLat={(d: object) => (d as BarData).coordinates[0] / COORDINATE_PRECISION}
-                        pointLng={(d: object) => (d as BarData).coordinates[1] / COORDINATE_PRECISION}
-                        pointAltitude={(d: object) => {
-                            const p = d as BarData;
-                            let alt = 0
-                            console.log(["data-looks-like"], d);
-                            if (p.hashboards) {
-                                alt = p.hashboards
-                            }
-                            if (p.scale) {
-                                alt = p.scale
-                            }
-                            return scaling_formula(alt, max_scale)
-                        }}
-                        pointRadius={0.15}
-                        pointColor={(d: object) => {
-                            console.log(["color-data-shape"], d);
-                            return chose_color(d as BarData)
-                        }}
-                        pointResolution={12}
-                        pointsMerge={true}
-                    />
-                </div>
-                <Divider />
-                <PlantTypeSelect handleChange={handlePlantTypeChange} plantTypes={plantTypes} />
-                <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={all_plant_owners} selectedPlantOwners={selectedPlantOwners} user_id={props.user_id}/>
-            </CardContent>
-        </Card>
-    </div>;
+                    }
+                    return label;
+                }}
+                pointLat={(d: object) => (d as BarData).coordinates[0] / COORDINATE_PRECISION}
+                pointLng={(d: object) => (d as BarData).coordinates[1] / COORDINATE_PRECISION}
+                pointAltitude={(d: object) => {
+                    const p = d as BarData;
+                    let alt = 0
+                    console.log(["data-looks-like"], d);
+                    if (p.hashboards) {
+                        alt = p.hashboards
+                    }
+                    if (p.scale) {
+                        alt = p.scale
+                    }
+                    return scaling_formula(alt, max_scale)
+                }}
+                pointRadius={0.15}
+                pointColor={(d: object) => {
+                    console.log(["color-data-shape"], d);
+                    return chose_color(d as BarData)
+                }}
+                pointResolution={12}
+                pointsMerge={true}
+            />
+        </div>
+        <Typography>
+            {location ? `Selected Location: ${location.lat}, ${location.lng}` : 'Click to select location'}
+        </Typography>
+        <Divider />
+        <PlantTypeSelect handleChange={handlePlantTypeChange} plantTypes={plantTypes} />
+        <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={all_plant_owners} selectedPlantOwners={selectedPlantOwners} user_id={props.user_id} />
+    </div >;
 };
 
