@@ -40,7 +40,15 @@ pub async fn sequencer_extractor(
     new_synthetic_event: Arc<Notify>,
     tasks: &TaskSet,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let res = sequencer_extractor_inner(oracle_key, msg_db, evlog, evlog_group_id, new_synthetic_event, tasks).await;
+    let res = sequencer_extractor_inner(
+        oracle_key,
+        msg_db,
+        evlog,
+        evlog_group_id,
+        new_synthetic_event,
+        tasks,
+    )
+    .await;
     debug!(with=?res, "Sequencer Extractor Terminated");
     res
 }
