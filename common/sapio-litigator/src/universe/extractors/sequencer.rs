@@ -32,8 +32,19 @@ use tokio::{
     task::{spawn_blocking, JoinHandle},
 };
 use tracing::{debug, info};
-
 pub async fn sequencer_extractor(
+    oracle_key: XOnlyPublicKey,
+    msg_db: MsgDB,
+    evlog: EventLog,
+    evlog_group_id: OccurrenceGroupID,
+    new_synthetic_event: Arc<Notify>,
+    tasks: &TaskSet,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let res = sequencer_extractor_inner(oracle_key, msg_db, evlog, evlog_group_id, new_synthetic_event, tasks).await;
+    debug!(with=?res, "Sequencer Extractor Terminated");
+    res
+}
+pub async fn sequencer_extractor_inner(
     oracle_key: XOnlyPublicKey,
     msg_db: MsgDB,
     evlog: EventLog,

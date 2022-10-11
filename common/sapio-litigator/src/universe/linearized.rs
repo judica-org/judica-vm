@@ -8,7 +8,7 @@ use event_log::{
     },
 };
 use tokio::sync::{mpsc::Sender, Notify};
-use tracing::{trace, warn};
+use tracing::{debug, trace, warn};
 
 use crate::events::{self, TaggedEvent};
 
@@ -17,6 +17,16 @@ const MAX_WAIT_TO_CHECK_LOG: Duration = Duration::from_secs(30);
 const LOG_CHECK_BACKING: f64 = 1.5;
 const LOG_CHECK_START: Duration = Duration::from_millis(1);
 pub async fn event_log_processor(
+    evlog: EventLog,
+    evlog_group_id: OccurrenceGroupID,
+    tx: Sender<events::Event>,
+    new_events_in_evlog: Arc<Notify>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let res = event_log_processor_inner(evlog, evlog_group_id, tx, new_events_in_evlog).await;
+    debug!(with=?res, "Event Log Processor Terminated");
+    res
+}
+pub async fn event_log_processor_inner(
     evlog: EventLog,
     evlog_group_id: OccurrenceGroupID,
     tx: Sender<events::Event>,

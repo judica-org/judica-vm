@@ -12,7 +12,7 @@ use crate::{
     sql_serializers::SqlJson,
 };
 
-use super::{SQL_GET_OCCURRENCES_FOR_GROUP, SQL_GET_OCCURRENCE_AFTER_ID, SQL_GET_OCCURRENCE_BY_ID};
+use super::{SQL_GET_OCCURRENCES_FOR_GROUP, SQL_GET_OCCURRENCE_AFTER_ID, SQL_GET_OCCURRENCE_BY_ID, SQL_GET_OCCURRENCES_FOR_GROUP_BY_TAG};
 
 impl<'a, T> EventLogAccessor<'a, T>
 where
@@ -64,7 +64,7 @@ where
         id: OccurrenceGroupID,
         tag: &str,
     ) -> Result<(OccurrenceID, Occurrence), rusqlite::Error> {
-        let mut stmt = self.0.prepare_cached(SQL_GET_OCCURRENCES_FOR_GROUP)?;
+        let mut stmt = self.0.prepare_cached(SQL_GET_OCCURRENCES_FOR_GROUP_BY_TAG)?;
         let q = stmt.query_row(named_params! {":group_id": id, ":tag": tag}, |row| {
             let row_id: OccurrenceID = row.get(0)?;
             let data: SqlJson = row.get(1)?;

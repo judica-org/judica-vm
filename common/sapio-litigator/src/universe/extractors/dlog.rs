@@ -18,6 +18,16 @@ pub async fn dlog_extractor(
     evlog_group_id: OccurrenceGroupID,
     interval: Duration,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let res = dlog_extractor_inner(msg_db, evlog, evlog_group_id, interval).await;
+    debug!(with = ?res, "DLog Extractor Terminated");
+    res
+}
+pub async fn dlog_extractor_inner(
+    msg_db: MsgDB,
+    evlog: EventLog,
+    evlog_group_id: OccurrenceGroupID,
+    interval: Duration,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut known: BTreeSet<XOnlyPublicKey> = Default::default();
     loop {
         time::sleep(interval).await;
