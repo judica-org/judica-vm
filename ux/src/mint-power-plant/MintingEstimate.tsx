@@ -9,7 +9,7 @@ export const MintingEstimate = ({ costs }: { costs: any[] }) => {
           <TableRow>
             <TableCell>Material</TableCell>
             <TableCell align="right">Quantity Needed</TableCell>
-            <TableCell align="right">Cost in BTC</TableCell>
+            <TableCell align="right">Cost in Virtual Sats</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>

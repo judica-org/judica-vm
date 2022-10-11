@@ -6,10 +6,8 @@ const SaleListingForm = ({ nft_id, currency }: { nft_id: string, currency: strin
   const [sale_price, set_sale_price] = useState<number>(0);
 
   const handle_submit = () => {
-    console.log(['sale-listing', 'currency'], currency);
     if (sale_price > 0 && currency) {
       tauri_host.make_move_inner({ list_n_f_t_for_sale: { nft_id, currency, price: sale_price } });
-      console.log(['list-plant'], { list_n_f_t_for_sale: { nft_id, currency, price: sale_price } });
     }
   };
 

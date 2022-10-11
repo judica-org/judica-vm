@@ -52,15 +52,8 @@ impl PowerPlant {
         coordinates: (i64, i64),
         scale: u64,
     ) -> Self {
-        let watts = {
-            // this can be a more fun calculation in the future
-            let materials = plant_type.raw_materials_bill(game, scale);
-            let mut total_watts = 0;
-            for (_, qty) in materials {
-                total_watts += qty / 2;
-            }
-            total_watts
-        };
+        // 1 scale = 100kW
+        let watts: u128 = (scale * 100_000).into();
         Self {
             id,
             plant_type,

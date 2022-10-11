@@ -1,12 +1,12 @@
 import FactoryIcon from '@mui/icons-material/Factory';
-import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Typography, Divider, Button, Paper } from '@mui/material';
+import { Table, TableHead, TableRow, TableCell, TableBody, Typography, Divider, Button, Paper } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { UserInventory } from '../App';
 import SaleListingForm from '../sale-listing/SaleListingForm';
 import { EntityID } from '../Types/GameMove';
 import { plant_type_color_map } from '../util';
 import { UXPlantData, UXUserInventory } from '../Types/Gameboard';
 import { MoveHashboards } from '../move-hashboards/MoveHashboards';
+import { COORDINATE_PRECISION } from '../mint-power-plant/MintingForm';
 
 
 export const Inventory = ({ userInventory, currency, hashboard_pointer }: { userInventory: UXUserInventory | null, currency: EntityID | null, hashboard_pointer: EntityID | null }) => {
@@ -51,7 +51,7 @@ export const Inventory = ({ userInventory, currency, hashboard_pointer }: { user
                     <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[plant.plant_type] }} /><p>{plant.plant_type}</p>
                   </TableCell>
                   <TableCell component="th" scope="row">
-                    {plant.coordinates}
+                  {`${plant.coordinates[0] / COORDINATE_PRECISION}, ${plant.coordinates[1] / COORDINATE_PRECISION}`}
                   </TableCell>
                   <TableCell align="right">{plant.hashrate}</TableCell>
                   <TableCell align="right">{plant.miners}</TableCell>

@@ -1,7 +1,6 @@
 import { ContentCopy, RemoveCircleOutline } from '@mui/icons-material';
 import { Button, FormControl, FormGroup, FormLabel, IconButton, MenuItem, Select } from '@mui/material';
-import { appWindow } from '@tauri-apps/api/window';
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { tauri_host } from '../tauri_host';
 import { GameSetup } from '../Types/Gameboard';
 

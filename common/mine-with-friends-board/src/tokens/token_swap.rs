@@ -335,11 +335,13 @@ impl ConstantFunctionMarketMaker {
                 ));
             }
             let k = mkt_qty_selling * mkt_qty_buying;
+            // Computed sell_amt
             let sell_amt = (k.roundup_div(mkt_qty_buying - buy_amt)) - mkt_qty_selling;
+            // shrunken buy_amt from input parameter
             let buy_amt = mkt_qty_buying - k.roundup_div(mkt_qty_selling + sell_amt);
 
             if let Some(max) = sell_max {
-                if max > sell_amt {
+                if sell_amt > max {
                     return Err(TradeError::MarketSlipped);
                 }
             }

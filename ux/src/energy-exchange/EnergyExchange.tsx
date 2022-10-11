@@ -1,10 +1,7 @@
 import FactoryIcon from '@mui/icons-material/Factory';
 import { Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Button, Divider } from '@mui/material';
-import { useState, useEffect } from 'react';
-import { PlantType } from '../App';
+import { useState } from 'react';
 import PurchaseOfferForm from '../purchase-offer/PurchaseOfferForm';
-import { EntityID } from '../Types/GameMove';
-import { plant_type_color_map } from '../util';
 import { UXNFTSale } from '../Types/Gameboard';
 
 export type NFTSale = UXNFTSale;

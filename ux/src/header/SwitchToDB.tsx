@@ -1,5 +1,4 @@
-import { Button, FormControl, FormGroup, FormLabel, InputLabel, TextField } from '@mui/material';
-import { appWindow } from '@tauri-apps/api/window';
+import { Button, FormControl,  FormLabel, TextField } from '@mui/material';
 import React from 'react';
 import { tauri_host } from '../tauri_host';
 

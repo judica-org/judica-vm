@@ -17,7 +17,7 @@ use serde::Serialize;
 #[derive(Serialize, JsonSchema, Debug)]
 pub struct Silicon {
     // the weight in kg of this silicon token
-    pub weight_in_kg: u8,
+    pub weight_in_kg: u64,
 }
 
 #[derive(Serialize, Clone, JsonSchema, Debug)]

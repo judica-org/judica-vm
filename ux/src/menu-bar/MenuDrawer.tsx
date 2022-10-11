@@ -7,22 +7,22 @@ import IconButton from '@mui/material/IconButton';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
 import { AppHeader } from '../header/AppHeader';
 import Close from '@mui/icons-material/Close';
-import { List, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
-import { Bolt, Handyman, Sell, Send, ShoppingCart } from '@mui/icons-material';
 import { SwitchToGameProps } from '../header/SwitchToGame';
 import { KeySelectorProps } from '../header/KeySelector';
 import { NewGameProps } from '../header/NewGame';
 import { SwitchToHostProps } from '../header/SwitchToHost';
+import { EntityID } from '../Types/GameMove';
 
 interface Props extends SwitchToGameProps, KeySelectorProps, NewGameProps, SwitchToHostProps {
   db_name_loaded: [string, string | null] | null;
+  readonly user_id: EntityID | null;
+  readonly elapsed_time: number | null;
+  readonly is_finished: boolean;
 };
 
 const settingsDrawerWidth = '100vw';
-
 
 export default function DrawerAppBar({ db_name_loaded,
   which_game_loaded,
@@ -31,29 +31,22 @@ export default function DrawerAppBar({ db_name_loaded,
   available_keys,
   join_code,
   join_password,
-  game_host_service
+  game_host_service,
+  user_id,
+  elapsed_time,
+  is_finished
 }:
   Props) {
-  const gameMoves = false;
+  const [player_id, set_player_id] = React.useState<EntityID | null>(null)
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [moveMenuOpen, setMoveMenuOpen] = React.useState(false);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
-  const toggleMoveDrawer =
-    (open: boolean) =>
-      (event: React.KeyboardEvent | React.MouseEvent) => {
-        if (
-          event.type === 'keydown' &&
-          ((event as React.KeyboardEvent).key === 'Tab' ||
-            (event as React.KeyboardEvent).key === 'Shift')
-        ) {
-          return;
-        }
-        setMoveMenuOpen(open);
-      };
+  React.useEffect(() => {
+    set_player_id(user_id);
+  }, [user_id])
 
   const drawer = (
     <Box sx={{ textAlign: 'center' }}>
@@ -79,69 +72,6 @@ export default function DrawerAppBar({ db_name_loaded,
     </Box>
   );
 
-  const moveList = () => (
-    <Box
-      sx={{ width: 250 }}
-      role="presentation"
-      onKeyDown={toggleMoveDrawer(false)}
-    >
-      <List>
-        <ListItem>
-          <IconButton
-            color="inherit"
-            aria-label="close drawer"
-            edge="start"
-            onClick={toggleMoveDrawer(false)}
-            sx={{ ml: 1 }}
-          >
-            <Close />
-          </IconButton>
-        </ListItem>
-      </List>
-      <Divider />
-      <List>
-        <ListItem>
-          <ListItemButton>
-            <ListItemIcon>
-              <Send />
-            </ListItemIcon>
-            <ListItemText primary={'Send Tokens'} />
-          </ListItemButton>
-        </ListItem>
-        {['Buy Materials or Hashboards', 'Sell Materials or Hashboards'].map((text, index) => (
-          <ListItem>
-            <ListItemButton>
-              <ListItemIcon>
-                {index === 0 ? <ShoppingCart /> : <Sell />}
-              </ListItemIcon>
-              <ListItemText primary={text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
-      <List>
-        {['Mint a Power Plant', 'SuperMint a Power Plant'].map((text, index) => (
-          <ListItem>
-            <ListItemButton>
-              <ListItemIcon>
-                {index === 0 ? <Handyman /> : <Bolt />}
-              </ListItemIcon>
-              <ListItemText primary={text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-        <ListItem>
-          <ListItemButton>
-            <ListItemIcon>
-              <SettingsIcon />
-            </ListItemIcon>
-            <ListItemText primary={'Manage your Plower Plants'} />
-          </ListItemButton>
-        </ListItem>
-      </List>
-    </Box>
-  )
-
   const container = undefined;
 
   return (
@@ -157,6 +87,9 @@ export default function DrawerAppBar({ db_name_loaded,
           >
             <SettingsIcon />
           </IconButton>
+          {player_id && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <Typography variant="h6">{`Playing as ${player_id}`}</Typography>
+          </Box>}
           <Typography
             variant="h6"
             component="div"
@@ -164,14 +97,12 @@ export default function DrawerAppBar({ db_name_loaded,
           >
             MASTER MINE!
           </Typography>
-          {gameMoves && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-            <Button key={"moves"} sx={{ color: '#fff' }} onClick={toggleMoveDrawer(true)}>
-              {'GAME MOVES'}
-            </Button>
-            <Drawer anchor='right' open={moveMenuOpen} onClose={toggleMoveDrawer(false)}>
-              {moveList()}
-            </Drawer>
-          </Box>}
+          {is_finished ? <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <Typography variant="h6">{'Game Over'}</Typography>
+          </Box>
+            : elapsed_time && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+              <Typography variant="h6">{`Est Time Remaining: ${new Date(3600000 - elapsed_time).toISOString().slice(11, 19)}`}</Typography>
+            </Box>}
         </Toolbar>
       </AppBar>
       <Box component="nav">

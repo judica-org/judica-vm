@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { listen } from '@tauri-apps/api/event';
+import React, { useState } from "react";
 import { Button, Divider, FormControl, FormControlLabel, FormLabel, Grid, Radio, RadioGroup, Switch, TextField, Typography } from "@mui/material";
-import { invoke } from "@tauri-apps/api";
 import { MintingEstimate } from "./MintingEstimate";
-import { tauri_host } from "../tauri_host";
+import { tauri_host, UnsuccessfulTradeOutcome } from "../tauri_host";
 import { PlantType } from "../App";
+import { handle_error } from "../purchase-material/PurchaseMaterialForm";
 
 export const COORDINATE_PRECISION = 1000000;
 const standardizeCoordinates = ({ lat, lng }: { lat: number, lng: number }): [number, number] => {
@@ -24,13 +23,6 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
     scale: 1,
     location,
   }
-
-  /* Will need two submit buttons:
-    1. simulate - will submit formData with simulate = true. 
-    2. mint - will submit formData with simulate = false.
-    3. toggle for mint vs. super-mint
-       estimate display should just return a list that we can populate dynamically. 
-  */
 
   const [formValues, setFormValues] = useState(defaultValues);
   // fix this type
@@ -57,8 +49,9 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
         let costs = await tauri_host.mint_power_plant_cost(scale, standardizeCoordinates({ lat: location[0], lng: location[1] }), plant_type as PlantType);
         console.log(["mint-plant-estimate"], costs)
         setEstimate(costs as unknown as any);
-      } catch (e) {
+      } catch (e: any) {
         console.warn(e);
+        alert(handle_error(e.TradeError as UnsuccessfulTradeOutcome));
       }
     }
     if (submitter_id === "mint") {
@@ -118,7 +111,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
             </Grid>
             <Grid item>
               <div style={{ width: "400px" }}>
-                Super Mint?
+                Super Build?
                 <Switch
                   checked={superMint}
                   onChange={handleSelectChange}
@@ -130,7 +123,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
               Estimate
             </Button>
             <Button variant="contained" color="primary" type="submit" id="mint">
-              Mint
+              Build
             </Button>
           </Grid>
         </form>
