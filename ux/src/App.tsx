@@ -14,11 +14,12 @@ import DrawerAppBar from './menu-bar/MenuDrawer';
 import { EntityID } from './Types/GameMove';
 import { ManagePlant } from './manage-plant/ManagePlant';
 import MoveForm from './move-form/MoveForm';
-import { EmittedAppState, GameBoard, LogEvent, UXPlantData } from './Types/Gameboard';
+import { EmittedAppState, LogEvent, UXPlantData } from './Types/Gameboard';
 import { EventLog } from './event-log/EventLog';
 import FooterTicker from './footer-ticker/FooterTicker';
 import { AppHeader } from './header/AppHeader';
 import { Backpack, BugReport, ChatBubble, ElectricBoltSharp, Settings, Shop2Sharp, StorefrontSharp } from '@mui/icons-material';
+import { ListGameBoard } from './ListGameBoard';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export const PLANT_SELECTED_EVENT = "PlantSelected";
@@ -37,41 +38,6 @@ export const ListenPlantSelected = (f: (d: EntityID) => void) => {
   })
 }
 
-
-function ListGameBoard(props: { g: GameBoard | null }) {
-  return props.g && <ul>
-    <li>
-      Init: {JSON.stringify(props.g.init)}
-    </li>
-    <li>
-      New Users: {JSON.stringify(props.g.new_users_allowed)}
-    </li>
-    <li>
-      User List: {JSON.stringify(props.g.users)}
-    </li>
-    <li>
-      Root User: {JSON.stringify(props.g.root_user)}
-    </li>
-    <li>
-      Bitcoin Token ID: {JSON.stringify(props.g.bitcoin_token_id)}
-    </li>
-    <li>
-      Dollar Token ID: {JSON.stringify(props.g.dollar_token_id)}
-    </li>
-    <li>
-      ERC20s: {JSON.stringify(props.g.erc20s)}
-    </li>
-    <li>
-      Exchanges: {JSON.stringify(props.g.swap)}
-    </li>
-    <li>
-      NFTs: {JSON.stringify(props.g.nfts)}
-    </li>
-    <li>
-      NFT Sales: {JSON.stringify(props.g.nft_sales)}
-    </li>
-  </ul>;
-}
 
 function Panel(props: React.PropsWithChildren & { index: number, current_index: number }) {
   return <div hidden={props.index !== props.current_index}>
@@ -218,7 +184,7 @@ function App() {
         <div className="Content">
           <WorkingGlobe power_plants={power_plants} user_id={user_id}></WorkingGlobe>
           <Box className="DataDisplay">
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }} className="DisplayContents">
+            <Box sx={{ borderBottom: 1, borderColor: 'divider'}} className="DisplayContents">
               <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
                 <Tab value={10}  icon={<Settings></Settings>}></Tab>
                 <Tab value={1} icon={<ElectricBoltSharp></ElectricBoltSharp>}></Tab>
