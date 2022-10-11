@@ -2,7 +2,7 @@
 
 case "$(uname -s)" in
 Darwin)
-    export PATH="/opt/homebrew/opt/llvm/bin:$PATH" ─╯
+    export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
     export CC=/opt/homebrew/opt/llvm/bin/clang
     export AR=/opt/homebrew/opt/llvm/bin/llvm-ar
     ;;
