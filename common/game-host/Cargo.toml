@@ -16,6 +16,8 @@ tracing = "0.1.35"
 directories = "3.0.1"
 ruma-serde = "0.6.0"
 tower-layer = "0.3.1"
+bitcoincore-rpc-async = "4.0.1-alpha.1"
+
 [dependencies.tower-http]
 version = "0.3.4"
 features = [ "cors", "trace" ]
@@ -28,8 +30,13 @@ path = "../attest-database"
 
 [dependencies.sapio-bitcoin]
 version = "0.28.1"
-features=['use-serde', 'rand']
+features=['use-serde', 'rand', 'use-serde', 'rand', 'base64', 'bitcoinconsensus']
 
+
+[dependencies.event-log]
+path = "../event-log"
+[dependencies.sapio-litigator-events]
+path = "../sapio-litigator-events"
 [dependencies.game-host-messages]
 path = "../game-host-messages"
 [dependencies.game-player-messages]
@@ -45,7 +52,22 @@ features = ["vendored"]
 
 [dependencies.attest-util]
 path = "../attest-util"
-features = ["tokio", "tracing"]
+features = ["tokio", "tracing", "bitcoin"]
 
 [dependencies.mine-with-friends-board]
 path = "../mine-with-friends-board"
+
+[dependencies.sapio-wasm-plugin]
+path = "../../submodule/sapio/plugins"
+version = "0.2.0"
+features = ["host"]
+[dependencies.sapio]
+path = "../../submodule/sapio/sapio"
+version = "0.2.0"
+
+[dependencies.sapio-psbt]
+path = "../../submodule/sapio/sapio-psbt"
+version = "0.1.0"
+[dependencies.ctv_emulators]
+path = "../../submodule/sapio/ctv_emulators"
+version = "0.2.0"

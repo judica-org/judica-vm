@@ -1,10 +1,10 @@
 use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_util::bitcoin::BitcoinConfig;
-use bitcoin::XOnlyPublicKey;
+use bitcoin::Network;
 use bitcoincore_rpc_async::Client;
 use event_log::connection::EventLog;
-use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
+
 use serde::Deserialize;
 
 use std::path::PathBuf;
@@ -16,11 +16,9 @@ pub(crate) struct Config {
     #[serde(default)]
     pub(crate) db_prefix: Option<PathBuf>,
     pub(crate) bitcoin: BitcoinConfig,
+    pub(crate) bitcoin_network: Network,
     pub(crate) app_instance: String,
     pub(crate) event_log: EventLogConfig,
-    pub(crate) oracle_key: XOnlyPublicKey,
-    pub(crate) psbt_broadcast_key: XOnlyPublicKey,
-    pub(crate) contract_location: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -28,7 +26,6 @@ pub(crate) struct EventLogConfig {
     pub(crate) app_name: String,
     #[serde(default)]
     pub(crate) prefix: Option<PathBuf>,
-    pub(crate) group: OccurrenceGroupKey,
 }
 
 impl Config {

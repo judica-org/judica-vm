@@ -65,6 +65,9 @@ features = ["bitcoin"]
 [dependencies.simps]
 path = "../simps"
 
+[dependencies.sapio-litigator-events]
+path = "../sapio-litigator-events"
+
 [dependencies.game-sequencer]
 path = "../game-sequencer"
 features = ["database_access"]

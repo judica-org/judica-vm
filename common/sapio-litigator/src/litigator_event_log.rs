@@ -1,38 +1,48 @@
-use super::AppState;
+use super::GlobalLitigatorState;
 use super::OK_T;
-use crate::{config, events, ext::CompiledExt, universe::extractors::sequencer::get_game_setup};
+use crate::LitigatedContractInstanceState;
+use crate::{events, ext::CompiledExt};
 use attest_database::db_handle::create::TipControl;
+use bitcoin::consensus::serialize as btc_ser;
+
+use bitcoin::hashes::hex::ToHex;
+use bitcoin::Network;
 use bitcoin::{
     blockdata::script::Script,
     hashes::{sha256, sha512, Hash, Hmac, HmacEngine},
     psbt::PartiallySignedTransaction,
-    secp256k1::{All, Secp256k1},
     util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint},
-    Amount, KeyPair, OutPoint, XOnlyPublicKey,
+    OutPoint, XOnlyPublicKey,
 };
 use emulator_connect::CTVEmulator;
-use event_log::{
-    connection::EventLog,
-    db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
+
+use event_log::db_handle::accessors::occurrence::ToOccurrence;
+
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
+use event_log::db_handle::accessors::{
+    occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID,
 };
+
+use events::ModuleRepo;
+
+use futures::stream::FuturesUnordered;
 use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
-use sapio::util::amountrange::AmountF64;
 use sapio_base::{
-    effects::{EditableMapEffectDB, PathFragment},
+    effects::EditableMapEffectDB,
     serialization_helpers::SArc,
     simp::{by_simp, SIMP},
     txindex::TxIndexLogger,
 };
 use sapio_psbt::SigningKey;
+use sapio_wasm_plugin::CreateArgs;
 use sapio_wasm_plugin::{
     host::{plugin_handle::ModuleLocator, WasmPluginHandle},
     plugin_handle::PluginHandle,
-    ContextualArguments, CreateArgs,
 };
 use serde_json::Value;
-use simps::{self, EventKey, GameKernel, GameStarted, PK};
+use simps::{self, EventKey, PK};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::rc::Rc;
@@ -42,39 +52,62 @@ use tokio::sync::mpsc::Receiver;
 use tokio::task::spawn_blocking;
 use tracing::debug;
 use tracing::info;
+use tracing::trace;
 
 pub(crate) struct EventLoopContext {
-    pub(crate) state: AppState,
-    pub(crate) emulator: Arc<dyn CTVEmulator>,
-    pub(crate) data_dir: std::path::PathBuf,
-    pub(crate) msg_db: attest_database::connection::MsgDB,
-    pub(crate) config: Arc<config::Config>,
-    pub(crate) root: sapio_base::reverse_path::ReversePath<PathFragment>,
+    pub(crate) globals: Arc<GlobalLitigatorState>,
+    pub state: LitigatedContractInstanceState,
     pub(crate) evlog_group_id: OccurrenceGroupID,
-    pub(crate) evlog: EventLog,
-    pub(crate) secp: Arc<Secp256k1<All>>,
 }
 
 pub(crate) async fn event_loop(
     mut rx: Receiver<events::Event>,
     mut e: EventLoopContext,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    let instance = e.evlog_group_id;
     loop {
         match rx.recv().await {
-            Some(events::Event::EmittedPSBTVia(_a, _b)) => {}
-            Some(events::Event::TransactionFinalized(_s, _tx)) => {
-                info!("Transaction Finalized");
+            Some(events::Event::EmittedPSBTVia(psbt, b)) => {
+                info!(?instance, emitter = b.to_hex(), "EmittedPSBTVia");
+                trace!(?instance, emitter = b.to_hex(), ?psbt, "EmittedPSBTVia");
+                // Nothing to do -- this action is mostly here for de-deuplication
+            }
+            Some(events::Event::TransactionFinalized(s, tx)) => {
+                info!(
+                    ?instance,
+                    s,
+                    tx = tx.txid().to_hex(),
+                    "TransactionFinalized"
+                );
+                trace!(
+                    ?instance,
+                    s,
+                    ?tx,
+                    tx = btc_ser(&tx).to_hex(),
+                    "TransactionFinalized"
+                );
+                // Nothing to do -- could broadcast txn if we want, but not required
             }
             Some(events::Event::SyntheticPeriodicActions(time)) => {
+                info!(?instance, "SyntehticPeriodicActions({})", time);
                 handle_synthetic_periodic(&mut e, time).await?;
             }
-            Some(events::Event::ModuleBytes(contract_bytes)) => {
-                handle_module_bytes(&mut e, contract_bytes).await?;
+            Some(events::Event::ModuleBytes(ref group_key, ref tag)) => {
+                info!(?instance, group_key, tag, "ModuleBytes");
+                handle_module_bytes(&mut e, group_key, tag).await?;
+            }
+            Some(events::Event::CreateArgs(args)) => {
+                info!(?instance, "CreateArgs");
+                trace!(?instance, args=?serde_json::to_string(&args), "CreateArgs");
+                handle_create_args(&mut e, args).await?;
             }
             Some(events::Event::Rebind(o)) => {
+                info!(?instance, ?o, "Rebind");
                 handle_rebind(&mut e, o);
             }
             Some(events::Event::NewRecompileTriggeringObservation(new_info_as_v, filter)) => {
+                info!(?instance, for_=?filter, "NewRecompileTriggeringObservation");
+                trace!(?instance, for_=?filter, new_info=new_info_as_v.to_string(), "NewRecompileTriggeringObservation");
                 handle_new_information(&mut e, filter, new_info_as_v).await?;
             }
             None => (),
@@ -145,7 +178,7 @@ pub(crate) async fn handle_new_information(
                 .as_ref()
                 .map_err(|e| e.as_str())?
                 .fresh_clone()?
-                .call(&PathFragment::Root.into(), &new_args)
+                .call(&state.root, &new_args)
                 .map_err(|e| debug!(error=?e, "Module did not like the new argument"))
         };
 
@@ -175,69 +208,16 @@ pub(crate) fn handle_rebind(e: &mut EventLoopContext, o: OutPoint) {
     state.bound_to.replace(o);
 }
 
-pub(crate) async fn handle_module_bytes(
+pub(crate) async fn handle_create_args(
     e: &mut EventLoopContext,
-    contract_bytes: Vec<u8>,
+    args: CreateArgs<Value>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let EventLoopContext {
-        ref mut state,
-        ref emulator,
-        ref data_dir,
-        ref msg_db,
-        ref config,
-        ref root,
-        ..
-    } = e;
-    info!("ModuleBytes");
-    let locator: ModuleLocator = ModuleLocator::Bytes(contract_bytes);
-    let module = WasmPluginHandle::<Compiled>::new_async(
-        &data_dir,
-        emulator,
-        locator,
-        bitcoin::Network::Bitcoin,
-        Default::default(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    info!("Module Loaded Successfully");
-    let setup = match get_game_setup(msg_db, config.oracle_key).await {
-        Ok(s) => s,
-        Err(e) => {
-            debug!(error=?e, "Error");
-            return Err(e)?;
-        }
-    };
-    info!(?setup, "Game Setup");
-    let amt_per_player: AmountF64 =
-        AmountF64::from(Amount::from_sat(100000 / setup.players.len() as u64));
-    let g = GameKernel {
-        game_host: PK(config.oracle_key),
-        players: setup
-            .players
-            .iter()
-            .map(|p| Ok((PK(XOnlyPublicKey::from_str(p)?), amt_per_player)))
-            .collect::<Result<_, bitcoin::secp256k1::Error>>()
-            .map_err(|e| {
-                format!(
-                    "Failed To Make JSON {}:{}\n    Error: {:?}",
-                    file!(),
-                    line!(),
-                    e
-                )
-            })?,
-        timeout: setup.finish_time,
-    };
-    info!(?g, "Game Kernel");
-    let args = CreateArgs {
-        arguments: serde_json::to_value(&GameStarted { kernel: g }).unwrap(),
-        context: ContextualArguments {
-            network: bitcoin::network::constants::Network::Bitcoin,
-            amount: Amount::from_sat(100000),
-            effects: Default::default(),
-        },
-    };
+    let EventLoopContext { ref mut state, .. } = e;
     info!(?args, "Contract Args Ready");
-    state.contract = match module.call(root, &args) {
+    let module_lock = state.module.lock().await;
+    let module = module_lock.as_ref().map_err(|e| e.to_string())?;
+
+    state.contract = match module.call(&state.root, &args) {
         Ok(c) => {
             info!(address=?c.address,"Contract Compilation Successful");
             Ok(c)
@@ -250,29 +230,58 @@ pub(crate) async fn handle_module_bytes(
     state.args = Ok(args);
     Ok(())
 }
+pub(crate) async fn handle_module_bytes(
+    e: &mut EventLoopContext,
+    group: &OccurrenceGroupKey,
+    tag: &String,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let EventLoopContext {
+        ref mut globals,
+        ref mut state,
+        ..
+    } = e;
+    info!("ModuleBytes");
+
+    let bytes = {
+        let accessor = globals.evlog.get_accessor().await;
+        let gid = accessor.get_occurrence_group_by_key(group)?;
+        let o = accessor.get_occurrence_for_group_by_tag(gid, tag)?;
+        let mr = ModuleRepo::from_occurrence(o.1)?;
+        mr.0
+    };
+
+    let locator: ModuleLocator = ModuleLocator::Bytes(bytes);
+    let module = WasmPluginHandle::<Compiled>::new_async(
+        &globals.data_dir,
+        &globals.emulator,
+        locator,
+        globals.config.bitcoin_network,
+        Default::default(),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    *state.module.lock().await = Ok(module);
+    Ok(())
+}
 
 pub(crate) async fn handle_synthetic_periodic(
     e: &mut EventLoopContext,
-    time: i64,
+    _time: i64,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let EventLoopContext {
         ref mut state,
-        ref emulator,
-        ref secp,
-        ref msg_db,
-        ref config,
+        ref mut globals,
         ref evlog_group_id,
-        ref evlog,
         ..
     } = e;
-    info!(time, "SyntehticPeriodicActions");
     if let Some(out) = state.bound_to.as_ref() {
         let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
-        if let Ok(program) = bind_psbt(c, out, emulator) {
+        if let Ok(program) = bind_psbt(c, out, &globals.emulator) {
             // TODO learn available keys through an extractor...
             let keys = Arc::new(
                 {
-                    let handle = msg_db.get_handle_read().await;
+                    let handle = globals.msg_db.get_handle_read().await;
                     spawn_blocking(move || handle.get_keymap()).await
                 }?
                 .map_err(|e| e.to_string())?,
@@ -287,19 +296,13 @@ pub(crate) async fn handle_synthetic_periodic(
                         added_output_metadata: _,
                     } = tx;
                     let keys = keys.clone();
-                    let secp = secp.clone();
-                    let config = config.clone();
-                    let msg_db = msg_db.clone();
                     // put this in an async block to simplify error handling
                     let r = process_psbt_fail_ok(
+                        globals.clone(),
                         keys,
-                        config,
                         psbt,
                         metadata,
-                        secp,
-                        msg_db,
                         *evlog_group_id,
-                        evlog.clone(),
                     )
                     .await;
                     if let Err(r) = r {
@@ -312,82 +315,112 @@ pub(crate) async fn handle_synthetic_periodic(
     Ok(())
 }
 
+/// processes a psbt
+///
+/// # Errors
+///
+/// This function will return an error if the psbt does not properly get
+/// inserted, however failure is OK and we should ignore it.
 pub(crate) async fn process_psbt_fail_ok(
+    globals: Arc<GlobalLitigatorState>,
     keys: Arc<BTreeMap<XOnlyPublicKey, bitcoin::secp256k1::SecretKey>>,
-    config: Arc<config::Config>,
     psbt: String,
     metadata: sapio::template::TemplateMetadata,
-    secp: Arc<Secp256k1<bitcoin::secp256k1::All>>,
-    msg_db: attest_database::connection::MsgDB,
     evlog_group_id: OccurrenceGroupID,
-    evlog: EventLog,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let broadcast_key = keys
-        .get(&config.psbt_broadcast_key)
-        .ok_or("Broadcast Key Unknown")?;
     let psbt = PartiallySignedTransaction::from_str(&psbt)?;
-    let skeys = extract_keys_for_simp(metadata, keys.clone())?;
+    let skeys = extract_keys_for_simp(globals.config.bitcoin_network, metadata, keys.clone())?;
     let signing_key = SigningKey(skeys);
     let signed = signing_key
         .sign_psbt(
             psbt.clone(),
-            &secp,
+            &globals.secp,
             bitcoin::SchnorrSighashType::AllPlusAnyoneCanPay,
         )
         .map_err(|(_old, e)| e)?;
     if signed == psbt {
         return OK_T;
     }
-    let keypair = KeyPair::from_secret_key(&secp, broadcast_key);
+    // TODO: Separate broadcast_keys from skeys
+    // let broadcast_key = keys
+    //     .get(&globals.config.psbt_broadcast_key)
+    //     .ok_or("Broadcast Key Unknown")?;
+    // let keypair = KeyPair::from_secret_key(&globals.secp, broadcast_key);
 
     let tx = signed.clone().extract_tx();
     let txid = tx.txid();
     let txid_s = txid.to_string();
 
-    let emitter = keypair.x_only_public_key().0;
-    // TODO: confirm serialization is deterministic?
-    let psbt_hash = sha256::Hash::hash(signed.to_string().as_bytes());
-    let o = events::TaggedEvent(
-        events::Event::EmittedPSBTVia(PsbtString(signed.clone()), emitter),
-        Some(events::Tag::ScopedValue(
-            "signed_psbt".into(),
-            format!("emit_by:{}:psbt_hash:{}", emitter, psbt_hash),
-        )),
-    );
-    let mut handle = msg_db.get_handle_all().await;
-    let mut accessor = evlog.get_accessor().await;
+    let data = signed.to_string();
+    let psbt_hash = sha256::Hash::hash(data.as_bytes());
+    let tasks = FuturesUnordered::new();
+    for epk in signing_key.0 {
+        // BEGIN ERROR FREE SECTION:
+        let keypair = epk.to_keypair(&globals.secp);
+        let emitter = keypair.x_only_public_key().0;
+        // TODO: confirm serialization is deterministic?
+        let o = events::TaggedEvent(
+            events::Event::EmittedPSBTVia(PsbtString(signed.clone()), emitter),
+            Some(events::Tag::ScopedValue(
+                "signed_psbt".into(),
+                format!("emit_by:{}:psbt_hash:{}", emitter, psbt_hash),
+            )),
+        );
+        let mut handle = globals.msg_db.get_handle_all().await;
+        let mut accessor = globals.evlog.get_accessor().await;
 
-    spawn_blocking(move || {
-        let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
-        let v2 = v?;
-        match v2 {
-            Err(Idempotent::AlreadyExists) => Ok(()),
-            Ok((_oid, txn)) => {
-                handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
-                    ParticipantAction::PsbtSigningCoordination(Multiplexed {
-                        channel: txid_s,
-                        data: PsbtString(signed),
-                    }),
-                    &keypair,
-                    &secp,
-                    None,
-                    TipControl::NoTips,
-                )?;
-                // Technically there is a tiny risk that we succeed at inserting the
-                // Signed PSBT but do not succeed at committing the event log entry.
-                // In this case, we will see a second entry for the same psbt, which
-                // is still not a logic error, fortunately.
-                //
-                // This could be fixed with some more clever logic in both DBs.
-                txn.commit()?;
-                Ok(())
+        let globals = globals.clone();
+        let signed = signed.clone();
+        let txid_s = txid_s.clone();
+        // END ERROR FREE SECTION:
+        tasks.push(spawn_blocking(move || {
+            let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
+            let v2 = v?;
+            match v2 {
+                Err(Idempotent::AlreadyExists) => Ok(()),
+                Ok((_oid, txn)) => {
+                    handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
+                        ParticipantAction::PsbtSigningCoordination(Multiplexed {
+                            channel: txid_s,
+                            data: PsbtString(signed),
+                        }),
+                        &keypair,
+                        &globals.secp,
+                        None,
+                        TipControl::NoTips,
+                    )?;
+                    // Technically there is a tiny risk that we succeed at inserting the
+                    // Signed PSBT but do not succeed at committing the event log entry.
+                    // In this case, we will see a second entry for the same psbt, which
+                    // is still not a logic error, fortunately.
+                    //
+                    // This could be fixed with some more clever logic in both DBs.
+                    txn.commit()?;
+                    Ok::<(), Box<dyn Error + Sync + Send>>(())
+                }
             }
-        }
-    })
-    .await?
+        }));
+    }
+    for task in tasks {
+        let r = task.await?;
+        trace!(?r, "Error From Task Joining");
+        r.map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
+/// extract all the keys named via the AutoBroadcast SIMP and their roles within
+/// this contract, that we have.
+///
+/// TODO: Some amount of safety to only use approved keys / restrict?
+/// TODO: Determinism on keys at a given point in time (maybe queried as an
+/// extractor?)
+///
+/// # Errors
+///
+/// This function will return an error if  the data is not properly formatted.
 pub(crate) fn extract_keys_for_simp(
+    network: Network,
     metadata: sapio::template::TemplateMetadata,
     keys: Arc<BTreeMap<XOnlyPublicKey, bitcoin::secp256k1::SecretKey>>,
 ) -> Result<Vec<ExtendedPrivKey>, Box<dyn Error + Send + Sync>> {
@@ -404,7 +437,7 @@ pub(crate) fn extract_keys_for_simp(
         let hmac_result: Hmac<sha512::Hash> = Hmac::from_engine(hmac_engine);
         skeys.push(ExtendedPrivKey {
             // todo: other networks
-            network: bitcoin::Network::Signet,
+            network,
             depth: 0,
             parent_fingerprint: Fingerprint::default(),
             child_number: ChildNumber::from(0),

@@ -970,7 +970,10 @@ dependencies = [
  "attest-messages",
  "attest-util",
  "axum",
+ "bitcoincore-rpc-async",
+ "ctv_emulators",
  "directories",
+ "event-log",
  "game-host-messages",
  "game-player-messages",
  "game-sequencer",
@@ -978,7 +981,11 @@ dependencies = [
  "mine-with-friends-board",
  "openssl-sys",
  "ruma-serde",
+ "sapio",
  "sapio-bitcoin",
+ "sapio-litigator-events",
+ "sapio-psbt",
+ "sapio-wasm-plugin",
  "serde",
  "serde_derive",
  "serde_json",
@@ -2445,6 +2452,7 @@ dependencies = [
  "sapio",
  "sapio-base",
  "sapio-bitcoin",
+ "sapio-litigator-events",
  "sapio-psbt",
  "sapio-wasm-plugin",
  "schemars",
@@ -2454,6 +2462,24 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "sapio-litigator-events"
+version = "0.1.0"
+dependencies = [
+ "event-log",
+ "game-player-messages",
+ "lazy_static",
+ "mine-with-friends-board",
+ "ruma-serde",
+ "sapio",
+ "sapio-base",
+ "sapio-bitcoin",
+ "schemars",
+ "serde",
+ "serde_json",
+ "simps",
 ]
 
 [[package]]

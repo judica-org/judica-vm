@@ -12,6 +12,7 @@ members = [
     "common/game-sequencer",
     "common/mine-with-friends-board",
     "common/sapio-litigator",
+    "common/sapio-litigator-events",
     "common/simps",
 ]
 

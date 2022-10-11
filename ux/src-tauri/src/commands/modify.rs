@@ -49,6 +49,7 @@ impl<E, T: std::fmt::Debug> ErrToString<E> for Result<E, T> {
 
 pub(crate) async fn make_new_game(
     nickname: String,
+    minutes: u16,
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
     globals: State<'_, Arc<Globals>>,
@@ -68,7 +69,7 @@ pub(crate) async fn make_new_game(
         .map_err(|e| e.to_string())?;
 
     let new_game = client
-        .create_new_game_instance(&game_host)
+        .create_new_game_instance(&game_host, minutes)
         .await
         .map_err(|e| e.to_string())?;
     info!(?new_game, "New Game Set Up");

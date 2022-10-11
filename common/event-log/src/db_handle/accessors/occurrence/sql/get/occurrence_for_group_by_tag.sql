@@ -7,7 +7,7 @@ SELECT
 FROM
     occurrence O
 WHERE
-    O.occurrence_id > :after_id
-    AND O.occurrence_group_id = :group_id
-ORDER BY
-    O.occurrence_id ASC
+    O.occurrence_group_id = :group_id
+    AND O.occurrence_unique_tag = :tag
+LIMIT
+    1

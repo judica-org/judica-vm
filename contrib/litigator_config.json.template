@@ -5,12 +5,10 @@
             "CookieFile": "$BITCOIN_DIR/signet/.cookie"
         }
     },
-    "db_app_name": "testing-$PLAYER",
     "app_instance": "testing-$PLAYER",
     "event_log": {
-        "app_name": "testing-$PLAYER",
-        "group": "$PLAYER-event-group"
+        "app_name": "testing-$PLAYER"
     },
-    "oracle_key": "$SEQUENCER_KEY",
-    "contract_location": "$WASM_MODULE"
+    "db_app_name": "testing-$PLAYER",
+    "bitcoin_network": "signet"
 }

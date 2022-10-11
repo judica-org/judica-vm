@@ -158,13 +158,14 @@ pub(crate) async fn set_game_host(
 #[tauri::command]
 pub(crate) async fn make_new_game(
     nickname: String,
+    minutes: u16,
     secp: State<'_, Arc<Secp256k1<All>>>,
     db: State<'_, Database>,
     client: State<'_, Arc<Globals>>,
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
     game: GameState<'_>,
 ) -> Result<(), String> {
-    modify::make_new_game(nickname, secp, db, client, game_host, game).await
+    modify::make_new_game(nickname, minutes, secp, db, client, game_host, game).await
 }
 
 #[tauri::command]

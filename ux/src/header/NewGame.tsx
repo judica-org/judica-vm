@@ -18,6 +18,7 @@ export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps
   const [join_or_new, set_join_or_new] = React.useState(false);
   const [is_finalizing, set_is_finalizing] = React.useState(false);
   const [is_creating, set_is_creating] = React.useState(false);
+  const [minutes, set_minutes] = React.useState<null | number>(null);
   const action = join_or_new ? "Join" : "New";
   const handle_click = async (ev: React.MouseEvent<HTMLButtonElement, MouseEvent>): Promise<void> => {
     ev.preventDefault();
@@ -25,9 +26,15 @@ export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps
     try {
 
       if (join_or_new) {
-        nick && join_code_form && await tauri_host.join_existing_game(nick, join_code_form);
+        if (nick && join_code_form)
+          await tauri_host.join_existing_game(nick, join_code_form);
+        else
+          alert("Nick and Join Code Required!");
       } else {
-        nick && await tauri_host.make_new_game(nick);
+        if (nick && minutes)
+          await tauri_host.make_new_game(nick, minutes);
+        else
+          alert("Nick and Minutes Required!");
       }
     } catch (e) {
       alert(e);
@@ -48,8 +55,8 @@ export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps
       await tauri_host.finalize_game({
         passcode: join_password,
         code: join_code,
-        finish_time: 60 /*minutes */ * 60 /*seconds*/ * 1000,
-        start_amount: 1_000_000
+        // NOTE: IF YOU CHANGE THIS YOU MUST ALSO CHANGE mining_game.rs
+        start_amount: 100000000
       });
 
     } catch (e) {
@@ -91,6 +98,9 @@ export function NewGame({ ext_disabled, join_code, join_password }: NewGameProps
           </ToggleButtonGroup>
 
           <TextField label='Chain Nickname' onChange={(ev) => set_nick(ev.target.value)}></TextField>
+          {!join_or_new &&
+            <TextField label='Game Duration' type="number" onChange={(ev) => set_minutes(parseInt(ev.target.value))}></TextField>
+          }
           {
             join_or_new && <TextField label='Join Code' onChange={(ev) => set_join_code_form(ev.target.value)}></TextField>
           }

@@ -1,15 +1,26 @@
+use app::CompilerModule;
 use attest_database::setup_db;
-
 use attest_database::{connection::MsgDB, db_handle::create::TipControl};
 use attest_messages::{
     Authenticated, CanonicalEnvelopeHash, Envelope, GenericEnvelope, WrappedJson,
 };
+use attest_util::bitcoin::BitcoinConfig;
+use emulator_connect::{CTVAvailable, CTVEmulator};
+
+use event_log::db_handle::accessors::occurrence::ToOccurrence;
 use game_host_messages::{BroadcastByHost, Channelized};
+use sapio::contract::Compiled;
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::seq::SliceRandom;
 use sapio_bitcoin::secp256k1::All;
+use sapio_bitcoin::Network;
 use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair};
+use sapio_litigator_events::ModuleRepo;
+use sapio_wasm_plugin::host::plugin_handle::ModuleLocator;
+use sapio_wasm_plugin::host::WasmPluginHandle;
+
 use serde::{Deserialize, Serialize};
+
 use std::time::Duration;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -18,10 +29,14 @@ use std::{
     sync::Arc,
 };
 use tokio::spawn;
+use tokio::sync::Mutex;
 use tokio::task::{spawn_blocking, JoinHandle};
 use tor::TorConfig;
 use tracing::{debug, info, warn};
+
+use crate::globals::GlobalsInner;
 mod app;
+mod globals;
 mod tor;
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -29,16 +44,96 @@ pub struct Config {
     #[serde(default)]
     prefix: Option<PathBuf>,
     game_host_name: String,
+    pub(crate) bitcoin: BitcoinConfig,
+    pub(crate) contract_location: String,
+    app_instance: String,
+    event_log: EventLogConfig,
+    bitcoin_network: Network,
+}
+#[derive(Serialize, Deserialize)]
+pub struct EventLogConfig {
+    app_name: String,
+    #[serde(default)]
+    prefix: Option<PathBuf>,
 }
 
 fn get_config() -> Result<Arc<Config>, Box<dyn Error + Send + Sync>> {
     let config = std::env::var("GAME_HOST_CONFIG_JSON").map(|s| serde_json::from_str(&s))??;
     Ok(Arc::new(config))
 }
+
+pub(crate) fn data_dir_modules(app_instance: &str) -> PathBuf {
+    let typ = "org";
+    let org = "judica";
+    let proj = format!("sapio-game-host.{}", app_instance);
+    let proj =
+        directories::ProjectDirs::from(typ, org, &proj).expect("Failed to find config directory");
+    let mut data_dir = proj.data_dir().to_owned();
+    data_dir.push("modules");
+    data_dir
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
     let config = get_config()?;
+
+    let client = config.bitcoin.get_new_client().await?;
+    // get location of project directory modules
+    let data_dir = data_dir_modules(&config.app_instance);
+
+    // Connect to litigator's DB
+    let proj = format!("sapio-litigator.{}", config.event_log.app_name);
+    let evlog = event_log::setup_db(&proj, config.event_log.prefix.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+    let (module_bytes, module_tag, module_repo_id) = {
+        let module_bytes = tokio::fs::read(&config.contract_location).await?;
+        let accessor = evlog.get_accessor().await;
+        let mrk = ModuleRepo::default_group_key();
+        let gid = accessor
+            .get_occurrence_group_by_key(&mrk)
+            .or_else(|_| accessor.insert_new_occurrence_group(&mrk))
+            .or_else(|_| accessor.get_occurrence_group_by_key(&mrk))?;
+        let mr = ModuleRepo(module_bytes);
+        let tag = mr.unique_tag().unwrap();
+        // get or insert or get
+        let _a = accessor
+            .get_occurrence_for_group_by_tag(gid, &tag)
+            .map(|(i, _)| i)
+            .or_else(|_| {
+                accessor
+                    .insert_new_occurrence_now_from(gid, &mr)?
+                    .or_else(|_Idempotent| {
+                        accessor
+                            .get_occurrence_for_group_by_tag(gid, &tag)
+                            .map(|(i, _)| i)
+                    })
+            })?;
+        (mr.0, tag, gid)
+    };
+    let locator: ModuleLocator = ModuleLocator::Bytes(module_bytes);
+
+    let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
+    let compiler_module: CompilerModule = Arc::new(Mutex::new(
+        WasmPluginHandle::<Compiled>::new_async(
+            &data_dir,
+            &emulator,
+            locator,
+            config.bitcoin_network,
+            Default::default(),
+        )
+        .await
+        .map_err(|e| e.to_string())?,
+    ));
+    let globals = Arc::new(GlobalsInner {
+        module_repo_id,
+        module_tag,
+        evlog,
+        compiler_module,
+        bitcoin_rpc: client,
+        bitcoin_network: config.bitcoin_network,
+    });
+
     let db = setup_db(
         &format!("attestations.{}", config.game_host_name),
         config.prefix.clone(),
@@ -50,7 +145,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let host = config.tor.get_hostname().await?;
     info!("Hosting Onion Service At: {}", host);
 
-    let app_instance = app::run(config.clone(), db.clone());
+    let app_instance = app::run(config.clone(), db.clone(), globals);
     let game_instance = game_server(config, db.clone());
     tokio::select! {
         a =  game_instance =>{

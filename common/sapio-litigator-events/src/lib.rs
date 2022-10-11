@@ -1,3 +1,7 @@
+use bitcoin::hashes::hex::ToHex;
+use bitcoin::hashes::sha256;
+use bitcoin::hashes::Hash;
+use bitcoin::Amount;
 use bitcoin::OutPoint;
 use bitcoin::Transaction;
 use bitcoin::XOnlyPublicKey;
@@ -5,17 +9,26 @@ use event_log::db_handle::accessors::occurrence::ApplicationTypeID;
 use event_log::db_handle::accessors::occurrence::Occurrence;
 use event_log::db_handle::accessors::occurrence::OccurrenceConversionError;
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
+use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
 use game_player_messages::PsbtString;
 use ruma_serde::CanonicalJsonValue;
+use sapio::util::amountrange::AmountU64;
+use sapio_base::plugin_args::ContextualArguments;
+use sapio_base::plugin_args::CreateArgs;
 use sapio_base::serialization_helpers::SArc;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use simps::EventKey;
+use simps::GameKernel;
+use simps::GameStarted;
+use simps::PK;
+use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Event {
-    ModuleBytes(Vec<u8>),
+    ModuleBytes(OccurrenceGroupKey, String),
+    CreateArgs(CreateArgs<Value>),
     TransactionFinalized(String, Transaction),
     Rebind(OutPoint),
     SyntheticPeriodicActions(i64),
@@ -26,8 +39,10 @@ pub enum Event {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum Tag {
+pub enum Tag {
     InitModule,
+    CreateArgs,
+    FirstBind,
     EvLoopCounter(u64),
     ScopedCounter(String, u64),
     ScopedValue(String, String),
@@ -42,7 +57,7 @@ impl ToString for Tag {
 }
 
 #[derive(Serialize, Deserialize)]
-pub(crate) struct TaggedEvent(pub Event, pub Option<Tag>);
+pub struct TaggedEvent(pub Event, pub Option<Tag>);
 
 impl ToOccurrence for TaggedEvent {
     fn to_data(&self) -> CanonicalJsonValue {
@@ -72,5 +87,57 @@ impl ToOccurrence for TaggedEvent {
             .transpose()
             .map_err(OccurrenceConversionError::DeserializationError)?;
         Ok(TaggedEvent(v, tag))
+    }
+}
+
+pub fn convert_setup_to_contract_args(
+    setup: mine_with_friends_board::game::GameSetup,
+    oracle_key: &XOnlyPublicKey,
+) -> Result<CreateArgs<Value>, bitcoin::secp256k1::Error> {
+    let amt_per_player: AmountU64 =
+        AmountU64::from(Amount::from_sat(100000 / setup.players.len() as u64));
+    let g = GameKernel {
+        game_host: PK(*oracle_key),
+        players: setup
+            .players
+            .iter()
+            .map(|p| Ok((PK(XOnlyPublicKey::from_str(p)?), amt_per_player)))
+            .collect::<Result<_, bitcoin::secp256k1::Error>>()?,
+        timeout: setup.finish_time,
+    };
+    let args = CreateArgs {
+        arguments: serde_json::to_value(&GameStarted { kernel: g }).unwrap(),
+        context: ContextualArguments {
+            network: bitcoin::network::constants::Network::Bitcoin,
+            amount: Amount::from_sat(100000),
+            effects: Default::default(),
+        },
+    };
+    Ok(args)
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ModuleRepo(pub Vec<u8>);
+
+impl ModuleRepo {
+    pub fn default_group_key() -> OccurrenceGroupKey {
+        ModuleRepo::stable_typeid().into_inner()
+    }
+}
+
+impl ToOccurrence for ModuleRepo {
+    fn to_data(&self) -> CanonicalJsonValue {
+        ruma_serde::to_canonical_value(self).unwrap()
+    }
+
+    fn stable_typeid() -> ApplicationTypeID
+    where
+        Self: Sized,
+    {
+        ApplicationTypeID::from_inner("ModuleRepo")
+    }
+
+    fn unique_tag(&self) -> Option<String> {
+        Some(sha256::Hash::hash(&self.0[..]).to_hex())
     }
 }

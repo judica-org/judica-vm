@@ -1,0 +1,37 @@
+[package]
+name = "sapio-litigator-events"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+schemars = "0.8.10"
+serde = "1.0.144"
+serde_json = "1.0.85"
+lazy_static = "1.4.0"
+ruma-serde = "0.6.0"
+
+[dependencies.sapio]
+path = "../../submodule/sapio/sapio"
+version = "0.2.0"
+
+[dependencies.sapio-base]
+path = "../../submodule/sapio/sapio-base"
+version = "0.2.0"
+
+[dependencies.bitcoin]
+package = "sapio-bitcoin"
+version = "0.28.0"
+features = ['use-serde', 'rand', 'base64']
+
+[dependencies.event-log]
+path = "../event-log"
+
+[dependencies.simps]
+path = "../simps"
+
+[dependencies.game-player-messages]
+path = "../game-player-messages"
+[dependencies.mine-with-friends-board]
+path = "../mine-with-friends-board"

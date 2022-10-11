@@ -4,6 +4,7 @@ use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::{
     hashes::hex::{FromHex, ToHex},
     secp256k1::rand::{thread_rng, Rng},
+    XOnlyPublicKey,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -17,9 +18,14 @@ use std::{
 pub struct FinishArgs {
     pub passcode: JoinCode,
     pub code: JoinCode,
-    pub finish_time: u64,
     pub start_amount: u64,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NewGameArgs {
+    pub duration_minutes: u16,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewGame {
     pub password: JoinCode,
@@ -39,12 +45,18 @@ impl Display for AddPlayerError {
 }
 impl Error for AddPlayerError {}
 
-#[derive(
-    Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Copy, Debug, JsonSchema,
-)]
+#[derive(Serialize, Deserialize, Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Copy, JsonSchema)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
 pub struct JoinCode(#[schemars(with = "String")] [u8; 16]);
+
+impl Debug for JoinCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("JoinCode")
+            .field(&String::from(*self))
+            .finish()
+    }
+}
 
 impl TryFrom<String> for JoinCode {
     type Error = sapio_bitcoin::hashes::hex::Error;
@@ -128,6 +140,7 @@ mod tests {
 
 #[derive(Serialize, Deserialize)]
 pub struct CreatedNewChain {
+    pub sequencer_key: XOnlyPublicKey,
     pub genesis_hash: CanonicalEnvelopeHash,
     pub group_name: String,
 }
