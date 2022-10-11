@@ -18,7 +18,7 @@ function Minting() {
       <Paper>
         {location ?
           <MintingForm location={location} /> :
-          <Typography variant='body1'>Select a location on the Globe to Mint a Power Plant</Typography>}
+          <Typography variant='body1'>Select a location on the Globe to Build a Power Plant</Typography>}
       </Paper>
     </div>
   )

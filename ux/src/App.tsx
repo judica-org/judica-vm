@@ -213,7 +213,7 @@ function App() {
           <Box className="DataDisplay">
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }} className="DisplayContents">
               <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
-                <Tab value={1} label="Minting"></Tab>
+                <Tab value={1} label="Build Plants"></Tab>
                 <Tab value={2} label="Energy Exchange"></Tab>
                 <Tab value={3} label="Materials Market"></Tab>
                 <Tab value={4} label="Inventory"></Tab>

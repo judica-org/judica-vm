@@ -111,7 +111,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
             </Grid>
             <Grid item>
               <div style={{ width: "400px" }}>
-                Super Mint?
+                Super Build?
                 <Switch
                   checked={superMint}
                   onChange={handleSelectChange}
@@ -123,7 +123,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
               Estimate
             </Button>
             <Button variant="contained" color="primary" type="submit" id="mint">
-              Mint
+              Build
             </Button>
           </Grid>
         </form>
