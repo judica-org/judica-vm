@@ -28,6 +28,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: wasm32-unknown-unknown
 
       - name: Install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-latest'
