@@ -61,6 +61,15 @@ pub(crate) struct EventLoopContext {
 }
 
 pub(crate) async fn event_loop(
+    rx: Receiver<events::Event>,
+    e: EventLoopContext,
+) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    let instance = e.evlog_group_id;
+    let res = event_loop_inner(rx, e).await;
+    debug!(with=?res, ?instance, "Event Loop Terminated");
+    res
+}
+pub(crate) async fn event_loop_inner(
     mut rx: Receiver<events::Event>,
     mut e: EventLoopContext,
 ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
@@ -240,13 +249,17 @@ pub(crate) async fn handle_module_bytes(
         ref mut state,
         ..
     } = e;
-    info!("ModuleBytes");
+    let instance = e.evlog_group_id;
+    info!(?instance, "ModuleBytes");
 
     let bytes = {
         let accessor = globals.evlog.get_accessor().await;
         let gid = accessor.get_occurrence_group_by_key(group)?;
+        info!(?instance, group_id=?gid, "ModuleBytes");
         let o = accessor.get_occurrence_for_group_by_tag(gid, tag)?;
+        info!(?instance, module=?o.0, "ModuleBytes");
         let mr = ModuleRepo::from_occurrence(o.1)?;
+        info!(?instance, code_length=mr.0.len(), "ModuleBytes");
         mr.0
     };
 
@@ -260,6 +273,7 @@ pub(crate) async fn handle_module_bytes(
     )
     .await
     .map_err(|e| e.to_string())?;
+    info!(status = "Loaded OK", "ModuleBytes");
 
     *state.module.lock().await = Ok(module);
     Ok(())

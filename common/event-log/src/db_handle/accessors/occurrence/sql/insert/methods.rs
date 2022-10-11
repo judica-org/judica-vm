@@ -45,7 +45,8 @@ where
             ":data": SqlJsonRef(&occurrence.data),
             ":time": occurrence.time,
             ":typeid": occurrence.typeid,
-            ":group_id": group_id
+            ":group_id": group_id,
+            ":unique_tag": occurrence.unique_tag
         }) {
             Ok(q) => Ok(Ok(OccurrenceID(q))),
             Err(e) => match e {
@@ -85,7 +86,8 @@ pub fn insert_occurrence_txn<'conn>(
         ":data": SqlJsonRef(&occurrence.data),
         ":time": occurrence.time,
         ":typeid": occurrence.typeid,
-        ":group_id": group_id
+        ":group_id": group_id,
+        ":unique_tag": occurrence.unique_tag
     }) {
         Ok(q) => {
             drop(stmt);
