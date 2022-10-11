@@ -52,6 +52,7 @@ export const tauri_host = {
     return invoke("make_new_game", { nickname, minutes});
   },
   mint_power_plant_cost: async (scale: number, location: [number, number], plantType: PlantType) => {
+    console.log("building plant", {scale, location, plantType});
     return invoke("mint_power_plant_cost", { scale, location, plantType });
   },
   super_mint: async (scale: number, location: [number, number], plantType: PlantType) => {
