@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+CI=false
 
 yarn build
 echo "#################"
