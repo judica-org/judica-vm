@@ -6,8 +6,9 @@
     justify-content: space-evenly;
     padding: 1em;
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr;
+    grid-template-areas: "a b" "c d";
     column-gap: 3em;
+    row-gap: 3em;
 }
 
 .App-header>* {

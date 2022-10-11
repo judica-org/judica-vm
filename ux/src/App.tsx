@@ -17,6 +17,7 @@ import MoveForm from './move-form/MoveForm';
 import { EmittedAppState, GameBoard, LogEvent, UXPlantData } from './Types/Gameboard';
 import { EventLog } from './event-log/EventLog';
 import FooterTicker from './footer-ticker/FooterTicker';
+import { AppHeader } from './header/AppHeader';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export const PLANT_SELECTED_EVENT = "PlantSelected";
@@ -224,6 +225,7 @@ function App() {
                 <Tab value={7} label="Event Log"></Tab>
                 <Tab value={8} label="Manage Plant"></Tab>
                 <Tab value={9} label="Board JSON"></Tab>
+                <Tab value={10} label="Connect to Game"></Tab>
               </Tabs>
             </Box>
             <Panel index={1} current_index={current_tab} >
@@ -258,6 +260,14 @@ function App() {
             </Panel>
             <Panel index={9} current_index={current_tab}>
               <ListGameBoard g={game_board}></ListGameBoard>
+            </Panel>
+            <Panel index={10} current_index={current_tab}>
+              <AppHeader {...{
+                available_sequencers, which_game_loaded,
+                db_name_loaded, signing_key,
+                available_keys, join_code, join_password,
+                game_host_service
+              }}></AppHeader>
             </Panel>
           </Box>
         </div>
