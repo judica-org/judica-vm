@@ -22,9 +22,10 @@ Darwin)
     export PATH_BACK=$PATH
     export CC_BACK=$CC
     export AR_BACK=$AR
-    export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
-    export CC=/opt/homebrew/opt/llvm/bin/clang
-    export AR=/opt/homebrew/opt/llvm/bin/llvm-ar
+    export PATH="/usr/local/opt/llvm/bin:$PATH"
+    export CC=/usr/local/opt/llvm/bin/clang
+    export AR=/usr/local/opt/llvm/bin/llvm-ar
+
     ;;
 esac
 
@@ -43,8 +44,6 @@ echo "#################"
 echo "# WASM BUILD OK #"
 echo "#################"
 
-
-
 echo "######################"
 echo "# BUILDING EXTRA UXs #"
 echo "######################"
@@ -53,9 +52,8 @@ pushd ../www/attest
 yarn build
 cd ..
 cd game-host
-yarn build 
+yarn build
 popd
-
 
 echo "#########################"
 echo "# BUILDING EXTRA UXs OK #"
