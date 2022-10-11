@@ -37,8 +37,10 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
       </Typography>
       {plantDetail && <Table>
         <TableHead>
-          <TableCell>Detail</TableCell>
-          <TableCell align="right"></TableCell>
+          <TableRow>
+            <TableCell>Detail</TableCell>
+            <TableCell align="right"></TableCell>
+          </TableRow>
         </TableHead>
         <TableBody>
           <TableRow>
@@ -47,16 +49,20 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
               <FactoryIcon className='sale-factory-icon' sx={{ color: plant_type_color_map[plantDetail.plant_type] }} /><p>{plantDetail.plant_type}</p>
             </TableCell>
           </TableRow>
-          <TableCell>Location</TableCell>
-          <TableCell >
-          {`${plantDetail.coordinates[0] / COORDINATE_PRECISION}, ${plantDetail.coordinates[1] / COORDINATE_PRECISION}`}
-          </TableCell>
+          <TableRow>
+            <TableCell>Location</TableCell>
+            <TableCell >
+              {`${plantDetail.coordinates[0] / COORDINATE_PRECISION}, ${plantDetail.coordinates[1] / COORDINATE_PRECISION}`}
+            </TableCell>
+          </TableRow>
           <TableRow>
             <TableCell >Hashrate</TableCell>
             <TableCell >{plantDetail.hashrate}</TableCell>
           </TableRow>
-          <TableCell >Miners Allocated</TableCell>
-          <TableCell >{plantDetail.miners}</TableCell>
+          <TableRow>
+            <TableCell >Miners Allocated</TableCell>
+            <TableCell >{plantDetail.miners}</TableCell>
+          </TableRow>
         </TableBody>
       </Table>}
       <div>
