@@ -179,6 +179,7 @@ function App() {
   const listings = root_state?.energy_exchange ?? [];
   const user_id = (signing_key && root_state?.game_board?.users_by_key) ? root_state?.game_board?.users_by_key[signing_key] : null;
   const elapsed_time = root_state?.game_board?.elapsed_time ?? null;
+  const finish_time = root_state?.game_board?.finish_time ?? null;
   const player_status = game_event_log.length ? getLastMovesByPlayer(game_event_log) : ["No moves to show"];
   const is_finished = game_event_log.length ? findFinishLog(game_event_log) : false;
   console.log(["game-event-log"], root_state?.game_board?.event_log || "event log is empty");
@@ -206,6 +207,7 @@ function App() {
           game_host_service,
           user_id,
           elapsed_time,
+          finish_time,
           is_finished
         }}></DrawerAppBar>
         <div className="Content">

@@ -19,6 +19,7 @@ interface Props extends SwitchToGameProps, KeySelectorProps, NewGameProps, Switc
   db_name_loaded: [string, string | null] | null;
   readonly user_id: EntityID | null;
   readonly elapsed_time: number | null;
+  readonly finish_time: number | null;
   readonly is_finished: boolean;
 };
 
@@ -34,7 +35,8 @@ export default function DrawerAppBar({ db_name_loaded,
   game_host_service,
   user_id,
   elapsed_time,
-  is_finished
+  is_finished,
+  finish_time,
 }:
   Props) {
   const [player_id, set_player_id] = React.useState<EntityID | null>(null)
@@ -100,8 +102,8 @@ export default function DrawerAppBar({ db_name_loaded,
           {is_finished ? <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
             <Typography variant="h6">{'Game Over'}</Typography>
           </Box>
-            : elapsed_time && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-              <Typography variant="h6">{`Est Time Remaining: ${new Date(3600000 - elapsed_time).toISOString().slice(11, 19)}`}</Typography>
+            : finish_time && elapsed_time && <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+              <Typography variant="h6">{`Est Time Remaining: ${new Date(finish_time - elapsed_time).toISOString().slice(11, 19)}`}</Typography>
             </Box>}
         </Toolbar>
       </AppBar>
