@@ -31,6 +31,10 @@
     margin: 6px;
 }
 
+.GlobeToggles {
+    padding: 5px;
+}
+
 .MuiTabs-root {
     display: flex;
 }
