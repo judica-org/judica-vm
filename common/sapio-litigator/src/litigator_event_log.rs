@@ -11,15 +11,16 @@ use bitcoin::{
     blockdata::script::Script,
     hashes::{sha256, sha512, Hash, Hmac, HmacEngine},
     psbt::PartiallySignedTransaction,
-    util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint}, OutPoint, XOnlyPublicKey,
+    util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint},
+    OutPoint, XOnlyPublicKey,
 };
 use emulator_connect::CTVEmulator;
 
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
 
 use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
-use event_log::{
-    db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
+use event_log::db_handle::accessors::{
+    occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID,
 };
 
 use events::ModuleRepo;
@@ -29,7 +30,7 @@ use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
 use sapio_base::{
-    effects::{EditableMapEffectDB},
+    effects::EditableMapEffectDB,
     serialization_helpers::SArc,
     simp::{by_simp, SIMP},
     txindex::TxIndexLogger,

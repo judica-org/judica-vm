@@ -22,9 +22,7 @@ use axum::{
     Extension, Json,
 };
 use bitcoincore_rpc_async::{json::WalletCreateFundedPsbtOptions, RpcApi};
-use event_log::db_handle::accessors::{
-    occurrence::sql::Idempotent,
-};
+use event_log::db_handle::accessors::occurrence::sql::Idempotent;
 use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame, NewGameArgs};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{

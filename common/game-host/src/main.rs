@@ -7,7 +7,6 @@ use attest_messages::{
 use attest_util::bitcoin::BitcoinConfig;
 use emulator_connect::{CTVAvailable, CTVEmulator};
 
-
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
 use game_host_messages::{BroadcastByHost, Channelized};
 use sapio::contract::Compiled;
@@ -16,10 +15,9 @@ use sapio_bitcoin::secp256k1::rand::seq::SliceRandom;
 use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::Network;
 use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair};
-use sapio_litigator_events::{ModuleRepo};
+use sapio_litigator_events::ModuleRepo;
 use sapio_wasm_plugin::host::plugin_handle::ModuleLocator;
 use sapio_wasm_plugin::host::WasmPluginHandle;
-
 
 use serde::{Deserialize, Serialize};
 

@@ -8,7 +8,7 @@ use super::*;
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, WrappedJson};
 use fallible_iterator::FallibleIterator;
 use ruma_serde::CanonicalJsonValue;
-use rusqlite::{params};
+use rusqlite::params;
 
 use sapio_bitcoin::secp256k1::rand::{thread_rng, Rng};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
