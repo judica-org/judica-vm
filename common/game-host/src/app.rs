@@ -11,6 +11,7 @@ use axum::{
         header::{ACCESS_CONTROL_ALLOW_HEADERS, CONTENT_TYPE},
         Method, Response,
     },
+    response::IntoResponse,
     routing::{get, post},
     Extension, Json, Router,
 };
@@ -34,6 +35,9 @@ mod routes;
 #[derive(Deserialize, Serialize)]
 pub struct Tips {
     pub tips: Vec<CanonicalEnvelopeHash>,
+}
+pub async fn connected() -> &'static str {
+    "Connected!"
 }
 pub async fn get_peers(
     Extension(db): Extension<MsgDB>,
@@ -249,6 +253,7 @@ pub fn run(
             .route("/game/player/new", post(add_player))
             .route("/game/finish", post(finish_setup))
             .route("/peer", get(get_peers))
+            .route("/ping", get(connected))
             .route("/attestation_chain/new", post(create_new_attestation_chain))
             .route("/attestation_chain", get(list_groups))
             .route(

@@ -11,6 +11,7 @@ use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use std::sync::Arc;
 use tauri::async_runtime::Mutex;
 use tauri::{generate_handler, Invoke};
+use tokio::spawn;
 
 pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     game_synchronizer,
@@ -151,8 +152,13 @@ pub(crate) async fn disconnect_game_host(
 pub(crate) async fn set_game_host(
     g: GameHost,
     game_host: State<'_, Arc<Mutex<Option<GameHost>>>>,
+    globals: State<'_, Arc<Globals>>,
 ) -> Result<(), ()> {
-    game_host.inner().lock().await.replace(g);
+    game_host.inner().lock().await.replace(g.clone());
+    let client = globals.get_client().await.or(Err(()))?;
+    // Courtesy Ping here which does DNS/Circuit Building to speed up subsequent
+    // game joins
+    spawn(async move { client.ping(&g).await });
     Ok(())
 }
 #[tauri::command]
