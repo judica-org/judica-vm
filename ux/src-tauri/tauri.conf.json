@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/schema.json",
   "build": {
-    "beforeBuildCommand": "yarn build",
+    "beforeBuildCommand": "./prebuild.sh",
     "beforeDevCommand": "yarn start",
     "devPath": "http://localhost:3000",
     "distDir": "../build"
@@ -38,7 +38,12 @@
         "providerShortName": null,
         "signingIdentity": null
       },
-      "resources": [],
+      "resources": [
+          "../../contracts/modules/target/wasm32-unknown-unknown/release/mining_game_contract.wasm",
+          "../../target/release/sapio-litigator",
+          "../../target/release/attest",
+          "../../target/release/game-host"
+      ],
       "shortDescription": "",
       "targets": "all",
       "windows": {
