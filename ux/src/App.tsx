@@ -106,7 +106,7 @@ function App() {
   const [current_tab_nested, set_current_tab_nested] = useState(1);
   const [root_state, set_root_state] = useState<null | EmittedAppState>(null);
   // reset the tab selection on the nested tab on nav away
-  useEffect(()=> set_current_tab_nested(1), [current_tab]);
+  useEffect(() => set_current_tab_nested(1), [current_tab]);
   useEffect(() => {
     let cancel = setTimeout(() => { }, 0);
     const callback = async () => {
@@ -153,6 +153,7 @@ function App() {
   const finish_time = root_state?.game_board?.finish_time ?? null;
   const player_status = game_event_log.length ? getLastMovesByPlayer(game_event_log) : ["No moves to show"];
   const is_finished = game_event_log.length ? findFinishLog(game_event_log) : false;
+  const player_key_map = root_state?.game_board?.users_by_key ?? {};
   console.log(["game-event-log"], root_state?.game_board?.event_log || "event log is empty");
 
   useEffect(() => {
@@ -185,9 +186,9 @@ function App() {
         <div className="Content">
           <WorkingGlobe power_plants={power_plants} user_id={user_id}></WorkingGlobe>
           <Box className="DataDisplay">
-            <Box sx={{ borderBottom: 1, borderColor: 'divider'}} className="DisplayContents">
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }} className="DisplayContents">
               <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
-                <Tab value={10}  icon={<Settings></Settings>}></Tab>
+                <Tab value={10} icon={<Settings></Settings>}></Tab>
                 <Tab value={1} icon={<ElectricBoltSharp></ElectricBoltSharp>}></Tab>
                 <Tab value={3} icon={<StorefrontSharp></StorefrontSharp>}></Tab>
                 <Tab value={4} icon={<Backpack></Backpack>}></Tab>
@@ -196,7 +197,7 @@ function App() {
               </Tabs>
             </Box>
             <Panel index={1} current_index={current_tab} >
-              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="scrollable" value={current_tab_nested}>
+              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="fullWidth" value={current_tab_nested} textColor="secondary" indicatorColor="secondary">
                 <Tab value={1} label="Build Plants"></Tab>
                 <Tab value={2} label="Buy/Sell Plants"></Tab>
                 <Tab value={3} label="Manage Plant"></Tab>
@@ -221,10 +222,10 @@ function App() {
               <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
             </Panel>
             <Panel index={4} current_index={current_tab}>
-              <Inventory userInventory={user_inventory} currency={game_board?.bitcoin_token_id ?? null} hashboard_pointer={game_board?.asic_token_id ?? null}></Inventory>
+              <Inventory player_key_map={player_key_map} signing_key={signing_key} currency={game_board?.bitcoin_token_id ?? null} hashboard_pointer={game_board?.asic_token_id ?? null}></Inventory>
             </Panel>
             <Panel index={5} current_index={current_tab}>
-              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="scrollable" value={current_tab_nested}>
+              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="fullWidth" value={current_tab_nested} textColor="secondary" indicatorColor="secondary">
                 <Tab value={1} label="Raw Move"></Tab>
                 <Tab value={2} label="Event Log"></Tab>
                 <Tab value={3} label="Board JSON"></Tab>

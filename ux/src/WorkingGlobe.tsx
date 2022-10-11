@@ -226,8 +226,10 @@ export default (props: { power_plants: UXPlantData[], user_id: EntityID | null }
             {location ? `Selected Location: ${location.lat}, ${location.lng}` : 'Click to select location'}
         </Typography>
         <Divider />
+        <div className="GlobeToggles">
         <PlantTypeSelect handleChange={handlePlantTypeChange} plantTypes={plantTypes} />
         <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={all_plant_owners} selectedPlantOwners={selectedPlantOwners} user_id={props.user_id} />
+        </div>
     </div >;
 };
 
