@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-CI=false
+export CI=false
 
 yarn build
 echo "#################"
