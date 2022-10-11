@@ -9,5 +9,6 @@
     "event_log": {
         "app_name": "testing-$PLAYER"
     },
-    "db_app_name": "testing-$PLAYER"
+    "db_app_name": "testing-$PLAYER",
+    "bitcoin_network": "signet"
 }

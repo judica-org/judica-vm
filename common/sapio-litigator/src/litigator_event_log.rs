@@ -6,6 +6,7 @@ use attest_database::db_handle::create::TipControl;
 use bitcoin::consensus::serialize as btc_ser;
 use bitcoin::consensus::Encodable;
 use bitcoin::hashes::hex::ToHex;
+use bitcoin::Network;
 use bitcoin::{
     blockdata::script::Script,
     hashes::{sha256, sha512, Hash, Hmac, HmacEngine},
@@ -256,7 +257,7 @@ pub(crate) async fn handle_module_bytes(
         &globals.data_dir,
         &globals.emulator,
         locator,
-        bitcoin::Network::Bitcoin,
+        globals.config.bitcoin_network,
         Default::default(),
     )
     .await
@@ -330,7 +331,7 @@ pub(crate) async fn process_psbt_fail_ok(
     evlog_group_id: OccurrenceGroupID,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let psbt = PartiallySignedTransaction::from_str(&psbt)?;
-    let skeys = extract_keys_for_simp(metadata, keys.clone())?;
+    let skeys = extract_keys_for_simp(globals.config.bitcoin_network, metadata, keys.clone())?;
     let signing_key = SigningKey(skeys);
     let signed = signing_key
         .sign_psbt(
@@ -374,36 +375,33 @@ pub(crate) async fn process_psbt_fail_ok(
         let signed = signed.clone();
         let txid_s = txid_s.clone();
         // END ERROR FREE SECTION:
-        tasks.push(
-            spawn_blocking(move || {
-                let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
-                let v2 = v?;
-                match v2 {
-                    Err(Idempotent::AlreadyExists) => Ok(()),
-                    Ok((_oid, txn)) => {
-                        handle
-                            .retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
-                                ParticipantAction::PsbtSigningCoordination(Multiplexed {
-                                    channel: txid_s,
-                                    data: PsbtString(signed),
-                                }),
-                                &keypair,
-                                &globals.secp,
-                                None,
-                                TipControl::NoTips,
-                            )?;
-                        // Technically there is a tiny risk that we succeed at inserting the
-                        // Signed PSBT but do not succeed at committing the event log entry.
-                        // In this case, we will see a second entry for the same psbt, which
-                        // is still not a logic error, fortunately.
-                        //
-                        // This could be fixed with some more clever logic in both DBs.
-                        txn.commit()?;
-                        Ok::<(), Box<dyn Error + Sync + Send>>(())
-                    }
+        tasks.push(spawn_blocking(move || {
+            let v = accessor.insert_new_occurrence_now_from_txn(evlog_group_id, &o);
+            let v2 = v?;
+            match v2 {
+                Err(Idempotent::AlreadyExists) => Ok(()),
+                Ok((_oid, txn)) => {
+                    handle.retry_insert_authenticated_envelope_atomic::<ParticipantAction, _, _>(
+                        ParticipantAction::PsbtSigningCoordination(Multiplexed {
+                            channel: txid_s,
+                            data: PsbtString(signed),
+                        }),
+                        &keypair,
+                        &globals.secp,
+                        None,
+                        TipControl::NoTips,
+                    )?;
+                    // Technically there is a tiny risk that we succeed at inserting the
+                    // Signed PSBT but do not succeed at committing the event log entry.
+                    // In this case, we will see a second entry for the same psbt, which
+                    // is still not a logic error, fortunately.
+                    //
+                    // This could be fixed with some more clever logic in both DBs.
+                    txn.commit()?;
+                    Ok::<(), Box<dyn Error + Sync + Send>>(())
                 }
-            }),
-        );
+            }
+        }));
     }
     for task in tasks {
         let r = task.await?;
@@ -424,6 +422,7 @@ pub(crate) async fn process_psbt_fail_ok(
 ///
 /// This function will return an error if  the data is not properly formatted.
 pub(crate) fn extract_keys_for_simp(
+    network: Network,
     metadata: sapio::template::TemplateMetadata,
     keys: Arc<BTreeMap<XOnlyPublicKey, bitcoin::secp256k1::SecretKey>>,
 ) -> Result<Vec<ExtendedPrivKey>, Box<dyn Error + Send + Sync>> {
@@ -440,7 +439,7 @@ pub(crate) fn extract_keys_for_simp(
         let hmac_result: Hmac<sha512::Hash> = Hmac::from_engine(hmac_engine);
         skeys.push(ExtendedPrivKey {
             // todo: other networks
-            network: bitcoin::Network::Signet,
+            network,
             depth: 0,
             parent_fingerprint: Fingerprint::default(),
             child_number: ChildNumber::from(0),

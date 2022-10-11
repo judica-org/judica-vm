@@ -1,5 +1,4 @@
 use std::str::FromStr;
-
 use bitcoin::hashes::hex::ToHex;
 use bitcoin::hashes::sha256;
 use bitcoin::hashes::Hash;
@@ -10,13 +9,11 @@ use bitcoin::XOnlyPublicKey;
 use event_log::db_handle::accessors::occurrence::ApplicationTypeID;
 use event_log::db_handle::accessors::occurrence::Occurrence;
 use event_log::db_handle::accessors::occurrence::OccurrenceConversionError;
-use event_log::db_handle::accessors::occurrence::OccurrenceID;
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
-use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupID;
 use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
 use game_player_messages::PsbtString;
 use ruma_serde::CanonicalJsonValue;
-use sapio::util::amountrange::AmountF64;
+use sapio::util::amountrange::AmountU64;
 use sapio_base::plugin_args::ContextualArguments;
 use sapio_base::plugin_args::CreateArgs;
 use sapio_base::serialization_helpers::SArc;
@@ -97,8 +94,8 @@ pub fn convert_setup_to_contract_args(
     setup: mine_with_friends_board::game::GameSetup,
     oracle_key: &XOnlyPublicKey,
 ) -> Result<CreateArgs<Value>, bitcoin::secp256k1::Error> {
-    let amt_per_player: AmountF64 =
-        AmountF64::from(Amount::from_sat(100000 / setup.players.len() as u64));
+    let amt_per_player: AmountU64 =
+        AmountU64::from(Amount::from_sat(100000 / setup.players.len() as u64));
     let g = GameKernel {
         game_host: PK(*oracle_key),
         players: setup

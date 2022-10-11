@@ -2,7 +2,7 @@ use bitcoin::{
     hashes::sha256, secp256k1::SecretKey, BlockHash, BlockHeader, TxMerkleNode, XOnlyPublicKey,
 };
 use lazy_static::lazy_static;
-use sapio::util::amountrange::AmountF64;
+use sapio::util::amountrange::AmountU64;
 use sapio_base::{
     serialization_helpers::SArc,
     simp::{CompiledObjectLT, ContinuationPointLT, SIMPAttachableAt, TemplateLT, SIMP},
@@ -150,7 +150,7 @@ pub struct PK(#[schemars(with = "sha256::Hash")] pub XOnlyPublicKey);
 #[derive(Clone, Serialize, Deserialize, JsonSchema, Debug)]
 pub struct GameKernel {
     pub game_host: PK,
-    pub players: BTreeMap<PK, AmountF64>,
+    pub players: BTreeMap<PK, AmountU64>,
     pub timeout: u64,
 }
 impl GameKernel {}

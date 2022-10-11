@@ -15,8 +15,8 @@
     },
     "app_instance": "testing-$PLAYER",
     "event_log": {
-        "app_name": "testing-$PLAYER",
-        "group": "$PLAYER-event-group"
+        "app_name": "testing-$PLAYER"
     },
-    "contract_location": "$WASM_MODULE"
+    "contract_location": "$WASM_MODULE",
+    "bitcoin_network": "signet"
 }

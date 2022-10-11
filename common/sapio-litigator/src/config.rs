@@ -1,7 +1,7 @@
 use attest_database::connection::MsgDB;
 use attest_database::setup_db;
 use attest_util::bitcoin::BitcoinConfig;
-use bitcoin::XOnlyPublicKey;
+use bitcoin::{XOnlyPublicKey, Network};
 use bitcoincore_rpc_async::Client;
 use event_log::connection::EventLog;
 use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
@@ -16,6 +16,7 @@ pub(crate) struct Config {
     #[serde(default)]
     pub(crate) db_prefix: Option<PathBuf>,
     pub(crate) bitcoin: BitcoinConfig,
+    pub(crate) bitcoin_network: Network,
     pub(crate) app_instance: String,
     pub(crate) event_log: EventLogConfig,
 }

@@ -25,7 +25,10 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::{error::Error, net::SocketAddr, sync::Arc};
 use tokio::{sync::Mutex, task::spawn_blocking};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::TraceLayer,
+};
 mod routes;
 
 #[derive(Deserialize, Serialize)]
@@ -252,6 +255,7 @@ pub fn run(
                 "/attestation_chain/commit_group/add_member",
                 post(add_chain_to_group),
             )
+            .layer(TraceLayer::new_for_http())
             .layer(Extension(db))
             .layer(Extension(secp))
             .layer(Extension(Arc::new(Mutex::new(NewGameDB::new()))))

@@ -42,6 +42,7 @@ use sapio_bitcoin::{
 };
 use sapio_litigator_events::{Event, ModuleRepo, Tag, TaggedEvent};
 use serde::Deserialize;
+use tracing::{debug, trace};
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -221,242 +222,269 @@ pub async fn finish_setup(
     }): Json<FinishArgs>,
     Extension(db): Extension<Arc<Mutex<NewGameDB>>>,
     // TODO: Add these to the layer in app.rs / move to globals?
-    Extension(rpc): Extension<Arc<Client>>,
     Extension(globals): Extension<Globals>,
 ) -> Result<(Response<()>, Json<CreatedNewChain>), (StatusCode, String)> {
-    if let Some(v) = db.lock().await.states.get(&code) {
-        if passcode == v.admin {
-            let mut game = v.state.lock().await;
-            game.finalize_setup(v.duration, start_amount)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            match &*game {
-                GameStartingState::AddingPlayers(_) | GameStartingState::WaitingForSetup(_) => {
-                    return Err((StatusCode::INTERNAL_SERVER_ERROR, "Unreachable".into()))
-                }
-                GameStartingState::Setup(envelopes, gs) => {
-                    let authed: Vec<_> = envelopes
-                        .iter()
-                        .map(|e| e.self_authenticate(&secp.0))
-                        .collect::<Result<_, AuthenticationError>>()
-                        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
-                    {
-                        for (i, env) in authed.into_iter().enumerate() {
-                            let mut handle = msgdb.get_handle_all().await;
-                            spawn_blocking(move || {
-                                handle.insert_user_by_genesis_envelope(
-                                    format!("{}::{}", String::from(code), i),
-                                    env,
-                                )
-                            })
-                            .await
-                            .map_err(|_e| (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()))?
-                            .map_err(|_e| (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()))?
-                            // These errors are OK here
-                            .ok();
-                        }
-                    }
-                    let resp = create_new_attestation_chain(
-                        Json((
-                            envelopes
-                                .iter()
-                                .map(|m| m.canonicalized_hash_ref())
-                                .collect(),
-                            gs.clone(),
-                        )),
-                        msgdb,
-                        secp,
+    let v = db
+        .lock()
+        .await
+        .states
+        .get(&code)
+        .ok_or((StatusCode::NOT_FOUND, "No Such Game".into()))?
+        .clone();
+
+    trace!(game_id=?code, "Starting to Create Game");
+    if passcode != v.admin {
+        return Err((StatusCode::UNAUTHORIZED, "Wrong Passcode".into()));
+    }
+    trace!(game_id=?code, "Passcode Matched");
+    let mut game = v.state.lock().await;
+    game.finalize_setup(v.duration, start_amount)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    match &*game {
+        GameStartingState::AddingPlayers(_) | GameStartingState::WaitingForSetup(_) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Game Not in Correct State".into(),
+        )),
+        GameStartingState::Setup(envelopes, gs) => {
+            let authed: Vec<_> = envelopes
+                .iter()
+                .map(|e| e.self_authenticate(&secp.0))
+                .collect::<Result<_, AuthenticationError>>()
+                .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
+
+            trace!(game_id=?code, "Envelopes Valid");
+            for (i, env) in authed.into_iter().enumerate() {
+                let mut handle = msgdb.get_handle_all().await;
+                spawn_blocking(move || {
+                    handle.insert_user_by_genesis_envelope(
+                        format!("{}::{}", String::from(code), i),
+                        env,
                     )
-                    .await
-                    .map_err(|e| (e.0, e.1.to_owned()));
-                    if let Ok((_, Json(ref b))) = resp {
-                        let args = sapio_litigator_events::convert_setup_to_contract_args(
-                            gs.to_owned(),
-                            &b.sequencer_key,
-                        )
-                        .map_err(|_e| {
+                })
+                .await
+                .map_err(|_e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Internal Database Panic".to_string(),
+                    )
+                })?
+                .map_err(|_e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Database Error".to_string(),
+                    )
+                })?
+                // These errors are OK here
+                .ok();
+            }
+            trace!(game_id=?code, "Envelopes Inserted");
+            let resp = create_new_attestation_chain(
+                Json((
+                    envelopes
+                        .iter()
+                        .map(|m| m.canonicalized_hash_ref())
+                        .collect(),
+                    gs.clone(),
+                )),
+                msgdb,
+                secp,
+            )
+            .await
+            .map_err(|e| (e.0, e.1.to_owned()));
+
+            trace!(game_id=?code, "Genesis Created");
+            if let Ok((_, Json(ref b))) = resp {
+                let args = sapio_litigator_events::convert_setup_to_contract_args(
+                    gs.to_owned(),
+                    &b.sequencer_key,
+                )
+                .map_err(|_e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Error Creating Sapio Args".to_string(),
+                    )
+                })?;
+
+                trace!(game_id=?code, ?args, "Contract Args Made");
+                let compiled = {
+                    let module = globals.compiler_module.lock().await;
+                    module
+                        .call(&EffectPath::from(PathFragment::Root), &args)
+                        .map_err(|e| {
+                            debug!(game_id=?code, ?e, "Contract Object Failed Compiled");
                             (
                                 StatusCode::INTERNAL_SERVER_ERROR,
-                                "Error Creating Sapio Args".to_string(),
+                                "Error Compiling Sapio Contract".to_string(),
                             )
-                        })?;
-                        let compiled = {
-                            let module = globals.compiler_module.lock().await;
-                            module
-                                .call(&EffectPath::from(PathFragment::Root), &args)
-                                .map_err(|_e| {
-                                    (
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Error Compiling Sapio Contract".to_string(),
-                                    )
-                                })?
-                        };
-                        let address = Address::from_script(
-                            &Script::from(compiled.address),
-                            sapio_bitcoin::network::constants::Network::Bitcoin,
-                        )
+                        })?
+                };
+                trace!(game_id=?code, "Contract Object Compiled");
+                let address =
+                    Address::from_script(&Script::from(compiled.address), globals.bitcoin_network)
                         .ok_or((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Error Converting Into Address".to_string(),
                         ))?;
 
-                        let amount = compiled.amount_range.max();
-                        let psbt = rpc
-                            .wallet_create_funded_psbt(
-                                &[],
-                                &HashMap::from_iter([(address.to_string(), amount)].into_iter()),
-                                None,
-                                Some(WalletCreateFundedPsbtOptions {
-                                    change_address: None,
-                                    change_position: Some(1),
-                                    change_type: None,
-                                    include_watching: None,
-                                    lock_unspent: Some(true),
-                                    fee_rate: None,
-                                    subtract_fee_from_outputs: vec![],
-                                    replaceable: Some(true),
-                                    conf_target: Some(1),
-                                    estimate_mode: None,
-                                }),
-                                Some(true),
-                            )
-                            .await
-                            .map_err(|_| {
-                                (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    "Error Making PSBTs".to_string(),
-                                )
-                            })?;
-                        #[derive(Deserialize)]
-                        struct R {
-                            psbt: String,
-                            complete: bool,
-                        }
-                        let r = rpc
-                            .call::<R>("walletprocesspsbt", &[serde_json::Value::String(psbt.psbt)])
-                            .await
-                            .map_err(|_| {
-                                (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    "Error Signing PSBTs".to_string(),
-                                )
-                            })?;
-                        if !r.complete {
-                            return Err((
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "PSBT NOT DONE".into(),
-                            ));
-                        }
+                debug!(game_id=?code, ?address, "Contract Address");
+                let amount = compiled.amount_range.max();
+                let psbt = globals
+                    .bitcoin_rpc
+                    .wallet_create_funded_psbt(
+                        &[],
+                        &HashMap::from_iter([(address.to_string(), amount)].into_iter()),
+                        None,
+                        Some(WalletCreateFundedPsbtOptions {
+                            change_address: None,
+                            change_position: Some(1),
+                            change_type: None,
+                            include_watching: None,
+                            lock_unspent: Some(true),
+                            fee_rate: None,
+                            subtract_fee_from_outputs: vec![],
+                            replaceable: Some(true),
+                            conf_target: Some(1),
+                            estimate_mode: None,
+                        }),
+                        Some(true),
+                    )
+                    .await
+                    .map_err(|_| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Error Making PSBTs".to_string(),
+                        )
+                    })?;
+                #[derive(Deserialize, Debug)]
+                struct R {
+                    psbt: String,
+                    complete: bool,
+                }
+                let r = globals
+                    .bitcoin_rpc
+                    .call::<R>("walletprocesspsbt", &[serde_json::Value::String(psbt.psbt)])
+                    .await
+                    .map_err(|_| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Error Signing PSBTs".to_string(),
+                        )
+                    })?;
+                trace!(game_id=?code, ?r, "Got PSBT");
+                if !r.complete {
+                    return Err((StatusCode::INTERNAL_SERVER_ERROR, "PSBT NOT DONE".into()));
+                }
 
-                        let psbt = PartiallySignedTransaction::from_str(&r.psbt).map_err(|_| {
+                let psbt = PartiallySignedTransaction::from_str(&r.psbt).map_err(|_| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "PSBT Invalid".to_string(),
+                    )
+                })?;
+
+                let tx = psbt.extract_tx();
+
+                let seq_str = b.sequencer_key.to_string();
+                let tx_evt = TaggedEvent(
+                    Event::TransactionFinalized("default".into(), tx.clone()),
+                    Some(Tag::ScopedValue(seq_str.clone(), "funding_tx".into())),
+                );
+                {
+                    let accessor = globals.evlog.get_accessor().await;
+                    // TODO: SPAWN_BLOCKING
+                    let sequencer_group = accessor
+                        .insert_new_occurrence_group(&seq_str)
+                        .or_else(|_| accessor.get_occurrence_group_by_key(&seq_str))
+                        .map_err(|_| {
                             (
                                 StatusCode::INTERNAL_SERVER_ERROR,
-                                "PSBT Invalid".to_string(),
+                                "Could not get group by key".into(),
+                            )
+                        })?;
+                    trace!(game_id=?code, ?sequencer_group, "Got Sequencer Group");
+                    accessor
+                        .insert_new_occurrence_now_from(
+                            sequencer_group,
+                            &TaggedEvent(
+                                Event::ModuleBytes(
+                                    ModuleRepo::default_group_key(),
+                                    globals.module_tag.clone(),
+                                ),
+                                Some(Tag::InitModule),
+                            ),
+                        )
+                        .map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Could not Insert new Group".into(),
+                            )
+                        })?
+                        // ignore idempotent error, safe if the library ever changes
+                        .map_err(|_: Idempotent| ())
+                        .ok();
+
+                    trace!(game_id=?code, "Inserted ModuleBytes into evlog");
+                    accessor
+                        .insert_new_occurrence_now_from(
+                            sequencer_group,
+                            &TaggedEvent(Event::CreateArgs(args), Some(Tag::CreateArgs)),
+                        )
+                        .map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Could not insert create args".into(),
+                            )
+                        })?
+                        .map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Idempotent Key already inserted".into(),
                             )
                         })?;
 
-                        let tx = psbt.extract_tx();
-
-                        let seq_str = b.sequencer_key.to_string();
-                        let tx_evt = TaggedEvent(
-                            Event::TransactionFinalized("default".into(), tx.clone()),
-                            Some(Tag::ScopedValue(seq_str.clone(), "funding_tx".into())),
-                        );
-                        {
-                            let accessor = globals.evlog.get_accessor().await;
-                            // TODO: SPAWN_BLOCKING
-                            let sequencer_group = accessor
-                                .insert_new_occurrence_group(&seq_str)
-                                .or_else(|_| accessor.get_occurrence_group_by_key(&seq_str))
-                                .map_err(|_| {
-                                    (
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Could not get group by key".into(),
-                                    )
-                                })?;
-                            accessor
-                                .insert_new_occurrence_now_from(
-                                    sequencer_group,
-                                    &TaggedEvent(
-                                        Event::ModuleBytes(
-                                            ModuleRepo::default_group_key(),
-                                            globals.module_tag.clone(),
-                                        ),
-                                        Some(Tag::InitModule),
-                                    ),
-                                )
-                                .map_err(|_| {
-                                    (
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Could not Insert new Group".into(),
-                                    )
-                                })?
-                                // ignore idempotent error, safe if the library ever changes
-                                .map_err(|_: Idempotent| ())
-                                .ok();
-
-                            accessor
-                                .insert_new_occurrence_now_from(
-                                    sequencer_group,
-                                    &TaggedEvent(Event::CreateArgs(args), Some(Tag::CreateArgs)),
-                                )
-                                .map_err(|_| {
-                                    (
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Could not insert create args".into(),
-                                    )
-                                })?
-                                .map_err(|_| {
-                                    (
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Idempotent Key already inserted".into(),
-                                    )
-                                })?;
-                            accessor
-                                .insert_new_occurrence_now_from(
-                                    sequencer_group,
-                                    &TaggedEvent(
-                                        Event::Rebind(sapio_bitcoin::OutPoint {
-                                            txid: tx.txid(),
-                                            vout: 0,
-                                        }),
-                                        Some(Tag::FirstBind),
-                                    ),
-                                )
-                                .map_err(|_| {
-                                    (
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Could not insert rebind args".into(),
-                                    )
-                                })?
-                                .map_err(|_| {
-                                    (
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Idempotent Key already inserted".into(),
-                                    )
-                                })?;
-                            accessor
-                                .insert_new_occurrence_now_from(sequencer_group, &tx_evt)
-                                .map_err(|_| {
-                                    (
-                                        StatusCode::INTERNAL_SERVER_ERROR,
-                                        "Could not insert tx evt".into(),
-                                    )
-                                })?
-                                .ok();
-                            // lastly send the tx...
-                            rpc.send_raw_transaction(&tx).await.ok();
-                        }
-
-                        return resp;
-                    } else {
-                        return resp;
-                    }
+                    trace!(game_id=?code, "Inserted CreateArgs into evlog");
+                    accessor
+                        .insert_new_occurrence_now_from(
+                            sequencer_group,
+                            &TaggedEvent(
+                                Event::Rebind(sapio_bitcoin::OutPoint {
+                                    txid: tx.txid(),
+                                    vout: 0,
+                                }),
+                                Some(Tag::FirstBind),
+                            ),
+                        )
+                        .map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Could not insert rebind args".into(),
+                            )
+                        })?
+                        .map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Idempotent Key already inserted".into(),
+                            )
+                        })?;
+                    trace!(game_id=?code, "Inserted Rebind into evlog");
+                    accessor
+                        .insert_new_occurrence_now_from(sequencer_group, &tx_evt)
+                        .map_err(|_| {
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Could not insert tx evt".into(),
+                            )
+                        })?
+                        .ok();
+                    trace!(game_id=?code, "Inserted PSBT into evlog");
+                    // lastly send the tx...
+                    globals.bitcoin_rpc.send_raw_transaction(&tx).await.ok();
                 }
+
+                return resp;
+            } else {
+                return resp;
             }
-        } else {
-            return Err((StatusCode::UNAUTHORIZED, "Wrong Passcode".into()));
         }
     }
-
-    Err((StatusCode::NOT_FOUND, "No Such Game".into()))
 }

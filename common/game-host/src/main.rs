@@ -14,6 +14,7 @@ use sapio::contract::Compiled;
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::seq::SliceRandom;
 use sapio_bitcoin::secp256k1::All;
+use sapio_bitcoin::Network;
 use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair};
 use sapio_litigator_events::{Event, ModuleRepo};
 use sapio_wasm_plugin::host::plugin_handle::ModuleLocator;
@@ -48,11 +49,12 @@ pub struct Config {
     pub(crate) bitcoin: BitcoinConfig,
     pub(crate) contract_location: String,
     app_instance: String,
-    evlog: EventLogConfig,
+    event_log: EventLogConfig,
+    bitcoin_network: Network,
 }
 #[derive(Serialize, Deserialize)]
 pub struct EventLogConfig {
-    application: String,
+    app_name: String,
     #[serde(default)]
     prefix: Option<PathBuf>,
 }
@@ -81,7 +83,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // get location of project directory modules
     let data_dir = data_dir_modules(&config.app_instance);
 
-    let evlog = event_log::setup_db(&config.evlog.application, config.evlog.prefix.clone())
+    // Connect to litigator's DB
+    let proj = format!("sapio-litigator.{}", config.event_log.app_name);
+    let evlog = event_log::setup_db(&proj, config.event_log.prefix.clone())
         .await
         .map_err(|e| e.to_string())?;
     let (module_bytes, module_tag, module_repo_id) = {
@@ -117,7 +121,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             &data_dir,
             &emulator,
             locator,
-            sapio_bitcoin::Network::Bitcoin,
+            config.bitcoin_network,
             Default::default(),
         )
         .await
@@ -128,6 +132,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         module_tag,
         evlog,
         compiler_module,
+        bitcoin_rpc: client,
+        bitcoin_network: config.bitcoin_network,
     });
 
     let db = setup_db(

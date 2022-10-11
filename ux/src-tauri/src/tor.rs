@@ -1,7 +1,7 @@
 use crate::config::Globals;
 use attest_messages::{Authenticated, GenericEnvelope};
 use attest_util::{ensure_dir, CrossPlatformPermissions};
-use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode, NewGame};
+use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode, NewGame, NewGameArgs};
 use game_player_messages::ParticipantAction;
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use schemars::JsonSchema;
