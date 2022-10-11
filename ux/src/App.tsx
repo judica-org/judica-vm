@@ -164,6 +164,7 @@ function App() {
     ListenPlantSelected((d) => {
       set_selected_plant(d)
       set_current_tab(8);
+      set_current_tab_nested(3);
     })
   });
 
