@@ -4,6 +4,16 @@ import { MaterialPriceDisplay } from "../App";
 import { SuccessfulTradeOutcome, tauri_host, UnsuccessfulTradeOutcome } from "../tauri_host";
 import { RawMaterialsActions } from "../util";
 
+export const handle_error = (e: UnsuccessfulTradeOutcome) => {
+  switch (typeof e) {
+    case 'string':
+      return "Market Slipped"
+    case "object":
+      if (e.InvalidTrade) return `Invalid Trade: ${e.InvalidTrade}`
+      if (e.InsufficientTokens) return `Insufficient Tokens: ${e.InsufficientTokens}`
+  }
+}
+
 const PurchaseMaterialForm = ({ action: action_in, market }: {
   readonly action: RawMaterialsActions;
   market: MaterialPriceDisplay;
@@ -13,15 +23,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
   const [trade_amt, set_trade_amt] = React.useState<number>(0);
   const [limit_pct, set_limit_pct] = React.useState<number | null>(null);
   const [formula_result, set_formula_result] = React.useState("");
-  const handle_error = (e: UnsuccessfulTradeOutcome) => {
-    switch (typeof e) {
-      case 'string':
-        return "Market Slipped"
-      case "object":
-        if (e.InvalidTrade) return `Invalid Trade: ${e.InvalidTrade}`
-        if (e.InsufficientTokens) return `Insufficient Tokens: ${e.InsufficientTokens}`
-    }
-  }
+
   const formula = async (a: number) => {
     if (isNaN(a)) return "Invalid Trade Entered";
     if (trade_amt === 0) return "No Trade Entered";
@@ -121,7 +123,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
             color="warning"
             value={action}
             exclusive
-            onChange={(ev, v) => v && set_action(v)}
+            onChange={(_ev, v) => v && set_action(v)}
             aria-label="buy or sell"
           >
             <ToggleButton value="BUY" aria-label="buy">
@@ -150,7 +152,7 @@ const PurchaseMaterialForm = ({ action: action_in, market }: {
           <Typography>
             {formula_result}
           </Typography>
-          <TextField label={"Slip Tolerance (e.g. 0.1 => 10%)"} type="number"
+          <TextField label={"Slip Tolerance (e.g. 10 => 10%)"} type="number"
             value={limit_pct} onChange={parse_limit_pct}></TextField>
           <Button type="submit" onClick={handle_click}>Execute {action}</Button>
         </FormControl>

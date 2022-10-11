@@ -1,5 +1,5 @@
 import { Send } from "@mui/icons-material";
-import { Button, FormControl, FormGroup, IconButton, TextField } from "@mui/material";
+import { FormControl, FormGroup, IconButton, TextField } from "@mui/material";
 import React from "react";
 import { tauri_host } from "../tauri_host";
 

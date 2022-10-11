@@ -8,11 +8,10 @@ export function EventLog({ game_event_log }: { game_event_log: [number, EntityID
     const [event_messages, set_event_messages] = useState<[number, EntityID, LogEvent][]>([]);
 
     useEffect(() => {
-        // const filtered = game_event_log.filter(([_num, _player, logEvent]) => !JSON.stringify(logEvent).includes("heartbeat"))
-        // set_event_messages(filtered as [number, EntityID, LogEvent][]);
-        set_event_messages(game_event_log as [number, EntityID, LogEvent][]);
+        const filtered = game_event_log.filter(([_num, _player, logEvent]) => !JSON.stringify(logEvent).includes("heartbeat"))
+        set_event_messages(filtered);
         bottomEl.current?.scrollIntoView(false)
-    }, [event_messages])
+    }, [game_event_log])
 
     return <div>
         <Typography className="EventsTitle" variant="h4" >Game Events</Typography>

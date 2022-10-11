@@ -4,7 +4,7 @@ import countries_data from "./countries.json";
 import earth from "./earth-dark.jpeg";
 import Globe from "react-globe.gl";
 import { Card, CardHeader, CardContent, Icon, Divider } from '@mui/material';
-import { emit, Event } from '@tauri-apps/api/event';
+import { emit } from '@tauri-apps/api/event';
 import { fireSvg, solarSvg, hydroSvg } from './util';
 import { PlantSelected, PlantType } from './App';
 import { PlantOwnerSelect, PlantTypeSelect } from './GlobeHelpers';
@@ -13,6 +13,9 @@ import { EntityID } from './Types/GameMove';
 import { UXPlantData } from './Types/Gameboard';
 const { useState, useEffect } = React;
 
+const scaling_formula = (units: number, max_units: number): number => {
+    return units / max_units
+}
 type Plant = UXPlantData;
 const stub_plant_data: Plant[] = [{
     coordinates: [46818188, 8227512],
@@ -53,24 +56,23 @@ function memoized_color(name: string) {
     return memo_colors[name];
 }
 
-type BarData = { coordinates: number[], hashrate?: number, watts?: number, id: string };
+type BarData = { coordinates: number[], hashboards?: number, scale?: number, id: string };
 
 function getBarData(plants: (UXPlantData)[]) {
-    return plants.reduce<BarData[]>((acc, { coordinates, hashrate, watts, id }) => {
-        return [...acc, { id, coordinates, hashrate }, { id, coordinates: [coordinates[0] + 100000, coordinates[1] + 100000], watts }];
+    return plants.reduce<BarData[]>((acc, { coordinates, miners, watts, id }) => {
+        return [...acc, { id, coordinates, scale: watts / 100_000 }, { id, coordinates: [coordinates[0] + 200000, coordinates[1] + 200000], hashboards: miners }];
     }, []);
 }
 
 const chose_color = (d: BarData): string => {
-    console.log(["picking-color"], d);
-    if (d.hashrate && d.hashrate > 0) {
-        return 'orange'
+    if (d.hashboards && d.hashboards > 0) {
+        return 'red'
     } else {
-        return 'green'
+        return 'lightgreen'
     }
 }
 
-export default (props: { power_plants: UXPlantData[] }) => {
+export default (props: { power_plants: UXPlantData[], user_id: EntityID | null }) => {
     const [all_plant_owners, set_all_plant_owners] = useState<Record<EntityID, true>>(
         {}
     ); // default to all owners
@@ -86,12 +88,13 @@ export default (props: { power_plants: UXPlantData[] }) => {
 
     const [selected_plants, set_selected_plants] = React.useState<UXPlantData[]>(props.power_plants);
     const [output_bars, set_output_bars] = React.useState<BarData[]>(getBarData(props.power_plants));
+    const [max_scale, set_max_scale] = React.useState(1);
 
     React.useEffect(() => {
         const plants_by_type = props.power_plants.filter(({ plant_type, owner }) => plantTypes[plant_type] && selectedPlantOwners[owner]);
-        const output_bars = getBarData(plants_by_type);
+        const output_bar_data = getBarData(plants_by_type);
         set_selected_plants(plants_by_type);
-        set_output_bars(output_bars);
+        set_output_bars(output_bar_data);
     }, [plantTypes, selectedPlantOwners]);
 
     React.useEffect(() => {
@@ -100,6 +103,10 @@ export default (props: { power_plants: UXPlantData[] }) => {
         set_all_plant_owners(
             new_all
         );
+        const wattages = props.power_plants.map((p) => p.watts / 100000);
+        wattages.sort();
+        let max_scale_new = Math.max(wattages[wattages.length - 1], 1);
+        set_max_scale(max_scale_new);
         setSelectedPlantOwners(
             {
                 // add the new, but
@@ -183,16 +190,16 @@ export default (props: { power_plants: UXPlantData[] }) => {
                         pointLabel={(d: object) => {
                             const p = d as BarData;
                             let label = `<></>`;
-                            if (p.hashrate) {
+                            if (p.hashboards) {
                                 label = `
                                 <b>ID: ${p.id}</b> <br />
-                                Hashrate: <i>${p.hashrate}</i> <br />
+                                Hashboards: <i>${p.hashboards}</i> <br />
                                 `
                             }
-                            if (p.watts) {
+                            if (p.scale) {
                                 label = `
                                 <b>ID: ${p.id}</b> <br />
-                                Watts: <i>${p.watts}</i> <br />
+                                Scale: <i>${p.scale}</i> <br />
                                 `
                             }
                             return label;
@@ -201,25 +208,28 @@ export default (props: { power_plants: UXPlantData[] }) => {
                         pointLng={(d: object) => (d as BarData).coordinates[1] / COORDINATE_PRECISION}
                         pointAltitude={(d: object) => {
                             const p = d as BarData;
-                            let alt = 1
+                            let alt = 0
                             console.log(["data-looks-like"], d);
-                            if (p.hashrate) {
-                                alt = p.hashrate! * 6e-6
+                            if (p.hashboards) {
+                                alt = p.hashboards
                             }
-                            if (p.watts) {
-                                alt = p.watts! * 6e-6
+                            if (p.scale) {
+                                alt = p.scale
                             }
-                            return alt
+                            return scaling_formula(alt, max_scale)
                         }}
-                        pointRadius={0.25}
-                        pointColor={(d: object) => chose_color(d as BarData)}
+                        pointRadius={0.15}
+                        pointColor={(d: object) => {
+                            console.log(["color-data-shape"], d);
+                            return chose_color(d as BarData)
+                        }}
                         pointResolution={12}
                         pointsMerge={true}
                     />
                 </div>
                 <Divider />
                 <PlantTypeSelect handleChange={handlePlantTypeChange} plantTypes={plantTypes} />
-                <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={all_plant_owners} selectedPlantOwners={selectedPlantOwners} />
+                <PlantOwnerSelect handleChange={handleOwnersChange} plantOwners={all_plant_owners} selectedPlantOwners={selectedPlantOwners} user_id={props.user_id}/>
             </CardContent>
         </Card>
     </div>;

@@ -416,8 +416,8 @@ fn test_send_tokens_to_plant() {
                 MoveEnvelope {
                     d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
                     sequence: alice_seq_next(),
-                    /// median time should be averaged to >= 250k
-                    time_millis: 500_000,
+                    /// median time should be averaged to >= 750k
+                    time_millis: 1_500_000,
                 },
                 NO_POST,
             ),
@@ -426,7 +426,7 @@ fn test_send_tokens_to_plant() {
                 MoveEnvelope {
                     d: Unsanitized(GameMove::Heartbeat(Heartbeat())),
                     sequence: alice_seq_next(),
-                    time_millis: 500_200,
+                    time_millis: 1_500_200,
                 },
                 &|g, v| {
                     let shares = g.get_user_hashrate_share();

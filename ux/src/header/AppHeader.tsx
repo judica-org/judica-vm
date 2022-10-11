@@ -3,7 +3,7 @@ import { SwitchToGame, SwitchToGameProps } from './SwitchToGame';
 import { KeySelector, KeySelectorProps } from './KeySelector';
 import "./AppHeader.css";
 import React from 'react';
-import { Button, FormControl, FormControlLabel, FormGroup, FormLabel, IconButton, Switch, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { FormControl, FormGroup, FormLabel, IconButton, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import { NewGame, NewGameProps } from './NewGame';
 import { SwitchToHost, SwitchToHostProps } from './SwitchToHost';
 import { ContentCopy, FiberNew, List, RemoveCircleOutline } from '@mui/icons-material';
