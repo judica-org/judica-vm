@@ -12,7 +12,7 @@
 //! finish_setup(password, join, ... params) -> CreatedNewChain {genesis: Envelope, name: String}
 
 use crate::{
-    app::{create_new_attestation_chain, CompilerModule, CreatedNewChain},
+    app::{create_new_attestation_chain, CreatedNewChain},
     globals::Globals,
 };
 use attest_database::connection::MsgDB;
@@ -21,10 +21,9 @@ use axum::{
     http::{Response, StatusCode},
     Extension, Json,
 };
-use bitcoincore_rpc_async::{json::WalletCreateFundedPsbtOptions, Client, RpcApi};
+use bitcoincore_rpc_async::{json::WalletCreateFundedPsbtOptions, RpcApi};
 use event_log::db_handle::accessors::{
     occurrence::sql::Idempotent,
-    occurrence_group::{OccurrenceGroupID, OccurrenceGroupKey},
 };
 use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame, NewGameArgs};
 use game_player_messages::ParticipantAction;
@@ -35,7 +34,6 @@ use mine_with_friends_board::{
 };
 use sapio::sapio_base::effects::{EffectPath, PathFragment};
 use sapio_bitcoin::{
-    hashes::Hash,
     psbt::PartiallySignedTransaction,
     secp256k1::{All, Secp256k1},
     Address, Script,
@@ -481,9 +479,9 @@ pub async fn finish_setup(
                     globals.bitcoin_rpc.send_raw_transaction(&tx).await.ok();
                 }
 
-                return resp;
+                resp
             } else {
-                return resp;
+                resp
             }
         }
     }

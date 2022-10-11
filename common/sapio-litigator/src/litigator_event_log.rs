@@ -1,38 +1,35 @@
 use super::GlobalLitigatorState;
 use super::OK_T;
 use crate::LitigatedContractInstanceState;
-use crate::{config, events, ext::CompiledExt, universe::extractors::sequencer::get_game_setup};
+use crate::{events, ext::CompiledExt};
 use attest_database::db_handle::create::TipControl;
 use bitcoin::consensus::serialize as btc_ser;
-use bitcoin::consensus::Encodable;
+
 use bitcoin::hashes::hex::ToHex;
 use bitcoin::Network;
 use bitcoin::{
     blockdata::script::Script,
     hashes::{sha256, sha512, Hash, Hmac, HmacEngine},
     psbt::PartiallySignedTransaction,
-    secp256k1::{All, Secp256k1},
-    util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint},
-    KeyPair, OutPoint, XOnlyPublicKey,
+    util::bip32::{ChainCode, ChildNumber, ExtendedPrivKey, Fingerprint}, OutPoint, XOnlyPublicKey,
 };
 use emulator_connect::CTVEmulator;
-use event_log::db_handle::accessors::occurrence::OccurrenceID;
+
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
-use event_log::db_handle::accessors::occurrence_group;
+
 use event_log::db_handle::accessors::occurrence_group::OccurrenceGroupKey;
 use event_log::{
-    connection::EventLog,
     db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
 };
-use events::convert_setup_to_contract_args;
+
 use events::ModuleRepo;
-use futures::stream::FuturesOrdered;
+
 use futures::stream::FuturesUnordered;
 use game_player_messages::{Multiplexed, ParticipantAction, PsbtString};
 use sapio::contract::object::SapioStudioFormat;
 use sapio::contract::Compiled;
 use sapio_base::{
-    effects::{EditableMapEffectDB, PathFragment},
+    effects::{EditableMapEffectDB},
     serialization_helpers::SArc,
     simp::{by_simp, SIMP},
     txindex::TxIndexLogger,
@@ -247,7 +244,7 @@ pub(crate) async fn handle_module_bytes(
     let bytes = {
         let accessor = globals.evlog.get_accessor().await;
         let gid = accessor.get_occurrence_group_by_key(group)?;
-        let o = accessor.get_occurrence_for_group_by_tag(gid, &tag)?;
+        let o = accessor.get_occurrence_for_group_by_tag(gid, tag)?;
         let mr = ModuleRepo::from_occurrence(o.1)?;
         mr.0
     };
@@ -269,7 +266,7 @@ pub(crate) async fn handle_module_bytes(
 
 pub(crate) async fn handle_synthetic_periodic(
     e: &mut EventLoopContext,
-    time: i64,
+    _time: i64,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let EventLoopContext {
         ref mut state,
@@ -354,7 +351,7 @@ pub(crate) async fn process_psbt_fail_ok(
     let txid_s = txid.to_string();
 
     let data = signed.to_string();
-    let psbt_hash = sha256::Hash::hash(&data.as_bytes());
+    let psbt_hash = sha256::Hash::hash(data.as_bytes());
     let tasks = FuturesUnordered::new();
     for epk in signing_key.0 {
         // BEGIN ERROR FREE SECTION:

@@ -6,8 +6,8 @@ use attest_messages::{
 };
 use attest_util::bitcoin::BitcoinConfig;
 use emulator_connect::{CTVAvailable, CTVEmulator};
-use event_log::connection::EventLog;
-use event_log::db_handle::accessors::occurrence::sql::Idempotent;
+
+
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
 use game_host_messages::{BroadcastByHost, Channelized};
 use sapio::contract::Compiled;
@@ -16,13 +16,13 @@ use sapio_bitcoin::secp256k1::rand::seq::SliceRandom;
 use sapio_bitcoin::secp256k1::All;
 use sapio_bitcoin::Network;
 use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair};
-use sapio_litigator_events::{Event, ModuleRepo};
+use sapio_litigator_events::{ModuleRepo};
 use sapio_wasm_plugin::host::plugin_handle::ModuleLocator;
 use sapio_wasm_plugin::host::WasmPluginHandle;
-use sapio_wasm_plugin::plugin_handle::PluginHandle;
-use sapio_wasm_plugin::CreateArgs;
+
+
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
 use std::time::Duration;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -99,13 +99,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         let mr = ModuleRepo(module_bytes);
         let tag = mr.unique_tag().unwrap();
         // get or insert or get
-        let a = accessor
+        let _a = accessor
             .get_occurrence_for_group_by_tag(gid, &tag)
             .map(|(i, _)| i)
             .or_else(|_| {
                 accessor
                     .insert_new_occurrence_now_from(gid, &mr)?
-                    .or_else(|Idempotent| {
+                    .or_else(|_Idempotent| {
                         accessor
                             .get_occurrence_for_group_by_tag(gid, &tag)
                             .map(|(i, _)| i)

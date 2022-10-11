@@ -120,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut instances = globals.running_instances.lock().await;
                 let new_instances: Vec<_> = groups
                     .iter()
-                    .filter_map(|(id, k)| XOnlyPublicKey::from_str(&k).ok())
+                    .filter_map(|(_id, k)| XOnlyPublicKey::from_str(k).ok())
                     // TODO: Remove crashed tasks/ log so they can restart? maybe also do if is none task?
                     .filter(|k| !instances.contains_key(k))
                     .collect();
@@ -222,7 +222,7 @@ async fn start_extractors(
 ) -> Result<(), Box<dyn Error + Sync + Send + 'static>> {
     let evlog: event_log::connection::EventLog = globals.evlog.clone();
     let msg_db: attest_database::connection::MsgDB = globals.msg_db.clone();
-    let config: Arc<config::Config> = globals.config.clone();
+    let _config: Arc<config::Config> = globals.config.clone();
     tasks.push(tokio::spawn(universe::linearized::event_log_processor(
         evlog.clone(),
         evlog_group_id,

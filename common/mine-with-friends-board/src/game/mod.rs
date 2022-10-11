@@ -432,7 +432,7 @@ impl GameBoard {
                     let players = balances.len() as u64;
                     balances
                         .into_iter()
-                        .map(|(k, v)| {
+                        .map(|(k, _v)| {
                             #[allow(clippy::integer_division)]
                             (k, bounty / players)
                         })

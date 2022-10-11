@@ -17,7 +17,7 @@ use attest_util::bitcoin::BitcoinConfig;
 use attest_util::CrossPlatformPermissions;
 use bitcoincore_rpc_async::Auth;
 use futures::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
-use reqwest::Client;
+
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::{
     secp256k1::{All, Secp256k1},
@@ -189,11 +189,11 @@ async fn connect_and_test_nodes() {
             });
             let resp = join_all(it).await;
             debug!("Got {:?}", resp);
-            if (resp
+            if resp
                 .into_iter()
                 .flat_map(|r| r.unwrap())
                 .collect::<Vec<_>>()
-                == genesis_envelopes)
+                == genesis_envelopes
             {
                 break;
             }

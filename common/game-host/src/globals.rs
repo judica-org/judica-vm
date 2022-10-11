@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bitcoincore_rpc_async::Client;
 use event_log::{
     connection::EventLog,
-    db_handle::accessors::{occurrence::OccurrenceID, occurrence_group::OccurrenceGroupID},
+    db_handle::accessors::{occurrence_group::OccurrenceGroupID},
 };
 use sapio_bitcoin::Network;
 

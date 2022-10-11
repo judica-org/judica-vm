@@ -8,16 +8,16 @@ use super::*;
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, WrappedJson};
 use fallible_iterator::FallibleIterator;
 use ruma_serde::CanonicalJsonValue;
-use rusqlite::{params, Connection};
+use rusqlite::{params};
 
 use sapio_bitcoin::secp256k1::rand::{thread_rng, Rng};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
 use sapio_bitcoin::KeyPair;
 
 use std::collections::BTreeSet;
-use std::sync::Arc;
+
 use test_log::test;
-use tokio::sync::Mutex;
+
 use tracing::debug;
 
 #[test(tokio::test)]

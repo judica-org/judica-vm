@@ -3,7 +3,7 @@ use super::super::server::protocol;
 use super::super::server::tungstenite_client_adaptor;
 use super::new_protocol_chan;
 use super::AttestationClient;
-use super::OpenState;
+
 use super::PeerState;
 use super::ProtocolChan;
 use super::ProtocolReceiver;
@@ -19,7 +19,7 @@ use std::time::Duration;
 use tokio::spawn;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::protocol::Role;
-use tracing::debug;
+
 use tracing::trace;
 
 impl AttestationClient {
@@ -91,7 +91,7 @@ impl AttestationClient {
             return rec;
         }
         match ent {
-            PeerState::Open(_, r) => {
+            PeerState::Open(_, _r) => {
                 trace!(?ent, "CRITICAL TRACE:  returning no Recv NONE");
                 return None;
             }
@@ -141,20 +141,20 @@ impl AttestationClient {
                 trace!(?svc, "Client Connection Closed");
                 let cookie = PENDING_COOKIE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 *r = PeerState::Pending(cookie);
-                return Some(cookie);
+                Some(cookie)
             }
             PeerState::Open(ref mut p, existing_role) => {
                 if !p.is_closed() {
                     trace!(?svc, role=?existing_role, "Client Connection Found to be Open");
-                    return None;
+                    None
                 } else {
                     trace!(?svc, "Client Connection Found to be Closed");
                     let cookie = PENDING_COOKIE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     *r = PeerState::Pending(cookie);
-                    return Some(cookie);
+                    Some(cookie)
                 }
             }
-            (PeerState::Pending(c)) => {
+            PeerState::Pending(c) => {
                 if force {
                     trace!(
                         ?svc,
@@ -163,14 +163,14 @@ impl AttestationClient {
                     );
                     let cookie = PENDING_COOKIE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     *r = PeerState::Pending(cookie);
-                    return Some(cookie);
+                    Some(cookie)
                 } else {
                     trace!(
                         ?svc,
                         cookie = c,
                         "Client Connection Pending, force not enabled"
                     );
-                    return None;
+                    None
                 }
             }
         }
@@ -196,7 +196,7 @@ impl AttestationClient {
             let waiting_in = get_my_name(&self.g).await.unwrap();
             trace!(?waiting_in, peer_state = ?s, ?svc, "Current Peer State");
             match s {
-                PeerState::Open(s, r) => return s,
+                PeerState::Open(s, _r) => return s,
 
                 PeerState::Pending(current_cookie) => {
                     // check if finished and owner
