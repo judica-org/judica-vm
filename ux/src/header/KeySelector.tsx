@@ -44,7 +44,7 @@ export function KeySelector({ which_game_loaded, available_sequencers, signing_k
       <FormControl disabled={disabled}>
         {
           signing_key === null &&
-          <>
+          <FormGroup>
             <FormLabel>Select Player</FormLabel>
             <Select label="Public Key"
               onChange={(ev) => set_selected_key(ev.target.value as string)}
@@ -54,17 +54,17 @@ export function KeySelector({ which_game_loaded, available_sequencers, signing_k
               {key_options}
             </Select>
             <Button variant="contained" type="submit" onClick={handle_submit}>Select This Key</Button>
-          </>
+          </FormGroup>
         }
         {
           signing_key !== null &&
-          <>
+          <FormGroup>
             <FormLabel sx={{ wordBreak: "break-word" }}>Signing Key: {signing_key}</FormLabel>
             <FormGroup row>
               <IconButton onClick={() => tauri_host.set_signing_key(null)}><RemoveCircleOutline></RemoveCircleOutline></IconButton>
               <IconButton onClick={() => window.navigator.clipboard.writeText(signing_key)}><ContentCopy></ContentCopy></IconButton>
             </FormGroup>
-          </>
+          </FormGroup>
         }
       </FormControl>
     </div>

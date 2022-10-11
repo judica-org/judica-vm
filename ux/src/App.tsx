@@ -14,9 +14,12 @@ import DrawerAppBar from './menu-bar/MenuDrawer';
 import { EntityID } from './Types/GameMove';
 import { ManagePlant } from './manage-plant/ManagePlant';
 import MoveForm from './move-form/MoveForm';
-import { EmittedAppState, GameBoard, LogEvent, UXPlantData } from './Types/Gameboard';
+import { EmittedAppState, LogEvent, UXPlantData } from './Types/Gameboard';
 import { EventLog } from './event-log/EventLog';
 import FooterTicker from './footer-ticker/FooterTicker';
+import { AppHeader } from './header/AppHeader';
+import { Backpack, BugReport, ChatBubble, ElectricBoltSharp, Settings, Shop2Sharp, StorefrontSharp } from '@mui/icons-material';
+import { ListGameBoard } from './ListGameBoard';
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export const PLANT_SELECTED_EVENT = "PlantSelected";
@@ -35,41 +38,6 @@ export const ListenPlantSelected = (f: (d: EntityID) => void) => {
   })
 }
 
-
-function ListGameBoard(props: { g: GameBoard | null }) {
-  return props.g && <ul>
-    <li>
-      Init: {JSON.stringify(props.g.init)}
-    </li>
-    <li>
-      New Users: {JSON.stringify(props.g.new_users_allowed)}
-    </li>
-    <li>
-      User List: {JSON.stringify(props.g.users)}
-    </li>
-    <li>
-      Root User: {JSON.stringify(props.g.root_user)}
-    </li>
-    <li>
-      Bitcoin Token ID: {JSON.stringify(props.g.bitcoin_token_id)}
-    </li>
-    <li>
-      Dollar Token ID: {JSON.stringify(props.g.dollar_token_id)}
-    </li>
-    <li>
-      ERC20s: {JSON.stringify(props.g.erc20s)}
-    </li>
-    <li>
-      Exchanges: {JSON.stringify(props.g.swap)}
-    </li>
-    <li>
-      NFTs: {JSON.stringify(props.g.nfts)}
-    </li>
-    <li>
-      NFT Sales: {JSON.stringify(props.g.nft_sales)}
-    </li>
-  </ul>;
-}
 
 function Panel(props: React.PropsWithChildren & { index: number, current_index: number }) {
   return <div hidden={props.index !== props.current_index}>
@@ -135,7 +103,10 @@ function App() {
   const [location, setLocation] = useState<[number, number]>([0, 0]);
   const [selected_plant, set_selected_plant] = useState<EntityID | null>(null);
   const [current_tab, set_current_tab] = useState(1);
+  const [current_tab_nested, set_current_tab_nested] = useState(1);
   const [root_state, set_root_state] = useState<null | EmittedAppState>(null);
+  // reset the tab selection on the nested tab on nav away
+  useEffect(()=> set_current_tab_nested(1), [current_tab]);
   useEffect(() => {
     let cancel = setTimeout(() => { }, 0);
     const callback = async () => {
@@ -179,6 +150,7 @@ function App() {
   const listings = root_state?.energy_exchange ?? [];
   const user_id = (signing_key && root_state?.game_board?.users_by_key) ? root_state?.game_board?.users_by_key[signing_key] : null;
   const elapsed_time = root_state?.game_board?.elapsed_time ?? null;
+  const finish_time = root_state?.game_board?.finish_time ?? null;
   const player_status = game_event_log.length ? getLastMovesByPlayer(game_event_log) : ["No moves to show"];
   const is_finished = game_event_log.length ? findFinishLog(game_event_log) : false;
   console.log(["game-event-log"], root_state?.game_board?.event_log || "event log is empty");
@@ -206,29 +178,43 @@ function App() {
           game_host_service,
           user_id,
           elapsed_time,
+          finish_time,
           is_finished
         }}></DrawerAppBar>
         <div className="Content">
           <WorkingGlobe power_plants={power_plants} user_id={user_id}></WorkingGlobe>
           <Box className="DataDisplay">
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }} className="DisplayContents">
+            <Box sx={{ borderBottom: 1, borderColor: 'divider'}} className="DisplayContents">
               <Tabs onChange={(_ev, value) => set_current_tab(value)} scrollButtons="auto" variant="scrollable" value={current_tab}>
-                <Tab value={1} label="Build Plants"></Tab>
-                <Tab value={2} label="Energy Exchange"></Tab>
-                <Tab value={3} label="Materials Market"></Tab>
-                <Tab value={4} label="Inventory"></Tab>
-                <Tab value={5} label="Raw Move"></Tab>
-                <Tab value={6} label="Chat"></Tab>
-                <Tab value={7} label="Event Log"></Tab>
-                <Tab value={8} label="Manage Plant"></Tab>
-                <Tab value={9} label="Board JSON"></Tab>
+                <Tab value={10}  icon={<Settings></Settings>}></Tab>
+                <Tab value={1} icon={<ElectricBoltSharp></ElectricBoltSharp>}></Tab>
+                <Tab value={3} icon={<StorefrontSharp></StorefrontSharp>}></Tab>
+                <Tab value={4} icon={<Backpack></Backpack>}></Tab>
+                <Tab value={6} icon={<ChatBubble></ChatBubble>}></Tab>
+                <Tab value={5} icon={<BugReport></BugReport>}></Tab>
               </Tabs>
             </Box>
             <Panel index={1} current_index={current_tab} >
-              <Minting />
-            </Panel>
-            <Panel index={2} current_index={current_tab}>
-              {<EnergyExchange listings={listings}></EnergyExchange>}
+              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="scrollable" value={current_tab_nested}>
+                <Tab value={1} label="Build Plants"></Tab>
+                <Tab value={2} label="Buy/Sell Plants"></Tab>
+                <Tab value={3} label="Manage Plant"></Tab>
+              </Tabs>
+              <Panel index={1} current_index={current_tab_nested} >
+                <Minting />
+              </Panel>
+              <Panel index={2} current_index={current_tab_nested}>
+                {<EnergyExchange listings={listings}></EnergyExchange>}
+              </Panel>
+              <Panel index={3} current_index={current_tab_nested}>
+                <ManagePlant
+                  asic_token_id={game_board?.asic_token_id ?? null}
+                  bitcoin_token_id={game_board?.bitcoin_token_id ?? null}
+                  selected_plant={selected_plant}
+                  power_plants={power_plants}
+                  user_inventory={user_inventory}
+                />
+              </Panel>
             </Panel>
             <Panel index={3} current_index={current_tab}>
               <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
@@ -237,25 +223,31 @@ function App() {
               <Inventory userInventory={user_inventory} currency={game_board?.bitcoin_token_id ?? null} hashboard_pointer={game_board?.asic_token_id ?? null}></Inventory>
             </Panel>
             <Panel index={5} current_index={current_tab}>
-              <MoveForm></MoveForm>
+              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="scrollable" value={current_tab_nested}>
+                <Tab value={1} label="Raw Move"></Tab>
+                <Tab value={2} label="Event Log"></Tab>
+                <Tab value={3} label="Board JSON"></Tab>
+              </Tabs>
+              <Panel index={1} current_index={current_tab_nested}>
+                <MoveForm></MoveForm>
+              </Panel>
+              <Panel index={2} current_index={current_tab_nested}>
+                <EventLog game_event_log={game_event_log}></EventLog>
+              </Panel>
+              <Panel index={3} current_index={current_tab_nested}>
+                <ListGameBoard g={game_board}></ListGameBoard>
+              </Panel>
             </Panel>
             <Panel index={6} current_index={current_tab}>
               <Chat chat_log={chat_log}></Chat>
             </Panel>
-            <Panel index={7} current_index={current_tab}>
-              <EventLog game_event_log={game_event_log}></EventLog>
-            </Panel>
-            <Panel index={8} current_index={current_tab}>
-              <ManagePlant
-                asic_token_id={game_board?.asic_token_id ?? null}
-                bitcoin_token_id={game_board?.bitcoin_token_id ?? null}
-                selected_plant={selected_plant}
-                power_plants={power_plants}
-                user_inventory={user_inventory}
-              />
-            </Panel>
-            <Panel index={9} current_index={current_tab}>
-              <ListGameBoard g={game_board}></ListGameBoard>
+            <Panel index={10} current_index={current_tab}>
+              <AppHeader {...{
+                available_sequencers, which_game_loaded,
+                db_name_loaded, signing_key,
+                available_keys, join_code, join_password,
+                game_host_service
+              }}></AppHeader>
             </Panel>
           </Box>
         </div>

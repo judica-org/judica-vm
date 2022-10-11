@@ -76,6 +76,7 @@ pub struct GameHost {
     pub url: String,
     pub port: u16,
 }
+const PING: &str = "ping";
 const GAME_NEW: &str = "game/new";
 const GAME_ADD_PLAYER: &str = "game/player/new";
 const GAME_FINISH_SETUP: &str = "game/finish";
@@ -96,6 +97,18 @@ where
 }
 
 impl TorClient {
+    pub async fn ping(&self,
+        GameHost { url, port }: &GameHost,
+    ) -> Result<String, reqwest::Error> {
+        self.client
+            .get(format!("http://{}:{}/{}", url, port, PING))
+            .send()
+            .await
+            .debug_err()?
+            .text()
+            .await
+            .debug_err()
+    }
     pub async fn create_new_game_instance(
         &self,
         GameHost { url, port }: &GameHost,
@@ -103,7 +116,9 @@ impl TorClient {
     ) -> Result<NewGame, reqwest::Error> {
         self.client
             .post(format!("http://{}:{}/{}", url, port, GAME_NEW))
-            .json(&NewGameArgs{duration_minutes:minutes})
+            .json(&NewGameArgs {
+                duration_minutes: minutes,
+            })
             .send()
             .await
             .debug_err()?
