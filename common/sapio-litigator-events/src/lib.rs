@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use bitcoin::hashes::hex::ToHex;
 use bitcoin::hashes::sha256;
 use bitcoin::hashes::Hash;
@@ -24,6 +23,7 @@ use simps::EventKey;
 use simps::GameKernel;
 use simps::GameStarted;
 use simps::PK;
+use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Event {
