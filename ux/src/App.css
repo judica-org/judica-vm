@@ -52,6 +52,10 @@
     max-width: inherit;
 }
 
+.BoardJson {
+    min-height: 400px;
+}
+
 .MoveForm {
     min-height: 20vh;
 }

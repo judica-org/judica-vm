@@ -103,6 +103,7 @@ function App() {
   const [location, setLocation] = useState<[number, number]>([0, 0]);
   const [selected_plant, set_selected_plant] = useState<EntityID | null>(null);
   const [current_tab, set_current_tab] = useState(1);
+  const [current_tab_plants, set_current_tab_plants] = useState(1);
   const [current_tab_nested, set_current_tab_nested] = useState(1);
   const [root_state, set_root_state] = useState<null | EmittedAppState>(null);
   // reset the tab selection on the nested tab on nav away
@@ -160,12 +161,14 @@ function App() {
     listen("globe-location", (ev: { payload: any }) => {
       console.log(["globe-location"], JSON.parse(ev.payload));
       setLocation(JSON.parse(ev.payload));
+      set_current_tab(1);
+      set_current_tab_nested(1);
     });
 
     ListenPlantSelected((d) => {
       set_selected_plant(d)
       set_current_tab(1);
-      set_current_tab_nested(3);
+      set_current_tab_plants(3);
     })
   });
 
@@ -197,18 +200,18 @@ function App() {
               </Tabs>
             </Box>
             <Panel index={1} current_index={current_tab} >
-              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="fullWidth" value={current_tab_nested} textColor="secondary" indicatorColor="secondary">
+              <Tabs onChange={(_ev, value) => set_current_tab_plants(value)} scrollButtons="auto" variant="fullWidth" value={current_tab_plants} textColor="secondary" indicatorColor="secondary">
                 <Tab value={1} label="Build Plants"></Tab>
                 <Tab value={2} label="Buy/Sell Plants"></Tab>
                 <Tab value={3} label="Manage Plant"></Tab>
               </Tabs>
-              <Panel index={1} current_index={current_tab_nested} >
+              <Panel index={1} current_index={current_tab_plants} >
                 <Minting />
               </Panel>
-              <Panel index={2} current_index={current_tab_nested}>
+              <Panel index={2} current_index={current_tab_plants}>
                 {<EnergyExchange listings={listings}></EnergyExchange>}
               </Panel>
-              <Panel index={3} current_index={current_tab_nested}>
+              <Panel index={3} current_index={current_tab_plants}>
                 <ManagePlant
                   asic_token_id={game_board?.asic_token_id ?? null}
                   bitcoin_token_id={game_board?.bitcoin_token_id ?? null}
