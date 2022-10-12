@@ -664,7 +664,7 @@ impl GameBoard {
                 if s.starts_with("/nick") && s.is_ascii() && s.len() < 32 {
                     let nick = s.split_at(s.find(' ').unwrap_or(s.len()));
                     self.nicks.insert(from, nick.1.to_owned());
-                    s = format!("{:?} is now known as {}", from, nick.1);
+                    s = format!("{} is now known as {}", String::from(from), nick.1);
                 }
                 self.chat_counter += 1;
                 // only log the last 1000 messages
