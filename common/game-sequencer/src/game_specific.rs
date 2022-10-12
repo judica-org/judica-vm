@@ -29,12 +29,19 @@ use crate::GenericSequencer;
 use crate::OfflineSequencer;
 use crate::SequenceingError;
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize)]
 #[serde(try_from = "OfflineSequencer<ParticipantAction>")]
-#[schemars(with = "OfflineSequencer<ParticipantAction>")]
-pub struct ExtractedMoveEnvelopes(
-    #[schemars(with = "Vec<(MoveEnvelope, String)>")] pub Vec<(MoveEnvelope, XOnlyPublicKey)>,
-);
+pub struct ExtractedMoveEnvelopes(pub Vec<(MoveEnvelope, XOnlyPublicKey)>);
+
+impl JsonSchema for ExtractedMoveEnvelopes {
+    fn schema_name() -> String {
+        OfflineSequencer::<ParticipantAction>::schema_name()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        OfflineSequencer::<ParticipantAction>::json_schema(gen)
+    }
+}
 
 impl ExtractedMoveEnvelopes {}
 
