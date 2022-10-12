@@ -2,5 +2,4 @@
 .pnp.cjs
 .pnp.loader.mjs
 .yarn/
-.yarnrc.yml
 /node_modules
