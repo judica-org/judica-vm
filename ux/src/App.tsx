@@ -109,6 +109,7 @@ function App() {
   const [location, setLocation] = useState<[number, number]>([0, 0]);
   const [selected_plant, set_selected_plant] = useState<EntityID | null>(null);
   const [current_tab, set_current_tab] = useState(1);
+  const [current_tab_plants, set_current_tab_plants] = useState(1);
   const [current_tab_nested, set_current_tab_nested] = useState(1);
   const [root_state, set_root_state] = useState<null | EmittedAppState>(null);
   // reset the tab selection on the nested tab on nav away
@@ -160,18 +161,21 @@ function App() {
   const finish_time = root_state?.game_board?.finish_time ?? null;
   const player_status = game_event_log.length ? getLastMovesByPlayer(game_event_log) : ["No moves to show"];
   const is_finished = game_event_log.length ? findFinishLog(game_event_log) : false;
+  const player_key_map = root_state?.game_board?.users_by_key ?? {};
   console.log(["game-event-log"], root_state?.game_board?.event_log || "event log is empty");
 
   useEffect(() => {
     listen("globe-location", (ev: { payload: any }) => {
       console.log(["globe-location"], JSON.parse(ev.payload));
       setLocation(JSON.parse(ev.payload));
+      set_current_tab(1);
+      set_current_tab_nested(1);
     });
 
     ListenPlantSelected((d) => {
       set_selected_plant(d)
       set_current_tab(1);
-      set_current_tab_nested(3);
+      set_current_tab_plants(3);
     })
   });
 
@@ -203,18 +207,18 @@ function App() {
               </Tabs>
             </Box>
             <Panel index={1} current_index={current_tab} >
-              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="scrollable" value={current_tab_nested}>
+              <Tabs onChange={(_ev, value) => set_current_tab_plants(value)} scrollButtons="auto" variant="fullWidth" value={current_tab_plants} textColor="secondary" indicatorColor="secondary">
                 <Tab value={1} label="Build Plants"></Tab>
                 <Tab value={2} label="Buy/Sell Plants"></Tab>
                 <Tab value={3} label="Manage Plant"></Tab>
               </Tabs>
-              <Panel index={1} current_index={current_tab_nested} >
+              <Panel index={1} current_index={current_tab_plants} >
                 <Minting />
               </Panel>
-              <Panel index={2} current_index={current_tab_nested}>
+              <Panel index={2} current_index={current_tab_plants}>
                 {<EnergyExchange listings={listings}></EnergyExchange>}
               </Panel>
-              <Panel index={3} current_index={current_tab_nested}>
+              <Panel index={3} current_index={current_tab_plants}>
                 <ManagePlant
                   asic_token_id={game_board?.asic_token_id ?? null}
                   bitcoin_token_id={game_board?.bitcoin_token_id ?? null}
@@ -228,10 +232,10 @@ function App() {
               <RawMaterialsMarket materials={materials}></RawMaterialsMarket>
             </Panel>
             <Panel index={4} current_index={current_tab}>
-              <Inventory userInventory={user_inventory} currency={game_board?.bitcoin_token_id ?? null} hashboard_pointer={game_board?.asic_token_id ?? null}></Inventory>
+              <Inventory player_key_map={player_key_map} signing_key={signing_key} currency={game_board?.bitcoin_token_id ?? null} hashboard_pointer={game_board?.asic_token_id ?? null}></Inventory>
             </Panel>
             <Panel index={5} current_index={current_tab}>
-              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="scrollable" value={current_tab_nested}>
+              <Tabs onChange={(_ev, value) => set_current_tab_nested(value)} scrollButtons="auto" variant="fullWidth" value={current_tab_nested} textColor="secondary" indicatorColor="secondary">
                 <Tab value={1} label="Raw Move"></Tab>
                 <Tab value={2} label="Event Log"></Tab>
                 <Tab value={3} label="Board JSON"></Tab>

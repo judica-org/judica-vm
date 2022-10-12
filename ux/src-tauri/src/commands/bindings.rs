@@ -11,6 +11,7 @@ use crate::tor::{GameHost, TorClient};
 use crate::{Game, GameInitState, TriggerRerender};
 use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode};
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
+use mine_with_friends_board::game::UXUserInventory;
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
@@ -24,6 +25,7 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     get_move_schema,
     get_materials_schema,
     get_purchase_schema,
+    get_inventory_by_key,
     make_move_inner,
     switch_to_game,
     switch_to_db,
@@ -40,6 +42,7 @@ pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     disconnect_game,
     disconnect_game_host
 ];
+
 #[tauri::command]
 pub async fn simulate_trade(
     pair: TradingPairID,
@@ -50,6 +53,7 @@ pub async fn simulate_trade(
 ) -> Result<Result<TradeOutcome, TradeError>, SyncError> {
     view::simulate_trade(pair, amounts, trade, signing_key, s).await
 }
+
 #[tauri::command]
 pub async fn game_synchronizer(
     window: Window,
@@ -257,4 +261,13 @@ pub(crate) async fn make_move_inner(
         nextMove,
     )
     .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_inventory_by_key(
+    game: GameState<'_>,
+    user_key: String,
+) -> Result<UXUserInventory, SyncError> {
+    let res = view::get_user_inventory_by_key(game, user_key).await;
+    res
 }

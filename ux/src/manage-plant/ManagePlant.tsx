@@ -66,6 +66,10 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
             <TableCell >{plantDetail.hashrate}</TableCell>
           </TableRow>
           <TableRow>
+            <TableCell>Max Miners Supported</TableCell>
+            <TableCell>{plantDetail.watts/100_000}</TableCell>
+          </TableRow>
+          <TableRow>
             <TableCell >Miners Allocated</TableCell>
             <TableCell >{plantDetail.miners}</TableCell>
           </TableRow>

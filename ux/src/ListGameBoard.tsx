@@ -10,10 +10,12 @@ import { GameBoard } from './Types/Gameboard';
 
 export function ListGameBoard(props: { g: GameBoard | null; }) {
   return props.g &&
-    <Typography component={"textarea"}
+    <div className='BoardJson'>
+      <Typography component={"textarea"}
 
-      style={{ width: "100%", maxHeight: "75vh" }}
-    >
-      {JSON.stringify(props.g, null, 2)}
-    </Typography>
+        style={{ width: "100%", minHeight: '75vh' }}
+      >
+        {JSON.stringify(props.g, null, 2)}
+      </Typography>
+    </div>
 }

@@ -6,7 +6,7 @@
 
 import { invoke } from '@tauri-apps/api';
 import { PlantType } from './App';
-import { EmittedAppState } from './Types/Gameboard';
+import { EmittedAppState, UXUserInventory } from './Types/Gameboard';
 import { GameMove } from './Types/GameMove';
 
 export type SuccessfulTradeOutcome = {
@@ -39,6 +39,9 @@ export const tauri_host = {
   get_material_schema: async () => {
     return invoke("get_materials_schema");
   },
+  get_inventory_by_key: async (userKey: string): Promise<UXUserInventory> => {
+    return invoke("get_inventory_by_key", { userKey });
+  },
   switch_to_game: async (key: string) => {
     return invoke("switch_to_game", { key });
   },
@@ -55,7 +58,7 @@ export const tauri_host = {
     return invoke("make_new_chain", { nickname, code });
   },
   make_new_game: async (nickname: string, minutes: number) => {
-    return invoke("make_new_game", { nickname, minutes});
+    return invoke("make_new_game", { nickname, minutes });
   },
   mint_power_plant_cost: async (scale: number, location: [number, number], plantType: PlantType) => {
     console.log("building plant", {scale, location, plantType});
@@ -75,10 +78,10 @@ export const tauri_host = {
     return invoke("finalize_game", { args });
   },
   disconnect_game: async (): Promise<void> => {
-    return await invoke("disconnect_game", { });
+    return await invoke("disconnect_game", {});
   },
   disconnect_game_host: async (): Promise<void> => {
-    return await invoke("disconnect_game_host", { });
+    return await invoke("disconnect_game_host", {});
   }
 };
 

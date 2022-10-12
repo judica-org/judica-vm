@@ -100,7 +100,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
                 onChange={handleInputChange}
               />
             </Grid>
-            <Grid item>
+            <Grid item sx={{ padding: '5px' }}>
               <FormControl>
                 <FormLabel>Plant Type</FormLabel>
                 <RadioGroup
@@ -140,9 +140,13 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
                 />
               </div>
             </Grid>
-            <Button variant="contained" color="primary" type="submit" id="mint">
-              Build
-            </Button>
+            <Grid item>
+              <div style={{ width: "400px" }}>
+                <Button variant="contained" color="primary" type="submit" id="mint">
+                  Build
+                </Button>
+              </div>
+            </Grid>
           </Grid>
         </form>
       </div>

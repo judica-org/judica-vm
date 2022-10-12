@@ -177,7 +177,7 @@ async fn game_synchronizer_inner_loop(
         let mut game = s.lock().await;
         let game = game.game_mut().ok_or(SyncError::NoGame)?;
         let game_value = serde_json::to_value(&game.board).unwrap_or_else(|e| {
-            tracing::warn!(error=?e, "Failed to Serialized Game Board");
+            tracing::warn!(error=?e, "Failed to Serialize Game Board");
             serde_json::Value::Null
         });
         let chat_log = game.board.get_ux_chat_log();
@@ -317,4 +317,16 @@ pub(crate) async fn simulate_trade(
             .board
             .simulate_sell_trade(pair, amounts.0, amounts.1, sender),
     })
+}
+
+pub(crate) async fn get_user_inventory_by_key(
+    s: GameState<'_>,
+    user_key: String,
+) -> Result<UXUserInventory, SyncError> {
+    let mut game = s.lock().await;
+    let game = game.game_mut().ok_or(SyncError::NoGame)?;
+    let inventory = game.board
+        .get_ux_user_inventory(user_key)
+        .map_err(|()| SyncError::KeyUnknownByGame)?;
+    Ok(inventory)
 }

@@ -31,6 +31,10 @@
     margin: 6px;
 }
 
+.GlobeToggles {
+    padding: 5px;
+}
+
 .MuiTabs-root {
     display: flex;
 }
@@ -46,6 +50,10 @@
 .DataDisplay>div {
     min-width: inherit;
     max-width: inherit;
+}
+
+.BoardJson {
+    min-height: 400px;
 }
 
 .MoveForm {

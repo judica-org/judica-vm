@@ -751,7 +751,7 @@ where
 fn setup_game() -> GameBoard {
     let setup = GameSetup {
         players: vec![ALICE.into(), BOB.into()],
-        start_amount: 1_000_000,
+        start_amount: 10_000_000,
         finish_time: 1_000_000,
     };
 
