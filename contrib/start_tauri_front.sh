@@ -3,6 +3,7 @@
 set -o errexit
 set -o nounset
 set -o pipefail
+
 cd ../ux
 export PORT=3000
 export BROWSER=none

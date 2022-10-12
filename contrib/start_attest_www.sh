@@ -3,6 +3,7 @@
 set -o errexit
 set -o nounset
 set -o pipefail
+
 cd ../www/attest
 export PORT=3002
 export BROWSER=none

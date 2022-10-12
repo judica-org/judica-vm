@@ -8,6 +8,7 @@ export CONF
 MASTERMINE_CONFIG=$(cat mastermine_config.json.template | envsubst)
 export MASTERMINE_CONFIG
 echo "$MASTERMINE_CONFIG" | jq
+
 cd ../ux
 case "$USE_RELEASE_TAURI" in
 dev)
