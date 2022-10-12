@@ -10,6 +10,7 @@ serde= "1.0"
 schemars = "0.8.10"
 tracing = "0.1.35"
 ruma-serde = "0.6.0"
+rand = "0.8.5"
 
 [dependencies.serde_json]
 version = "1.0"

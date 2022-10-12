@@ -1585,6 +1585,7 @@ name = "mine-with-friends-board"
 version = "0.1.0"
 dependencies = [
  "attest-messages",
+ "rand 0.8.5",
  "ruma-serde",
  "schemars",
  "serde",

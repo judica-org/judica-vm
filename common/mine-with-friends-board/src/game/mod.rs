@@ -18,6 +18,7 @@ use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::instances::powerplant::PlantType;
+use crate::nfts::instances::powerplant::PowerPlant;
 use crate::nfts::instances::powerplant::PowerPlantPrices;
 use crate::nfts::instances::powerplant::PowerPlantProducer;
 use crate::nfts::sale::NFTSaleRegistry;
@@ -45,6 +46,7 @@ use crate::tokens::token_swap::TradeOutcome;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::token_swap::UXMaterialsPriceData;
 use crate::MoveEnvelope;
+use rand::{thread_rng, Rng};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -249,25 +251,25 @@ impl GameBoard {
         plant_prices.insert(
             PlantType::Solar,
             Vec::from([
-                (steel_token_id, 160),
-                (silicon_token_id, 400),
-                (concrete_token_id, 170),
+                (steel_token_id, 1),
+                (silicon_token_id, 8),
+                (concrete_token_id, 1),
             ]),
         );
         plant_prices.insert(
             PlantType::Hydro,
             Vec::from([
-                (steel_token_id, 100),
-                (silicon_token_id, 100),
-                (concrete_token_id, 600),
+                (steel_token_id, 3),
+                (silicon_token_id, 1),
+                (concrete_token_id, 6),
             ]),
         );
         plant_prices.insert(
             PlantType::Flare,
             Vec::from([
-                (steel_token_id, 256),
-                (silicon_token_id, 283),
-                (concrete_token_id, 271),
+                (steel_token_id, 4),
+                (silicon_token_id, 2),
+                (concrete_token_id, 4),
             ]),
         );
 
@@ -324,7 +326,7 @@ impl GameBoard {
         }
         self.tokens[self.bitcoin_token_id].transaction();
         self.tokens[self.real_sats_token_id].transaction();
-        self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10000000);
+        self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10_000_000_000);
         self.tokens[self.real_sats_token_id].mint(&self.root_user, 30000);
         self.tokens[self.bitcoin_token_id].end_transaction();
         self.tokens[self.real_sats_token_id].end_transaction();
@@ -349,7 +351,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(SteelSmelter {
             id: steel_id,
             total_units: 100_000,
-            base_price: 3_000,
+            base_price: 100_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.steel_token_id,
             adjusts_every: 5_003, // 5 seconds
@@ -360,7 +362,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(SiliconRefinery {
             id: silicon_id,
             total_units: 100_000,
-            base_price: 5_000,
+            base_price: 100_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.silicon_token_id,
             adjusts_every: 25_013, // 25 seconds
@@ -371,7 +373,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(ConcreteMiller {
             id: concrete_id,
             total_units: 100_000,
-            base_price: 3_000,
+            base_price: 100_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.concrete_token_id,
             adjusts_every: 14_009, // 14 seconds
@@ -396,6 +398,43 @@ impl GameBoard {
             self.bitcoin_token_id,
             &self.nfts,
         );
+
+        let plant_types = vec![PlantType::Flare, PlantType::Hydro, PlantType::Solar];
+        let start_locations: Vec<(i64, i64)> = vec![
+            (38075660, -120030170),
+            (-2346660, -76223050),
+            (-5203060, -66345370),
+            (66596730, 31545250),
+            (29521143, 26620126),
+            (58162163, 39188486),
+            (28599246, 116180671),
+            (-29625744, 138416999),
+            (-12141092, 35233406),
+            (21968789, -12535149),
+        ];
+
+        let mut p: Vec<&EntityID> = self.users_by_key.iter().map(|(_, p_id)| p_id).collect();
+        p.sort();
+        p.dedup(); // necessary?
+
+        for (i, player) in p.iter().enumerate() {
+            // base nft
+            let base_nft = BaseNFT {
+                owner: *player.clone(),
+                nft_id: self.alloc(),
+                transfer_count: 0,
+            };
+            let plant_ptr = self.nfts.add(Box::new(base_nft));
+            // pick random plant type
+            let random_plant_type = plant_types[thread_rng().gen_range(0..3)];
+            // pick random location
+            let coordinates: (i64, i64) = start_locations[i];
+
+            let new_plant =
+                PowerPlant::new(self, plant_ptr, random_plant_type, coordinates, 1 as u64);
+            // add to plant register, need to return Plant?
+            let _ = self.nfts.power_plants.insert(plant_ptr, new_plant);
+        }
     }
     /// Creates a new EntityID
     pub fn alloc(&mut self) -> EntityID {
