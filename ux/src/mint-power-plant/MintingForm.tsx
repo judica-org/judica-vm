@@ -56,6 +56,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
       } catch (e: any) {
         console.warn(e);
         setEstimate(handle_error(e.TradeError as UnsuccessfulTradeOutcome));
+        set_est_scale(scale);
       }
     });
     let i = setInterval(a, 1000)
