@@ -16,7 +16,10 @@ export const handle_error = (e: UnsuccessfulTradeOutcome) => {
       return "Market Slipped"
     case "object":
       if (e.InvalidTrade) return `Invalid Trade: ${e.InvalidTrade}`
-      if (e.InsufficientTokens) return `Insufficient Tokens: ${e.InsufficientTokens}`
+      else if (e.InsufficientTokens) return `Insufficient Tokens: ${e.InsufficientTokens}`
+      else throw "Unexpected Type"
+    default:
+      throw "Unexcpected Type"
   }
 }
 

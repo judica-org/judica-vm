@@ -100,6 +100,7 @@ export interface GameBoard {
     callbacks: CallbackRegistry
     chat: [number, EntityID, string][]
     chat_counter: number
+    nicks: Record<EntityID, string>
     /**
      * If init = true, must be Some
      */

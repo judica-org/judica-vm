@@ -151,6 +151,7 @@ function App() {
   const game_host_service = root_state?.game_host_service ?? null;
   const power_plants = root_state?.power_plants ?? [];
   const chat_log = root_state?.chat_log ?? [];
+  const nicks: Record<EntityID, string> = root_state?.game_board?.nicks ?? ({} as Record<EntityID, string>);
   const game_event_log = root_state?.game_board?.event_log ?? [];
   const game_board = root_state?.game_board ?? null;
   const user_inventory = root_state?.user_inventory ?? null;
@@ -250,7 +251,7 @@ function App() {
               </Panel>
             </Panel>
             <Panel index={6} current_index={current_tab}>
-              <Chat chat_log={chat_log}></Chat>
+              <Chat chat_log={chat_log} nicks={nicks}></Chat>
             </Panel>
             <Panel index={10} current_index={current_tab}>
               <AppHeader {...{

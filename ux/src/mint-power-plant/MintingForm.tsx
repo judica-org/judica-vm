@@ -21,14 +21,15 @@ const standardizeCoordinates = ({ lat, lng }: { lat: number, lng: number }): [nu
 }
 
 const MintingForm = ({ location }: { location: [number, number] }) => {
-  const [superMint, setSuperMint] = useState(false);
-  const [estimate, setEstimate] = useState<any[] | null>(null);
+  const [superMint, setSuperMint] = useState(true);
+  const [estimate, setEstimate] = useState<any[] | null | string>(null);
 
   const defaultValues = {
-    plant_type: 'Select',
-    scale: 1,
+    plant_type: 'Solar',
+    scale: 10,
     location,
   }
+  const [est_scale, set_est_scale] = useState<number>(defaultValues.scale);
 
   const [formValues, setFormValues] = useState(defaultValues);
   // fix this type
@@ -44,6 +45,22 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
     setSuperMint(event.target.checked);
   };
 
+  React.useEffect(() => {
+    let a = (async () => {
+      const { scale, plant_type } = formValues;
+      try {
+        let costs = await tauri_host.mint_power_plant_cost(scale, standardizeCoordinates({ lat: location[0], lng: location[1] }), plant_type as PlantType);
+        console.log(["mint-plant-estimate"], costs)
+        setEstimate(costs as unknown as any);
+        set_est_scale(scale);
+      } catch (e: any) {
+        console.warn(e);
+        setEstimate(handle_error(e.TradeError as UnsuccessfulTradeOutcome));
+      }
+    });
+    let i = setInterval(a, 1000)
+    return () => clearInterval(i);
+  }, [formValues]);
   const handleSubmit = async (event: any) => {
     event.preventDefault();
     const submitter_id = event.nativeEvent.submitter.id;
@@ -69,8 +86,6 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
 
   return (
     <div className="MintingForm">
-      {estimate && <MintingEstimate costs={estimate}></MintingEstimate>}
-      <Divider />
       <div>
         <Typography variant="h6"> Estimate Plant Cost and Build </Typography>
         <form onSubmit={handleSubmit}>
@@ -127,9 +142,6 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
             </Grid>
             <Grid item>
               <div style={{ width: "400px" }}>
-                <Button variant="contained" color="primary" type="submit" id="estimate">
-                  Estimate
-                </Button>
                 <Button variant="contained" color="primary" type="submit" id="mint">
                   Build
                 </Button>
@@ -138,6 +150,8 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
           </Grid>
         </form>
       </div>
+      <Divider />
+      {estimate && <MintingEstimate costs={estimate} scale={est_scale}></MintingEstimate>}
     </div >
   );
 };

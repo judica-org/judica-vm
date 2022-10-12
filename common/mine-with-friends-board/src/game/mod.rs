@@ -113,6 +113,7 @@ pub struct GameBoard {
     pub(crate) mining_subsidy: u128,
     pub ticks: BTreeMap<EntityID, Tick>,
     pub chat: VecDeque<(u64, EntityID, String)>,
+    pub nicks: BTreeMap<EntityID, String>,
     pub chat_counter: u64,
     pub event_log: VecDeque<(u64, EntityID, LogEvent)>,
     pub event_log_counter: u64,
@@ -297,6 +298,7 @@ impl GameBoard {
             event_log: VecDeque::with_capacity(1000),
             event_log_counter: 0,
             plant_prices,
+            nicks: Default::default(),
         };
         setup.setup_game(&mut g);
         g.post_init();
@@ -658,7 +660,12 @@ impl GameBoard {
                     info!("Remove Tokens: NFT owner mismatch");
                 }
             }
-            GameMove::Chat(Chat(s)) => {
+            GameMove::Chat(Chat(mut s)) => {
+                if s.starts_with("/nick") && s.is_ascii() && s.len() < 32 {
+                    let nick = s.split_at(s.find(' ').unwrap_or(s.len()));
+                    self.nicks.insert(from, nick.1.to_owned());
+                    s = format!("{} is now known as {}", String::from(from), nick.1);
+                }
                 self.chat_counter += 1;
                 // only log the last 1000 messages
                 // TODO: Configurable? Ignorable?
