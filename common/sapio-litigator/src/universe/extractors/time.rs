@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use event_log::{connection::EventLog, db_handle::accessors::occurrence_group::OccurrenceGroupID};
 use std::{error::Error, sync::Arc, time::Duration};
 use tokio::sync::Notify;

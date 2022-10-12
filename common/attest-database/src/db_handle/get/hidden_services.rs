@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use super::PeerInfo;
 use crate::db_handle::{handle_type, sql::SQL_GET_ALL_HIDDEN_SERVICES, MsgDBHandle};
 use fallible_iterator::FallibleIterator;

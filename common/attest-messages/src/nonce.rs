@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use sapio_bitcoin::secp256k1::ffi::types::{c_int, c_uchar, c_void, size_t};
 use sapio_bitcoin::secp256k1::ffi::{CPtr, SchnorrSigExtraParams};
 use sapio_bitcoin::secp256k1::schnorr::Signature;

@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use attest_util::{ensure_dir, get_hidden_service_hostname, CrossPlatformPermissions};
 
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};

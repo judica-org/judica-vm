@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import { Key, Add, RemoveCircleOutline, ContentCopy, Check, Pending } from '@mui/icons-material';
 import { Button, FormGroup, FormLabel, IconButton, TextField, ToggleButton, ToggleButtonGroup } from '@mui/material';
 import React from 'react';
