@@ -4,28 +4,40 @@
 //  License, v. 2.0. If a copy of the MPL was not distributed with this
 //  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import { useState, useEffect } from 'react';
-import './App.css';
-import EnergyExchange from './energy-exchange/EnergyExchange';
-import WorkingGlobe from './WorkingGlobe';
-import RawMaterialsMarket from './raw-materials/RawMaterialsMarket';
-import { tauri_host } from './tauri_host';
-import { Chat } from './chat/Chat';
-import { Inventory } from './inventory/inventory';
-import Minting from './mint-power-plant/Minting';
+import { Backpack, BugReport, ChatBubble, ElectricBoltSharp, Settings, StorefrontSharp } from '@mui/icons-material';
+import { Box, Button, Tab, Tabs } from '@mui/material';
 import { listen } from '@tauri-apps/api/event';
-import { Box, Tab, Tabs } from '@mui/material';
-import React from 'react';
-import DrawerAppBar from './menu-bar/MenuDrawer';
-import { EntityID } from './Types/GameMove';
-import { ManagePlant } from './manage-plant/ManagePlant';
-import MoveForm from './move-form/MoveForm';
-import { EmittedAppState, LogEvent, UXPlantData } from './Types/Gameboard';
+import { WebviewWindow } from '@tauri-apps/api/window';
+import React, { useEffect, useState } from 'react';
+import './App.css';
+import { Chat } from './chat/Chat';
+import EnergyExchange from './energy-exchange/EnergyExchange';
 import { EventLog } from './event-log/EventLog';
 import FooterTicker from './footer-ticker/FooterTicker';
 import { AppHeader } from './header/AppHeader';
-import { Backpack, BugReport, ChatBubble, ElectricBoltSharp, Settings, Shop2Sharp, StorefrontSharp } from '@mui/icons-material';
+import { Inventory } from './inventory/inventory';
 import { ListGameBoard } from './ListGameBoard';
+import { ManagePlant } from './manage-plant/ManagePlant';
+import DrawerAppBar from './menu-bar/MenuDrawer';
+import Minting from './mint-power-plant/Minting';
+import MoveForm from './move-form/MoveForm';
+import RawMaterialsMarket from './raw-materials/RawMaterialsMarket';
+import { tauri_host } from './tauri_host';
+import { EmittedAppState, LogEvent, UXPlantData } from './Types/Gameboard';
+import { EntityID } from './Types/GameMove';
+import WorkingGlobe from './WorkingGlobe';
+import { Command } from "@tauri-apps/api/shell";
+
+async function get_admindb_port(): Promise<string> {
+  const commandResult = await new Command(
+    "get-env-var",
+    ["ADMINDB_PORT"]
+  ).execute();
+
+  if (commandResult.code !== 0) throw new Error(commandResult.stderr);
+
+  return commandResult.stdout;
+}
 export type PlantType = 'Solar' | 'Hydro' | 'Flare';
 
 export const PLANT_SELECTED_EVENT = "PlantSelected";
@@ -239,6 +251,7 @@ function App() {
                 <Tab value={1} label="Raw Move"></Tab>
                 <Tab value={2} label="Event Log"></Tab>
                 <Tab value={3} label="Board JSON"></Tab>
+                <Tab value={4} label="Attest Admin"></Tab>
               </Tabs>
               <Panel index={1} current_index={current_tab_nested}>
                 <MoveForm></MoveForm>
@@ -249,6 +262,22 @@ function App() {
               <Panel index={3} current_index={current_tab_nested}>
                 <ListGameBoard g={game_board}></ListGameBoard>
               </Panel>
+              <Panel index={4} current_index={current_tab_nested}>
+                <Button onClick={async () => {
+                  const webview = new WebviewWindow('AttestAdmin', {
+                    url: `http://localhost:3002/?service_url=http%3A%2F%2F127.0.0.1%3A${await get_admindb_port()}`,
+                    fullscreen: true,
+                  })
+                  webview.once('tauri://created', function () {
+                    // webview window successfully created
+                  })
+                  webview.once('tauri://error', function (e) {
+                    // an error happened creating the webview window
+                    console.log(e);
+                  })
+                }}>Open DB Admin</Button>
+              </Panel>
+
             </Panel>
             <Panel index={6} current_index={current_tab}>
               <Chat chat_log={chat_log} nicks={nicks}></Chat>
