@@ -127,24 +127,28 @@ impl DemuxedSequencer {
 
     #[cfg(feature = "has_async")]
     pub async fn run(self) -> Result<(), JoinError> {
+        use std::error::Error;
+
         spawn(self.sequencer.clone().run());
         spawn({
             let this = self;
             async move {
-                match this.sequencer.output_move().await {
-                    Some(e) => match e.msg() {
-                        ParticipantAction::MoveEnvelope(m) => {
-                            this.send_move.send((m.clone(), e.header().key()));
+                loop {
+                    if let Some(e) = this.sequencer.output_move().await {
+                        match e.msg() {
+                            ParticipantAction::MoveEnvelope(m) => {
+                                this.send_move.send((m.clone(), e.header().key()))?;
+                            }
+                            ParticipantAction::Custom(c) => {
+                                this.send_custom.send(c.clone())?;
+                            }
+                            ParticipantAction::PsbtSigningCoordination(c) => {
+                                this.send_psbt.send((c.data.0.clone(), c.channel.clone()))?;
+                            }
                         }
-                        ParticipantAction::Custom(c) => {
-                            this.send_custom.send(c.clone());
-                        }
-                        ParticipantAction::PsbtSigningCoordination(c) => {
-                            this.send_psbt.send((c.data.0.clone(), c.channel.clone()));
-                        }
-                    },
-                    None => (),
+                    }
                 }
+                Ok::<_, Box<dyn Error + Send + Sync>>(())
             }
         });
         Ok(())
