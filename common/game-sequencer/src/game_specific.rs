@@ -133,19 +133,30 @@ impl DemuxedSequencer {
         spawn({
             let this = self;
             async move {
+                let mut listening_moves = true;
+                let mut listening_custom = true;
+                let mut listening_psbt = true;
                 loop {
                     if let Some(e) = this.sequencer.output_move().await {
                         match e.msg() {
-                            ParticipantAction::MoveEnvelope(m) => {
-                                this.send_move.send((m.clone(), e.header().key()))?;
+                            ParticipantAction::MoveEnvelope(m) if listening_moves => {
+                                listening_moves =
+                                    this.send_move.send((m.clone(), e.header().key())).is_ok();
                             }
-                            ParticipantAction::Custom(c) => {
-                                this.send_custom.send(c.clone())?;
+                            ParticipantAction::Custom(c) if listening_custom => {
+                                listening_custom = this.send_custom.send(c.clone()).is_ok();
                             }
-                            ParticipantAction::PsbtSigningCoordination(c) => {
-                                this.send_psbt.send((c.data.0.clone(), c.channel.clone()))?;
+                            ParticipantAction::PsbtSigningCoordination(c) if listening_psbt => {
+                                listening_psbt = this
+                                    .send_psbt
+                                    .send((c.data.0.clone(), c.channel.clone()))
+                                    .is_ok();
                             }
+                            _ => {}
                         }
+                    }
+                    if !(listening_custom || listening_moves || listening_psbt) {
+                        break;
                     }
                 }
                 Ok::<_, Box<dyn Error + Send + Sync>>(())
