@@ -1,4 +1,8 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
+# enable common error handling options
+set -o errexit
+set -o nounset
+set -o pipefail
 
 case "$(uname -s)" in
 Darwin)
@@ -19,7 +23,8 @@ Darwin)
         if test -f "$CC"; then
             echo "Using CC=$CC AR=$AR PATH=$PATH"
         else
-            echo "You may need to: $ brew install llvm" && exit -1
+            echo "You may need to: $ brew install llvm"
+            exit 1
         fi
     fi
 
