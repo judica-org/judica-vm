@@ -347,7 +347,7 @@ pub(crate) async fn handle_synthetic_periodic(
         ..
     } = e;
     if let Some(out) = state.bound_to.as_ref() {
-        trace!(?out, action="Binding Output", "SyntehticPeriodic");
+        trace!(?out, action = "Binding Output", "SyntehticPeriodic");
         let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
         if let Ok(program) = bind_psbt(c, out, &globals.emulator) {
             // TODO learn available keys through an extractor...

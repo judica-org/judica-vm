@@ -167,7 +167,7 @@ async fn connect_and_test_nodes() {
                             &NewGenesis {
                                 nickname: format!("ch-{}", ctrl),
                                 msg: CanonicalJsonValue::Null,
-                                danger_extended_private_key: None
+                                danger_extended_private_key: None,
                             },
                             &HOME.into(),
                             *ctrl,
