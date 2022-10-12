@@ -9,7 +9,7 @@ import logo from './logo.svg';
 import './App.css';
 import { GridColDef, GridColumns, GridToolbarContainer } from '@mui/x-data-grid';
 import { CopyAll, Menu, Newspaper } from '@mui/icons-material';
-import { AppBar, Box, Button, Container, IconButton, Tab, Tabs, Toolbar, Typography } from '@mui/material';
+import { AppBar, Box, Button, Container, Divider, IconButton, Tab, Tabs, Toolbar, Typography } from '@mui/material';
 import { AddPeer } from './AddPeer';
 import { TaskSet } from './TaskSet';
 import { Peers } from './Peers';
@@ -53,7 +53,7 @@ function App() {
   const [genesis, set_genesis] = React.useState<null | string>(null);
   const [current_tab, set_current_tab] = React.useState<"main" | "commit_groups">("main");
   const peer = React.useMemo(() =>
-    <AddPeer root={url}></AddPeer>
+    null
     , [url]);
   React.useEffect(
     () => {
@@ -94,13 +94,13 @@ function App() {
             <Menu />
           </IconButton>
           <Typography variant="body2" color="inherit" component="div" style={{ paddingRight: "10px" }}>
-            {url || "YOU MUST SET A SERVICE URL"}
+            {url && `Local Control Interface: ${url}` || "YOU MUST SET A SERVICE URL"}
           </Typography>
-          <ChangeService set_url={set_url} ></ChangeService>
+          <Divider orientation='vertical' flexItem={true}></Divider>
           <Typography variant="body2" color="inherit" component="div" style={{ paddingLeft: "10px" }}>
             {status_url === null ? "Tor Disabled" :
               <>
-                Tor: <code>{status_url}</code>
+                Public Tor Interface: <code>{status_url}</code>
                 <IconButton onClick={() => { window.navigator.clipboard.writeText(status_url) }}><CopyAll></CopyAll></IconButton>
               </>
             }
@@ -115,12 +115,21 @@ function App() {
             <Tabs onChange={(ev, t) => set_current_tab(t)} value={current_tab}>
               <Tab value="main" label="Main"></Tab>
               <Tab value="commit_groups" label="Commit Groups"></Tab>
+              <Tab value="add-peer" label="Add Peer"></Tab>
+              <Tab value="peers" label="View Peers"></Tab>
+              <Tab value="which-db" label="Switch DB"></Tab>
             </Tabs>
           </Box>
           <Box>
+            <Panel current_tab={current_tab} my_id={"which-db"}>
+              <ChangeService set_url={set_url} ></ChangeService>
+            </Panel>
 
-            <Panel current_tab={current_tab} my_id={"main"}>
-              <div className="TableGrid">
+            <Panel current_tab={current_tab} my_id={"add-peer"}>
+              <AddPeer root={url}></AddPeer>
+            </Panel>
+            <Panel current_tab={current_tab} my_id={"peers"}>
+              <div className="PeerTableGrid">
 
                 <div style={{ gridArea: "peers" }}>
                   {!status.IsNull && <Peers peers={status?.peers ?? []} root={url} toolbar_component={peer}></Peers>}
@@ -128,6 +137,10 @@ function App() {
                 <div style={{ gridArea: "tasks" }}>
                   {!status.IsNull && <TaskSet tasks={status.peer_connections}></TaskSet>}
                 </div>
+              </div>
+            </Panel>
+            <Panel current_tab={current_tab} my_id={"main"}>
+              <div className="TableGrid">
                 <div style={{ gridArea: "tips" }}>
                   {!status.IsNull && <Tips tips={status.tips} set_genesis={(a) => { set_genesis(a); set_current_tab("commit_groups") }}></Tips>}
                 </div>
@@ -170,7 +183,7 @@ export const handle_new_msg = async (safe: "SAFE" | "DANGER", url: string, pk: s
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ msg: js, key: pk, equivocate: safe === "DANGER"})
+      body: JSON.stringify({ msg: js, key: pk, equivocate: safe === "DANGER" })
     })
     console.log(await (await ret).json());
   }

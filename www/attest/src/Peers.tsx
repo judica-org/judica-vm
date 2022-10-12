@@ -42,7 +42,6 @@ async function change(url: string, port: number, root: string,
 export function Peers(props: { peers: Array<PeerInfo>, root: string | null, toolbar_component: any }) {
 
   const root = props.root;
-  const components = { Toolbar: CustomToolbar(props.toolbar_component) };
   const rows: GridRowsProp = props.peers.map((peer, id) => {
     const row: typeof rows[number] = Object.fromEntries(Object.entries(peer));
     row.id = id;
@@ -194,5 +193,5 @@ export function Peers(props: { peers: Array<PeerInfo>, root: string | null, tool
     new_tip_actions,
   ];
 
-  return <DataGrid rows={rows} columns={columns} components={components} />;
+  return <DataGrid rows={rows} columns={columns} />;
 }
