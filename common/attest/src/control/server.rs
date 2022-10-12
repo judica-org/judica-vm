@@ -11,7 +11,7 @@ use crate::{
 use attest_database::{
     connection::MsgDB,
     db_handle::{create::TipControl, get::PeerInfo},
-    generate_new_user,
+    generate_new_user, generate_new_user_keypair,
 };
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, WrappedJson};
 use attest_util::{AbstractResult, INFER_UNIT};
@@ -25,12 +25,13 @@ use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use reqwest::Method;
 use sapio_bitcoin::{
     secp256k1::{All, Secp256k1},
+    util::bip32::ExtendedPrivKey,
     KeyPair, XOnlyPublicKey,
 };
 use serde::Deserialize;
 use serde::Serialize;
 
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, str::FromStr, sync::Arc};
 use tokio::{
     sync::{mpsc::Sender, oneshot},
     task::spawn_blocking,
@@ -232,7 +233,11 @@ async fn push_message_dangerous(
     db: Extension<MsgDB>,
     secp: Extension<Secp256k1<All>>,
     bitcoin_tipcache: Extension<Arc<BitcoinCheckPointCache>>,
-    Json(PushMsg { msg, key }): Json<PushMsg>,
+    Json(PushMsg {
+        mut msg,
+        key,
+        equivocate,
+    }): Json<PushMsg>,
 ) -> Result<(Response<()>, Json<Outcome>), (StatusCode, String)> {
     let mut handle = db.0.get_handle_all().await;
     let tips = bitcoin_tipcache.0.read_cache().await;
@@ -247,20 +252,61 @@ async fn push_message_dangerous(
             .get(&key)
             .map(|k| KeyPair::from_secret_key(&secp, k))
             .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Unknown Key".into()))?;
-        handle
-            .retry_insert_authenticated_envelope_atomic::<WrappedJson, _, _>(
-                msg,
-                &kp,
-                &secp.0,
-                Some(tips),
-                TipControl::AllTips,
-            )
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Wrapping Message and Inserting failed: {}", e),
+        if equivocate {
+            match msg {
+                ruma_serde::CanonicalJsonValue::Array(mut a) if a.len() == 2 => {
+                    let dirty1 = a.pop().unwrap();
+                    let dirty2 = a.pop().unwrap();
+                    let tip = handle
+                        .get_tip_for_user_by_key(kp.x_only_public_key().0)
+                        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("No Tip: {}", e)))?
+                        .inner();
+                    for dirty in [dirty1, dirty2] {
+                        let m: Envelope = handle
+                            .wrap_message_in_envelope_for_user_by_key(
+                                dirty,
+                                &kp,
+                                &secp,
+                                Some(tips.clone()),
+                                Some(tip.clone()),
+                                TipControl::NoTips,
+                            )
+                            .map_err(|e| {
+                                (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    format!("Wrapping Message and Inserting failed: {}", e),
+                                )
+                            })?
+                            .map_err(|e| {
+                                (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    format!("Wrapping Message and Inserting failed: {}", e),
+                                )
+                            })?;
+                        handle.try_insert_authenticated_envelope(
+                            m.self_authenticate(&secp).unwrap(),
+                            false,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        } else {
+            handle
+                .retry_insert_authenticated_envelope_atomic::<WrappedJson, _, _>(
+                    msg,
+                    &kp,
+                    &secp.0,
+                    Some(tips),
+                    TipControl::AllTips,
                 )
-            })?;
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Wrapping Message and Inserting failed: {}", e),
+                    )
+                })?;
+        };
         Ok::<_, (StatusCode, String)>(())
     })
     .await
@@ -277,9 +323,25 @@ async fn push_message_dangerous(
 async fn make_genesis(
     db: Extension<MsgDB>,
     secp: Extension<Secp256k1<All>>,
-    Json(NewGenesis { nickname, msg }): Json<NewGenesis>,
+    Json(NewGenesis {
+        nickname,
+        msg,
+        danger_extended_private_key,
+    }): Json<NewGenesis>,
 ) -> Result<(Response<()>, Json<Envelope>), (StatusCode, String)> {
-    let (kp, pre, genesis) = generate_new_user::<_, WrappedJson, _>(&secp.0, msg).map_err(|e| {
+    let (kp, pre, genesis) = if let Some(epk) = danger_extended_private_key {
+        let epk = ExtendedPrivKey::from_str(&epk).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "Invalid ExtendedPrivateKey".to_string(),
+            )
+        })?;
+        let kp = epk.to_keypair(&secp);
+        generate_new_user_keypair::<_, WrappedJson, _>(&secp.0, msg, kp)
+    } else {
+        generate_new_user::<_, WrappedJson, _>(&secp.0, msg)
+    }
+    .map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Creating Genesis Message failed: {}", e),

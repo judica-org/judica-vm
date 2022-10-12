@@ -78,6 +78,13 @@ pub fn generate_new_user<C: Signing, M: AttestEnvelopable, Im: Into<M>>(
     init: Im,
 ) -> Result<(KeyPair, PrecomittedNonce, GenericEnvelope<M>), Box<dyn Error>> {
     let keypair: _ = KeyPair::new(secp, &mut rand::thread_rng());
+    generate_new_user_keypair(secp, init, keypair)
+}
+pub fn generate_new_user_keypair<C: Signing, M: AttestEnvelopable, Im: Into<M>>(
+    secp: &Secp256k1<C>,
+    init: Im,
+    keypair: KeyPair,
+) -> Result<(KeyPair, PrecomittedNonce, GenericEnvelope<M>), Box<dyn Error>> {
     let nonce = PrecomittedNonce::new(secp);
     let next_nonce = PrecomittedNonce::new(secp);
     let sent_time_ms = attest_util::now();

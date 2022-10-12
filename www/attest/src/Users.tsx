@@ -6,9 +6,9 @@
 
 import React from 'react';
 import { DataGrid, GridActionsCellItem, GridRowParams, GridRowsProp, GridToolbarContainer } from '@mui/x-data-grid';
-import { Create } from '@mui/icons-material';
+import { Create, Dangerous } from '@mui/icons-material';
 import { handle_new_msg } from './App';
-import { MakeGenesis } from './MakeGenesis';
+import { MakeGenesis, MakeGenesisImported } from './MakeGenesis';
 
 export function Users(props: { users: Array<[string, string, boolean]>; url: string; }) {
 
@@ -26,7 +26,8 @@ export function Users(props: { users: Array<[string, string, boolean]>; url: str
       getActions: (params: GridRowParams) => {
         if (rows[params.id as number].has_private_key)
           return [
-            <GridActionsCellItem icon={<Create></Create>} onClick={() => handle_new_msg(props.url, rows[params.id as number].pubkey)} label="Create New Message" />,
+            <GridActionsCellItem icon={<Create></Create>} onClick={() => handle_new_msg("SAFE", props.url, rows[params.id as number].pubkey)} label="Create New Message" />,
+            <GridActionsCellItem icon={<Dangerous></Dangerous>} onClick={() => handle_new_msg("DANGER", props.url, rows[params.id as number].pubkey)} label="Create New Message" />,
           ];
         else
           return []
@@ -42,6 +43,7 @@ function CustomToolbar(url: string) {
     <GridToolbarContainer>
       <h4>Chains</h4>
       <MakeGenesis url={url}></MakeGenesis>
+      <MakeGenesisImported url={url}></MakeGenesisImported>
     </GridToolbarContainer>
   );
 }

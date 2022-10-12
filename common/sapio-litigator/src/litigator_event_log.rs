@@ -183,7 +183,7 @@ pub(crate) async fn handle_new_information(
             let res = g_handle
                 .as_ref()
                 .map_err(|e| e.as_str())?
-                .fresh_clone()?
+                //.fresh_clone()?
                 .call(&state.root, &new_args)
                 .map_err(|e| debug!(error=?e, "Module did not like the new argument"));
             trace!(result=?res, "NewRecompileTriggeringObservation did Recompile");
@@ -347,6 +347,7 @@ pub(crate) async fn handle_synthetic_periodic(
         ..
     } = e;
     if let Some(out) = state.bound_to.as_ref() {
+        trace!(?out, action="Binding Output", "SyntehticPeriodic");
         let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
         if let Ok(program) = bind_psbt(c, out, &globals.emulator) {
             // TODO learn available keys through an extractor...
@@ -368,6 +369,7 @@ pub(crate) async fn handle_synthetic_periodic(
                     } = tx;
                     let keys = keys.clone();
                     // put this in an async block to simplify error handling
+                    trace!("Processing new Linked PSBT");
                     let r = process_psbt_fail_ok(
                         globals.clone(),
                         keys,
