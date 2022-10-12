@@ -29,6 +29,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
     scale: 10,
     location,
   }
+  const [est_scale, set_est_scale] = useState<number>(defaultValues.scale);
 
   const [formValues, setFormValues] = useState(defaultValues);
   // fix this type
@@ -51,6 +52,7 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
         let costs = await tauri_host.mint_power_plant_cost(scale, standardizeCoordinates({ lat: location[0], lng: location[1] }), plant_type as PlantType);
         console.log(["mint-plant-estimate"], costs)
         setEstimate(costs as unknown as any);
+        set_est_scale(scale);
       } catch (e: any) {
         console.warn(e);
         setEstimate(handle_error(e.TradeError as UnsuccessfulTradeOutcome));
@@ -84,8 +86,6 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
 
   return (
     <div className="MintingForm">
-      {estimate && <MintingEstimate costs={estimate}></MintingEstimate>}
-      <Divider />
       <div>
         <Typography variant="h6"> Estimate Plant Cost and Build </Typography>
         <form onSubmit={handleSubmit}>
@@ -146,6 +146,8 @@ const MintingForm = ({ location }: { location: [number, number] }) => {
           </Grid>
         </form>
       </div>
+      <Divider />
+      {estimate && <MintingEstimate costs={estimate} scale={est_scale}></MintingEstimate>}
     </div >
   );
 };

@@ -6,17 +6,17 @@
 
 import { Typography, Table, TableHead, TableRow, TableCell, TableBody } from "@mui/material"
 
-export const MintingEstimate = ({ costs }: { costs: any[] | string }) => {
+export const MintingEstimate = ({ costs, scale }: { costs: any[] | string, scale: number }) => {
   switch (typeof costs) {
     case "string":
       return <div className="Estimate">
-        <Typography variant='h6'>Materials Cost Estimate</Typography>
+        <Typography variant='h6'>Materials Cost Estimate for {scale} Scale</Typography>
         <Typography variant='body1'>{costs}</Typography>
       </div>
     case "object":
       return (
         <div className="Estimate">
-          <Typography variant='h6'>Materials Cost Estimate</Typography>
+          <Typography variant='h6'>Materials Cost Estimate for {scale} Scale</Typography>
           <Table>
             <TableHead>
               <TableRow>
