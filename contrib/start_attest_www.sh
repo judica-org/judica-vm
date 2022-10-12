@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 cd ../www/attest
 export PORT=3002
 export BROWSER=none

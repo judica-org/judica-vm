@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 export CONF=$(cat disable_tauri_front.json)
 export MASTERMINE_CONFIG=$(cat mastermine_config.json.template | envsubst)
