@@ -48,6 +48,7 @@ use sapio_wasm_plugin::{
     plugin_handle::PluginHandle,
 };
 use serde_json::Value;
+use simps::EK_WILDCARD;
 use simps::{self, EventKey, PK};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -139,8 +140,9 @@ pub(crate) async fn handle_new_information(
     filter: SArc<EventKey>,
     new_info_as_v: Value,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let instance = e.evlog_group_id;
     let EventLoopContext { ref mut state, .. } = e;
-    info!("NewRecompileTriggeringObservation");
+    info!(?instance, "NewRecompileTriggeringObservation");
     let idx_str = SArc(Arc::new(format!("event-{}", state.event_counter)));
     let mut new_args = state.args.as_ref().map_err(|e| e.as_str())?.clone();
     let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
@@ -150,26 +152,14 @@ pub(crate) async fn handle_new_information(
         .as_ref()
         .map_err(|e| e.as_str())?
         .continuation_points()
+        .filter(|api| event_key_filter_hit(api, &filter))
         .filter(|api| {
-            (&api.simp >> by_simp::<simps::EventRecompiler>())
-                .and_then(|j| simps::EventRecompiler::from_json(j.clone()).ok())
-                .map(|j| j.filter == *filter.0)
-                .unwrap_or(false)
-        })
-        .filter(|api| {
-            api.schema
-                .as_ref()
-                .and_then(|schema| {
-                    // todo: cache?
-                    jsonschema_valid::Config::from_schema(
-                        // since schema is a RootSchema, cannot throw here
-                        &schema.0,
-                        Some(jsonschema_valid::schemas::Draft::Draft6),
-                    )
-                    .ok()
-                })
-                .map(|validator| validator.validate(&new_info_as_v).is_ok())
-                .unwrap_or(false)
+            info!(
+                ?instance,
+                action = "Checking API",
+                "NewRecompileTriggeringObservation"
+            );
+            validate_api(api, &new_info_as_v)
         })
     {
         any_edits = true;
@@ -183,18 +173,21 @@ pub(crate) async fn handle_new_information(
                 new_info_as_v.clone(),
             );
     }
+    info!(?instance, any_edits, "NewRecompileTriggeringObservation");
     if any_edits {
         new_args.context.effects = save.into();
         let result = {
             let g_handle = state.module.lock().await;
             // drop error before releasing g_handle so that the CompilationError non-send type
             // doesn't get held across an await point
-            g_handle
+            let res = g_handle
                 .as_ref()
                 .map_err(|e| e.as_str())?
-                .fresh_clone()?
+                //.fresh_clone()?
                 .call(&state.root, &new_args)
-                .map_err(|e| debug!(error=?e, "Module did not like the new argument"))
+                .map_err(|e| debug!(error=?e, "Module did not like the new argument"));
+            trace!(result=?res, "NewRecompileTriggeringObservation did Recompile");
+            res
         };
 
         match result {
@@ -215,6 +208,64 @@ pub(crate) async fn handle_new_information(
         }
     };
     Ok(())
+}
+
+fn event_key_filter_hit(
+    api: &sapio::contract::abi::continuation::ContinuationPoint,
+    filter: &SArc<EventKey>,
+) -> bool {
+    (&api.simp >> by_simp::<simps::EventRecompiler>())
+        .and_then(|j| {
+            trace!(recompiler=j.to_string(),"NewRecompileTriggeringObservation");
+            simps::EventRecompiler::from_json(j.clone()).ok()
+        })
+        .map(|j| {
+            let hit = j.filter == *filter.0 || j.filter.is_wildcard();
+            trace!(hit, filter_for=?j.filter, event_was=?filter,"NewRecompileTriggeringObservation");
+            hit
+           })
+        .unwrap_or(false)
+}
+
+fn validate_api(
+    api: &sapio::contract::abi::continuation::ContinuationPoint,
+    new_info_as_v: &Value,
+) -> bool {
+    if api.schema.is_none() {
+        debug!("Missing Schema");
+    }
+    api.schema
+        .as_ref()
+        .and_then(|schema| {
+            // todo: cache?
+            let conf = jsonschema_valid::Config::from_schema(
+                // since schema is a RootSchema, cannot throw here
+                &schema.0,
+                Some(jsonschema_valid::schemas::Draft::Draft6),
+            );
+            if let Err(err) = conf.as_ref() {
+                debug!(?err, "Invalid Schema");
+            } else {
+                trace!("Valid Schema Found")
+            }
+
+            conf.ok()
+        })
+        .map(|validator| {
+            let v = validator.validate(new_info_as_v);
+            if let Err(v) = v {
+                let errs = v.collect::<Vec<_>>();
+                debug!(?errs, "Errors Validating Schema");
+                trace!(
+                    value = new_info_as_v.to_string(),
+                    schema = validator.get_schema().to_string()
+                );
+                false
+            } else {
+                true
+            }
+        })
+        .unwrap_or(false)
 }
 
 pub(crate) fn handle_rebind(e: &mut EventLoopContext, o: OutPoint) {
@@ -296,6 +347,7 @@ pub(crate) async fn handle_synthetic_periodic(
         ..
     } = e;
     if let Some(out) = state.bound_to.as_ref() {
+        trace!(?out, action = "Binding Output", "SyntehticPeriodic");
         let c = &state.contract.as_ref().map_err(|e| e.as_str())?;
         if let Ok(program) = bind_psbt(c, out, &globals.emulator) {
             // TODO learn available keys through an extractor...
@@ -317,6 +369,7 @@ pub(crate) async fn handle_synthetic_periodic(
                     } = tx;
                     let keys = keys.clone();
                     // put this in an async block to simplify error handling
+                    trace!("Processing new Linked PSBT");
                     let r = process_psbt_fail_ok(
                         globals.clone(),
                         keys,

@@ -55,7 +55,7 @@ pub async fn sequencer_extractor(
         tasks,
     )
     .await;
-    debug!(with=?res, "Sequencer Extractor Terminated");
+    debug!("Sequencer Extractor Finished Adding Tasks");
     res
 }
 pub async fn sequencer_extractor_inner(

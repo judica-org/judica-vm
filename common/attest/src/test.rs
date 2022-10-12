@@ -167,6 +167,7 @@ async fn connect_and_test_nodes() {
                             &NewGenesis {
                                 nickname: format!("ch-{}", ctrl),
                                 msg: CanonicalJsonValue::Null,
+                                danger_extended_private_key: None,
                             },
                             &HOME.into(),
                             *ctrl,
@@ -397,6 +398,7 @@ async fn make_nth(
                     &PushMsg {
                         key,
                         msg: nth_msg_per_port(port, n),
+                        equivocate: false,
                     },
                     &HOME.into(),
                     ctrl,

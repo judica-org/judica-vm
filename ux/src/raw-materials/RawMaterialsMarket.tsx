@@ -22,8 +22,8 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
         <Card className={'card'}>
           <CardHeader
             className={"MaterialsMarketTitle"}
-            title={'Raw Meterials Market'}
-            subheader={'Buy and sell resources to build power plants'}
+            title={'Marketplace'}
+            subheader={'Buy and sell resources to build powerplants and mining operations'}
           />
           <CardContent className={'content'}>
             <Divider/>

@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 pub struct PushMsg {
     pub msg: CanonicalJsonValue,
     pub key: XOnlyPublicKey,
+    #[serde(default)]
+    pub equivocate: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -35,4 +37,6 @@ pub struct Outcome {
 pub struct NewGenesis {
     pub nickname: String,
     pub msg: CanonicalJsonValue,
+    #[serde(default)]
+    pub danger_extended_private_key: Option<String>,
 }
