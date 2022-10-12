@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import React, { useState } from "react";
 import { Button, Divider, FormControl, FormControlLabel, FormLabel, Grid, Radio, RadioGroup, Switch, TextField, Typography } from "@mui/material";
 import { MintingEstimate } from "./MintingEstimate";
