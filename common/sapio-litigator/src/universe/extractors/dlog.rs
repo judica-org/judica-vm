@@ -38,6 +38,7 @@ pub async fn dlog_extractor_inner(
     loop {
         time::sleep(interval).await;
 
+        info!("DLog Extractor Waking Up");
         let mut reused_nonce_map = {
             let hdl = msg_db.get_handle_read().await;
 
@@ -57,16 +58,18 @@ pub async fn dlog_extractor_inner(
         }
 
         for (k, mut v) in reused_nonce_map {
+            info!(key=?k, "New DLog For");
             let e1 = v
                 .pop()
                 .ok_or("Invariant Broken in Database, reused nonce returned fewer than two")?;
             let e2 = v
                 .pop()
                 .ok_or("Invariant Broken in Database, reused nonce returned fewer than two")?;
+            info!("Messages: {} {}", e1.msg(), e2.msg());
             if let Some(dlog_discovered) = extract_sk_from_envelopes(e1, e2) {
                 info!(
                     ?k,
-                    ?dlog_discovered,
+                    secret_key_hex = dlog_discovered.secret_bytes().to_hex(),
                     "Learned DLog of an Attestation Chain, Evidence of Equivocation Acquired!"
                 );
                 known.insert(k);
