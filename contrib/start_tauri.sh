@@ -16,14 +16,15 @@ dev)
     sleep 10
     yarn tauri dev -c "$CONF"
     ;;
-
 debug)
     echo "Using Debug Tauri"
     ./src-tauri/target/debug/mastermine
     ;;
-
 release)
     echo "Using Release Tauri"
     ./src-tauri/target/release/mastermine
+    ;;
+*)
+    echo "Unknown Mode"
     ;;
 esac

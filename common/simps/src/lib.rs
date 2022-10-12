@@ -66,6 +66,11 @@ pub struct EventSource(pub String);
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct EventKey(pub String);
+impl EventKey {
+    pub fn is_wildcard(&self) -> bool {
+        self.0 == "*"
+    }
+}
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct EventRecompiler {
@@ -219,6 +224,8 @@ impl SIMP for DLogSubscription {
 impl SIMPAttachableAt<ContinuationPointLT> for DLogSubscription {}
 
 lazy_static! {
+    pub static ref EK_WILDCARD: SArc<EventKey> =
+        SArc(Arc::new(EventKey("*".into())));
     pub static ref EK_GAME_ACTION_WIN: SArc<EventKey> =
         SArc(Arc::new(EventKey("game_action_players_win".into())));
     pub static ref EK_GAME_ACTION_LOSE: SArc<EventKey> =
