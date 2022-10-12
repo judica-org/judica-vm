@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use crate::{
     attestations::{
         client::{AttestationClient, ServiceUrl},
@@ -161,6 +167,7 @@ async fn connect_and_test_nodes() {
                             &NewGenesis {
                                 nickname: format!("ch-{}", ctrl),
                                 msg: CanonicalJsonValue::Null,
+                                danger_extended_private_key: None,
                             },
                             &HOME.into(),
                             *ctrl,
@@ -391,6 +398,7 @@ async fn make_nth(
                     &PushMsg {
                         key,
                         msg: nth_msg_per_port(port, n),
+                        equivocate: false,
                     },
                     &HOME.into(),
                     ctrl,

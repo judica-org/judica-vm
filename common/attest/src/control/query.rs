@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use ruma_serde::CanonicalJsonValue;
 use sapio_bitcoin::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
@@ -6,6 +12,8 @@ use serde::{Deserialize, Serialize};
 pub struct PushMsg {
     pub msg: CanonicalJsonValue,
     pub key: XOnlyPublicKey,
+    #[serde(default)]
+    pub equivocate: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -29,4 +37,6 @@ pub struct Outcome {
 pub struct NewGenesis {
     pub nickname: String,
     pub msg: CanonicalJsonValue,
+    #[serde(default)]
+    pub danger_extended_private_key: Option<String>,
 }

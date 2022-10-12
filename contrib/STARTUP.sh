@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# enable common error handling options
+set -o errexit
+set -o nounset
+set -o pipefail
+
 tmux start-server
 BTCPORT=${BTCPORT:-"18443"}
 export START_HOST=1
@@ -35,11 +41,11 @@ if tmux attach -t MySession; then
 else
 
   pushd ..
-  cargo build --release || exit -1
+  cargo build --release || exit 1
   popd
 
   # Build WASM Module
-  $SCRIPT_LOCATION/build_wasm.sh || exit -1
+  $SCRIPT_LOCATION/build_wasm.sh || exit 1
   export WASM_MODULE="$SCRIPT_LOCATION/../contracts/modules/target/wasm32-unknown-unknown/release/mining_game_contract.wasm"
 
   case "$USE_RELEASE_TAURI" in
@@ -47,7 +53,7 @@ else
 
   debug)
     pushd ../ux
-    yarn tauri build --debug || exit -1
+    yarn tauri build --debug || exit 1
     popd
     ;;
   release)

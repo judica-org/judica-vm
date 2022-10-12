@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use attest_messages::{Authenticated, GenericEnvelope};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::MoveEnvelope;
@@ -23,12 +29,19 @@ use crate::GenericSequencer;
 use crate::OfflineSequencer;
 use crate::SequenceingError;
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize)]
 #[serde(try_from = "OfflineSequencer<ParticipantAction>")]
-#[schemars(with = "OfflineSequencer<ParticipantAction>")]
-pub struct ExtractedMoveEnvelopes(
-    #[schemars(with = "Vec<(MoveEnvelope, String)>")] pub Vec<(MoveEnvelope, XOnlyPublicKey)>,
-);
+pub struct ExtractedMoveEnvelopes(pub Vec<(MoveEnvelope, XOnlyPublicKey)>);
+
+impl JsonSchema for ExtractedMoveEnvelopes {
+    fn schema_name() -> String {
+        OfflineSequencer::<ParticipantAction>::schema_name()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        OfflineSequencer::<ParticipantAction>::json_schema(gen)
+    }
+}
 
 impl ExtractedMoveEnvelopes {}
 
@@ -121,24 +134,39 @@ impl DemuxedSequencer {
 
     #[cfg(feature = "has_async")]
     pub async fn run(self) -> Result<(), JoinError> {
+        use std::error::Error;
+
         spawn(self.sequencer.clone().run());
         spawn({
             let this = self;
             async move {
-                match this.sequencer.output_move().await {
-                    Some(e) => match e.msg() {
-                        ParticipantAction::MoveEnvelope(m) => {
-                            this.send_move.send((m.clone(), e.header().key()));
+                let mut listening_moves = true;
+                let mut listening_custom = true;
+                let mut listening_psbt = true;
+                loop {
+                    if let Some(e) = this.sequencer.output_move().await {
+                        match e.msg() {
+                            ParticipantAction::MoveEnvelope(m) if listening_moves => {
+                                listening_moves =
+                                    this.send_move.send((m.clone(), e.header().key())).is_ok();
+                            }
+                            ParticipantAction::Custom(c) if listening_custom => {
+                                listening_custom = this.send_custom.send(c.clone()).is_ok();
+                            }
+                            ParticipantAction::PsbtSigningCoordination(c) if listening_psbt => {
+                                listening_psbt = this
+                                    .send_psbt
+                                    .send((c.data.0.clone(), c.channel.clone()))
+                                    .is_ok();
+                            }
+                            _ => {}
                         }
-                        ParticipantAction::Custom(c) => {
-                            this.send_custom.send(c.clone());
-                        }
-                        ParticipantAction::PsbtSigningCoordination(c) => {
-                            this.send_psbt.send((c.data.0.clone(), c.channel.clone()));
-                        }
-                    },
-                    None => (),
+                    }
+                    if !(listening_custom || listening_moves || listening_psbt) {
+                        break;
+                    }
                 }
+                Ok::<_, Box<dyn Error + Send + Sync>>(())
             }
         });
         Ok(())

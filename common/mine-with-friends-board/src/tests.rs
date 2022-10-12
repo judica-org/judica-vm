@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use crate::{
     game::{
         game_move::{
@@ -745,7 +751,7 @@ where
 fn setup_game() -> GameBoard {
     let setup = GameSetup {
         players: vec![ALICE.into(), BOB.into()],
-        start_amount: 1_000_000,
+        start_amount: 10_000_000,
         finish_time: 1_000_000,
     };
 

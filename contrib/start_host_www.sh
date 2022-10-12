@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# enable common error handling options
+set -o errexit
+set -o nounset
+set -o pipefail
+
 if [[ -n $START_HOST ]]; then
 	cd ../www/game-host
 	export PORT=3001

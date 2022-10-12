@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import { Card, CardHeader, CardContent, Typography, Table, TableBody, TableCell, TableHead, TableRow, Divider } from "@mui/material";
 import FactoryIcon from '@mui/icons-material/Factory';
 import { useEffect, useState } from "react"
@@ -58,6 +64,10 @@ export const ManagePlant = ({ asic_token_id, bitcoin_token_id, selected_plant, p
           <TableRow>
             <TableCell >Hashrate</TableCell>
             <TableCell >{plantDetail.hashrate}</TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>Max Miners Supported</TableCell>
+            <TableCell>{plantDetail.watts/100_000}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell >Miners Allocated</TableCell>

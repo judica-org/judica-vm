@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 use self::game_move::Chat;
 use self::game_move::GameMove;
 use self::game_move::Heartbeat;
@@ -107,6 +113,7 @@ pub struct GameBoard {
     pub(crate) mining_subsidy: u128,
     pub ticks: BTreeMap<EntityID, Tick>,
     pub chat: VecDeque<(u64, EntityID, String)>,
+    pub nicks: BTreeMap<EntityID, String>,
     pub chat_counter: u64,
     pub event_log: VecDeque<(u64, EntityID, LogEvent)>,
     pub event_log_counter: u64,
@@ -242,25 +249,25 @@ impl GameBoard {
         plant_prices.insert(
             PlantType::Solar,
             Vec::from([
-                (steel_token_id, 2),
+                (steel_token_id, 160),
                 (silicon_token_id, 400),
-                (concrete_token_id, 2),
+                (concrete_token_id, 170),
             ]),
         );
         plant_prices.insert(
             PlantType::Hydro,
             Vec::from([
-                (steel_token_id, 5),
-                (silicon_token_id, 10),
-                (concrete_token_id, 1000),
+                (steel_token_id, 100),
+                (silicon_token_id, 100),
+                (concrete_token_id, 600),
             ]),
         );
         plant_prices.insert(
             PlantType::Flare,
             Vec::from([
-                (steel_token_id, 10),
-                (silicon_token_id, 10),
-                (concrete_token_id, 10),
+                (steel_token_id, 256),
+                (silicon_token_id, 283),
+                (concrete_token_id, 271),
             ]),
         );
 
@@ -284,13 +291,14 @@ impl GameBoard {
             callbacks: Default::default(),
             elapsed_time: 0,
             finish_time: 0,
-            mining_subsidy: 100_000_000_000 * 50,
+            mining_subsidy: 100_000_000 * 50,
             ticks: Default::default(),
             chat: VecDeque::with_capacity(1000),
             chat_counter: 0,
             event_log: VecDeque::with_capacity(1000),
             event_log_counter: 0,
             plant_prices,
+            nicks: Default::default(),
         };
         setup.setup_game(&mut g);
         g.post_init();
@@ -330,7 +338,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(ASICProducer {
             id,
             total_units: 100_000,
-            base_price: 20,
+            base_price: 5_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: *self.tokens.hashboards.iter().next().unwrap().0,
             adjusts_every: 10_007, // 10 seconds -- prime rounded for chaos
@@ -341,7 +349,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(SteelSmelter {
             id: steel_id,
             total_units: 100_000,
-            base_price: 1,
+            base_price: 3_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.steel_token_id,
             adjusts_every: 5_003, // 5 seconds
@@ -352,7 +360,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(SiliconRefinery {
             id: silicon_id,
             total_units: 100_000,
-            base_price: 38,
+            base_price: 5_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.silicon_token_id,
             adjusts_every: 25_013, // 25 seconds
@@ -363,7 +371,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(ConcreteMiller {
             id: concrete_id,
             total_units: 100_000,
-            base_price: 290,
+            base_price: 3_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.concrete_token_id,
             adjusts_every: 14_009, // 14 seconds
@@ -652,7 +660,12 @@ impl GameBoard {
                     info!("Remove Tokens: NFT owner mismatch");
                 }
             }
-            GameMove::Chat(Chat(s)) => {
+            GameMove::Chat(Chat(mut s)) => {
+                if s.starts_with("/nick") && s.is_ascii() && s.len() < 32 {
+                    let nick = s.split_at(s.find(' ').unwrap_or(s.len()));
+                    self.nicks.insert(from, nick.1.to_owned());
+                    s = format!("{} is now known as {}", String::from(from), nick.1);
+                }
                 self.chat_counter += 1;
                 // only log the last 1000 messages
                 // TODO: Configurable? Ignorable?

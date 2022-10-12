@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import React from 'react';
 import logo from './logo.svg';
 import './App.css';
@@ -151,8 +157,10 @@ function App() {
   );
 }
 
-export const handle_new_msg = async (url: string, pk: string) => {
-  const message = window.prompt("DANGER: Invalid message May Corrupt Your Chain.\n\nWhat message should we send?");
+export const handle_new_msg = async (safe: "SAFE" | "DANGER", url: string, pk: string) => {
+  const message = safe === "DANGER" ?
+    window.prompt("DANGER: You are about to destroy your chain.\n\nMessage must be [a, b] format?") :
+    window.prompt("DANGER: Invalid message May Corrupt Your Chain.\n\nWhat message should we send?");
   if (message) {
     let js = JSON.parse(message);
     const c = window.confirm(`Are you sure? Pushing: \n ${JSON.stringify(message)}`);
@@ -162,7 +170,7 @@ export const handle_new_msg = async (url: string, pk: string) => {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ msg: js, key: pk })
+      body: JSON.stringify({ msg: js, key: pk, equivocate: safe === "DANGER"})
     })
     console.log(await (await ret).json());
   }

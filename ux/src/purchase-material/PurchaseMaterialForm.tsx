@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import { Card, CardHeader, CardContent, FormControl, TextField, Button, Typography, ToggleButtonGroup, ToggleButton } from "@mui/material";
 import React from "react";
 import { MaterialPriceDisplay } from "../App";
@@ -10,7 +16,10 @@ export const handle_error = (e: UnsuccessfulTradeOutcome) => {
       return "Market Slipped"
     case "object":
       if (e.InvalidTrade) return `Invalid Trade: ${e.InvalidTrade}`
-      if (e.InsufficientTokens) return `Insufficient Tokens: ${e.InsufficientTokens}`
+      else if (e.InsufficientTokens) return `Insufficient Tokens: ${e.InsufficientTokens}`
+      else throw "Unexpected Type"
+    default:
+      throw "Unexcpected Type"
   }
 }
 

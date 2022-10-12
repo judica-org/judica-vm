@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 #[cfg(feature = "database_access")]
 use attest_database::connection::MsgDB;
 use attest_messages::AttestEnvelopable;
@@ -69,9 +75,8 @@ impl<M: AttestEnvelopable> TryFrom<UnauthenticatedRawSequencer<M>> for RawSequen
     }
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize)]
 #[serde(try_from = "UnauthenticatedRawSequencer<M>")]
-#[schemars(with = "UnauthenticatedRawSequencer<M>")]
 #[serde(bound = "M: AttestEnvelopable")]
 pub struct RawSequencer<M>
 where
@@ -79,6 +84,19 @@ where
 {
     pub sequencer_envelopes: Vec<Authenticated<GenericEnvelope<Channelized<BroadcastByHost>>>>,
     pub msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
+}
+
+impl<M> JsonSchema for RawSequencer<M>
+where
+    M: AttestEnvelopable,
+{
+    fn schema_name() -> String {
+        UnauthenticatedRawSequencer::<M>::schema_name()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        UnauthenticatedRawSequencer::<M>::json_schema(gen)
+    }
 }
 
 #[derive(Debug)]
@@ -139,13 +157,22 @@ impl<M: AttestEnvelopable> TryFrom<RawSequencer<M>> for OfflineSequencer<M> {
     }
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize)]
 #[serde(try_from = "RawSequencer<M>")]
-#[schemars(with = "RawSequencer<M>")]
 #[serde(bound = "M: AttestEnvelopable")]
 pub struct OfflineSequencer<M: AttestEnvelopable> {
     pub batches_to_sequence: Vec<VecDeque<CanonicalEnvelopeHash>>,
     pub msg_cache: HashMap<CanonicalEnvelopeHash, Authenticated<GenericEnvelope<M>>>,
+}
+
+impl<M: AttestEnvelopable> JsonSchema for OfflineSequencer<M> {
+    fn schema_name() -> String {
+        RawSequencer::<M>::schema_name()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        RawSequencer::<M>::json_schema(gen)
+    }
 }
 #[derive(Debug)]
 pub enum SequenceingError<T> {

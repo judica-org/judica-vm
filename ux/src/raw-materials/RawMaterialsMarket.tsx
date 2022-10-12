@@ -1,3 +1,9 @@
+// Copyright Judica, Inc 2022
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+//  License, v. 2.0. If a copy of the MPL was not distributed with this
+//  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 import ConstructionIcon from '@mui/icons-material/Construction';
 import { Typography, Card, CardHeader, CardContent, Table, TableHead, TableRow, TableCell, TableBody, Button, Divider } from '@mui/material';
 import { useState, useEffect } from 'react';
@@ -16,8 +22,8 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
         <Card className={'card'}>
           <CardHeader
             className={"MaterialsMarketTitle"}
-            title={'Raw Meterials Market'}
-            subheader={'Buy and sell resources to build power plants'}
+            title={'Marketplace'}
+            subheader={'Buy and sell resources to build powerplants and mining operations'}
           />
           <CardContent className={'content'}>
             <Divider/>
