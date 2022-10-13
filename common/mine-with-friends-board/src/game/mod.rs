@@ -436,7 +436,7 @@ impl GameBoard {
                 PowerPlant::new(self, plant_ptr, random_plant_type, coordinates, 1 as u64);
             // add to plant register, need to return Plant?
             let _ = self.nfts.power_plants.insert(plant_ptr, new_plant);
-            self.tokens[self.asic_token_id].mint(&plant_ptr, 1);
+            self.tokens[self.asic_token_id].mint(&plant_ptr.inner(), 1);
         }
     }
     /// Creates a new EntityID
