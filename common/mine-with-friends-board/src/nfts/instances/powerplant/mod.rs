@@ -51,7 +51,7 @@ pub(crate) struct PowerPlant {
 
 impl PowerPlant {
     /// Create a new PowerPlant
-    fn new(
+    pub(crate) fn new(
         game: &GameBoard,
         id: NftPtr,
         plant_type: PlantType,

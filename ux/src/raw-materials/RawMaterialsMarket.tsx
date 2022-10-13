@@ -26,7 +26,7 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
             subheader={'Buy and sell resources to build powerplants and mining operations'}
           />
           <CardContent className={'content'}>
-            <Divider/>
+            <Divider />
             <Table>
               <TableHead>
                 <TableRow>
@@ -43,8 +43,8 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
                       <ConstructionIcon className='sale-factory-icon' fontSize={'medium'} />
                       <Typography>{material.display_asset}</Typography>
                     </TableCell>
-                    <TableCell align="right">1 to {material.price_a_b_b_a[0]}</TableCell>
-                    <TableCell align="right">{material.asset_a} / {material.asset_b}</TableCell>
+                    <TableCell align="right">1 to {Math.round(material.price_a_b_b_a[1])}</TableCell>
+                    <TableCell align="right">{material.asset_b} / {material.asset_a}</TableCell>
                     <TableCell align="right">
                       <Button onClick={() => {
                         set_action("BUY");
@@ -56,7 +56,7 @@ export const RawMaterialsMarket = ({ materials }: { materials: MaterialPriceDisp
               </TableBody>
             </Table>
             <Divider />
-            { (action && selected_material) && <PurchaseMaterialForm action={action} market={selected_material}/>}
+            {(action && selected_material) && <PurchaseMaterialForm action={action} market={selected_material} />}
           </CardContent>
         </Card>
       </div>

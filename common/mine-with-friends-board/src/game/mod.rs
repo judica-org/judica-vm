@@ -18,6 +18,7 @@ use crate::entity::EntityID;
 use crate::entity::EntityIDAllocator;
 use crate::nfts::instances::powerplant::events::PowerPlantEvent;
 use crate::nfts::instances::powerplant::PlantType;
+use crate::nfts::instances::powerplant::PowerPlant;
 use crate::nfts::instances::powerplant::PowerPlantPrices;
 use crate::nfts::instances::powerplant::PowerPlantProducer;
 use crate::nfts::sale::NFTSaleRegistry;
@@ -249,25 +250,25 @@ impl GameBoard {
         plant_prices.insert(
             PlantType::Solar,
             Vec::from([
-                (steel_token_id, 160),
-                (silicon_token_id, 400),
-                (concrete_token_id, 170),
+                (steel_token_id, 1),
+                (silicon_token_id, 8),
+                (concrete_token_id, 1),
             ]),
         );
         plant_prices.insert(
             PlantType::Hydro,
             Vec::from([
-                (steel_token_id, 100),
-                (silicon_token_id, 100),
-                (concrete_token_id, 600),
+                (steel_token_id, 3),
+                (silicon_token_id, 1),
+                (concrete_token_id, 6),
             ]),
         );
         plant_prices.insert(
             PlantType::Flare,
             Vec::from([
-                (steel_token_id, 256),
-                (silicon_token_id, 283),
-                (concrete_token_id, 271),
+                (steel_token_id, 4),
+                (silicon_token_id, 2),
+                (concrete_token_id, 4),
             ]),
         );
 
@@ -324,7 +325,7 @@ impl GameBoard {
         }
         self.tokens[self.bitcoin_token_id].transaction();
         self.tokens[self.real_sats_token_id].transaction();
-        self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10000000);
+        self.tokens[self.bitcoin_token_id].mint(&self.root_user, 10_000_000_000);
         self.tokens[self.real_sats_token_id].mint(&self.root_user, 30000);
         self.tokens[self.bitcoin_token_id].end_transaction();
         self.tokens[self.real_sats_token_id].end_transaction();
@@ -338,7 +339,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(ASICProducer {
             id,
             total_units: 100_000,
-            base_price: 5_000,
+            base_price: 100_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: *self.tokens.hashboards.iter().next().unwrap().0,
             adjusts_every: 10_007, // 10 seconds -- prime rounded for chaos
@@ -349,7 +350,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(SteelSmelter {
             id: steel_id,
             total_units: 100_000,
-            base_price: 3_000,
+            base_price: 100_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.steel_token_id,
             adjusts_every: 5_003, // 5 seconds
@@ -360,7 +361,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(SiliconRefinery {
             id: silicon_id,
             total_units: 100_000,
-            base_price: 5_000,
+            base_price: 100_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.silicon_token_id,
             adjusts_every: 25_013, // 25 seconds
@@ -371,31 +372,57 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(ConcreteMiller {
             id: concrete_id,
             total_units: 100_000,
-            base_price: 3_000,
+            base_price: 100_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: self.concrete_token_id,
             adjusts_every: 14_009, // 14 seconds
             elapsed_time: 0,
             first: true,
         }));
-        // DEMO CODE:
-        // REMOVE BEFORE FLIGHT
-        // TODO: Initialize Power Plants?
-        let nft_id = self.alloc();
-        let demo_nft = self.nfts.add(Box::new(BaseNFT {
-            owner: self.root_user,
-            nft_id,
-            transfer_count: 0,
-        }));
-        self.nft_sales.list_nft(
-            &CallContext {
-                sender: self.root_user,
-            },
-            demo_nft,
-            1000,
-            self.bitcoin_token_id,
-            &self.nfts,
-        );
+
+        #[cfg(not(test))]
+        {
+            let start_locations: Vec<((i64, i64), PlantType)> = vec![
+                ((38075660, -120030170), PlantType::Flare),
+                ((-2346660, -76223050), PlantType::Hydro),
+                ((-5203060, -66345370), PlantType::Solar),
+                ((66596730, 31545250), PlantType::Flare),
+                ((29521143, 26620126), PlantType::Hydro),
+                ((58162163, 39188486), PlantType::Solar),
+                ((28599246, 116180671), PlantType::Flare),
+                ((-29625744, 138416999), PlantType::Hydro),
+                ((-12141092, 35233406), PlantType::Solar),
+                ((21968789, -12535149), PlantType::Flare),
+            ];
+
+            let mut p: Vec<EntityID> = self
+                .users_by_key
+                .iter()
+                .map(|(_, p_id)| EntityID(p_id.0))
+                .collect();
+            p.sort();
+            p.dedup(); // necessary?
+
+            for (i, player) in p.iter().enumerate() {
+                // base nft
+                let base_nft = BaseNFT {
+                    owner: *player,
+                    nft_id: self.alloc(),
+                    transfer_count: 0,
+                };
+                let plant_ptr = self.nfts.add(Box::new(base_nft));
+                // pick random plant type
+                let random_plant_type = start_locations[i].1;
+                // pick random location
+                let coordinates: (i64, i64) = start_locations[i].0;
+
+                let new_plant =
+                    PowerPlant::new(self, plant_ptr, random_plant_type, coordinates, 1 as u64);
+                // add to plant register, need to return Plant?
+                let _ = self.nfts.power_plants.insert(plant_ptr, new_plant);
+                self.tokens[self.asic_token_id].mint(&plant_ptr.inner(), 1);
+            }
+        }
     }
     /// Creates a new EntityID
     pub fn alloc(&mut self) -> EntityID {
