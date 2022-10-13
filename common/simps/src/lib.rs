@@ -239,10 +239,7 @@ lazy_static! {
         SArc(Arc::new(EventKey("blockheader".into())));
 }
 pub fn ek_new_dlog(x: XOnlyPublicKey) -> EventKey {
-EventKey(format!(
-        "discrete_log_discovery({})",
-        x.to_hex()
-    ))
+    EventKey(format!("discrete_log_discovery({})", x.to_hex()))
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
