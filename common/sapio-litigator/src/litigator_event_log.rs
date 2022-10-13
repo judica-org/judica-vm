@@ -201,6 +201,7 @@ pub(crate) async fn handle_new_information(
                 }
 
                 info!(address=?new_contract.address,"Contract ReCompilation Successful");
+                trace!("{}", serde_json::to_string(&new_contract)?);
                 state.args = Ok(new_args);
                 state.contract = Ok(new_contract);
             }

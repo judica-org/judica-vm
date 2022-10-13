@@ -4,9 +4,9 @@
 //  License, v. 2.0. If a copy of the MPL was not distributed with this
 //  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import React from 'react';
+import { Diversity3, ReadMore } from '@mui/icons-material';
 import { DataGrid, GridActionsCellItem, GridRowParams, GridRowsProp } from '@mui/x-data-grid';
-import { Report, SelectAll } from '@mui/icons-material';
+import React from 'react';
 import { Envelope } from './App';
 
 type TipProps = {
@@ -46,8 +46,8 @@ export function Tips(props: TipProps) {
       field: 'actions',
       type: 'actions',
       getActions: (params: GridRowParams) => [
-        <GridActionsCellItem icon={<Report></Report>} onClick={() => console.log(["message"], JSON.parse(rows[params.id as number].msg))} label="Log Message" />,
-        <GridActionsCellItem icon={<SelectAll></SelectAll>} onClick={() => props.set_genesis(rows[params.id as number].genesis)} label="Set Genesis" />
+        <GridActionsCellItem icon={<ReadMore></ReadMore>} onClick={() => console.log(["message"], JSON.parse(rows[params.id as number].msg))} label="Log Message" />,
+        <GridActionsCellItem icon={<Diversity3></Diversity3>} onClick={() => props.set_genesis(rows[params.id as number].genesis)} label="Set Genesis" />
       ]
     }
   ];

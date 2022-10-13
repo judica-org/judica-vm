@@ -1,7 +1,15 @@
 .TableGrid {
     display: grid;
-    grid-template-areas: " peers peers peers tasks " " tips tips tips tips " " keys all-msgs all-msgs all-msgs";
-    grid-template-rows: 500px 500px 500px;
+    grid-template-areas: " tips tips tips tips " " keys all-msgs all-msgs all-msgs";
+    grid-template-rows: 40vh 40vh;
+    grid-gap: 10px;
+    height: 100%;
+}
+
+.PeerTableGrid {
+    display: grid;
+    grid-template-areas: " peers peers peers tasks ";
+    grid-template-rows: 80vh;
     grid-gap: 10px;
     height: 100%;
 }
