@@ -413,14 +413,18 @@ impl GameBoard {
             (21968789, -12535149),
         ];
 
-        let mut p: Vec<&EntityID> = self.users_by_key.iter().map(|(_, p_id)| p_id).collect();
+        let mut p: Vec<EntityID> = self
+            .users_by_key
+            .iter()
+            .map(|(_, p_id)| EntityID(p_id.0))
+            .collect();
         p.sort();
         p.dedup(); // necessary?
 
         for (i, player) in p.iter().enumerate() {
             // base nft
             let base_nft = BaseNFT {
-                owner: *player.clone(),
+                owner: *player,
                 nft_id: self.alloc(),
                 transfer_count: 0,
             };
