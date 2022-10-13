@@ -6,7 +6,6 @@
 //! Payment Pool Contract for Sapio Studio Advent Calendar Entry
 use crate::sapio_base::Clause;
 use bitcoin::hashes::sha256;
-use bitcoin::secp256k1::Secp256k1;
 use bitcoin::secp256k1::SecretKey;
 use bitcoin::util::amount::Amount;
 use bitcoin::BlockHash;
@@ -73,7 +72,7 @@ impl GameStarted {
             }),
             Box::new(EventRecompiler {
                 source: EventSource("*".into()),
-                filter: (*simps::EK_NEW_DLOG.0).clone(),
+                filter: simps::ek_new_dlog(self.kernel.game_host.0)
             }),
         ])
     }
@@ -137,8 +136,9 @@ impl GameStarted {
     fn host_cheat_equivocate(self, ctx: Context, proof: Option<DLogDiscovered>) {
         match proof {
             Some(k) => {
-                let secp = Secp256k1::new();
-                if k.dlog_discovered.x_only_public_key(&secp).0 == self.kernel.game_host.0 {
+                // Disabled due to secp getrandom issue
+                // if k.dlog_discovered.x_only_public_key(&secp).0 == self.kernel.game_host.0 {
+                if true {
                     let mut tmpl = ctx.template();
                     for (player, balance) in &self.kernel.players {
                         tmpl = tmpl.add_output((*balance).into(), &player.0, None)?
@@ -460,3 +460,18 @@ fn coerce_degrade(
 }
 
 REGISTER![GameStarted, "logo.png"];
+
+const ENTROPY: &[u8] = include_bytes!("entropy.raw");
+static mut idx: usize = 0;
+
+#[no_mangle]
+unsafe fn getrandom(buf: *mut u8, buflen: isize, flags: usize) -> isize {
+    loop {}
+    assert!(ENTROPY.len() == 4096);
+    for i in 0..buflen {
+        idx += 1;
+        idx &= 4095;
+        *(buf.offset(i)) = ENTROPY[idx];
+    }
+    buflen
+}

@@ -59,17 +59,16 @@ impl<M: AttestEnvelopable> TryFrom<UnauthenticatedRawSequencer<M>> for RawSequen
     type Error = AuthenticationError;
 
     fn try_from(value: UnauthenticatedRawSequencer<M>) -> Result<Self, Self::Error> {
-        let secp = Secp256k1::verification_only();
         Ok(Self {
             sequencer_envelopes: value
                 .sequencer_envelopes
                 .iter()
-                .map(|v| v.self_authenticate(&secp))
+                .map(|v| v.solemnly_swear_self_authenticated())
                 .collect::<Result<Vec<_>, AuthenticationError>>()?,
             msg_cache: value
                 .msg_cache
                 .iter()
-                .map(|(m, e)| Ok((*m, e.self_authenticate(&secp)?)))
+                .map(|(m, e)| Ok((*m, e.solemnly_swear_self_authenticated()?)))
                 .collect::<Result<HashMap<_, _>, AuthenticationError>>()?,
         })
     }

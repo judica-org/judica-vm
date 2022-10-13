@@ -5,7 +5,9 @@
 //  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use bitcoin::{
-    hashes::sha256, secp256k1::SecretKey, BlockHash, BlockHeader, TxMerkleNode, XOnlyPublicKey,
+    hashes::{hex::ToHex, sha256},
+    secp256k1::SecretKey,
+    BlockHash, BlockHeader, TxMerkleNode, XOnlyPublicKey,
 };
 use lazy_static::lazy_static;
 use sapio::util::amountrange::AmountU64;
@@ -230,13 +232,14 @@ lazy_static! {
         SArc(Arc::new(EventKey("game_action_players_win".into())));
     pub static ref EK_GAME_ACTION_LOSE: SArc<EventKey> =
         SArc(Arc::new(EventKey("game_action_players_lose".into())));
-    pub static ref EK_NEW_DLOG: SArc<EventKey> =
-        SArc(Arc::new(EventKey("discrete_log_discovery".into())));
     // Bitcoin Related
     pub static ref SOURCE_BITCOIN_RPC: SArc<EventSource> =
         SArc(Arc::new(EventSource("bitcoin-rpc".into())));
     pub static ref EK_BITCOIN_BLOCKHEADER: SArc<EventKey> =
         SArc(Arc::new(EventKey("blockheader".into())));
+}
+pub fn ek_new_dlog(x: XOnlyPublicKey) -> EventKey {
+    EventKey(format!("discrete_log_discovery({})", x.to_hex()))
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]

@@ -366,6 +366,18 @@ where
         Ok(Authenticated(self.clone()))
     }
 
+    pub fn solemnly_swear_self_authenticated(
+        &self,
+    ) -> Result<Authenticated<Self>, AuthenticationError> {
+        if self.header.height == 0 && self.header.ancestors.is_some() {
+            return Err(AuthenticationError::NoAncestorsForGenesis);
+        }
+        if self.header.height > 0 && self.header.ancestors.is_none() {
+            return Err(AuthenticationError::MissingAncestors);
+        }
+        Ok(Authenticated(self.clone()))
+    }
+
     /// signs an [`Envelope`] in-place with a given key.
     ///
     /// Because keypair is not guaranteed to be the correct keypair for the
