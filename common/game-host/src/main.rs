@@ -13,8 +13,8 @@ use attest_messages::{
 use attest_util::bitcoin::BitcoinConfig;
 use emulator_connect::{CTVAvailable, CTVEmulator};
 
-use event_log::db_handle::accessors::occurrence::ToOccurrence;
 use event_log::db_handle::accessors::occurrence::sql::Idempotent;
+use event_log::db_handle::accessors::occurrence::ToOccurrence;
 use game_host_messages::{BroadcastByHost, Channelized};
 use sapio::contract::Compiled;
 use sapio_bitcoin::secp256k1::rand;

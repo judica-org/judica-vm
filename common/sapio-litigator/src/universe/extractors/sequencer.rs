@@ -9,7 +9,7 @@ use crate::{
     TaskSet, OK_T,
 };
 use attest_database::connection::MsgDB;
-use attest_messages::GenericEnvelope;
+use attest_messages::{Envelope, GenericEnvelope};
 use bitcoin::{psbt::PartiallySignedTransaction, XOnlyPublicKey};
 use event_log::{
     connection::EventLog,
@@ -19,7 +19,7 @@ use event_log::{
 };
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
-use game_sequencer::{OnlineDBFetcher, UnauthenticatedRawSequencer};
+use game_sequencer::{OnlineDBFetcher, SequencerError, UnauthenticatedRawSequencer};
 use mine_with_friends_board::{
     game::{FinishReason, GameBoard, MoveRejectReason},
     MoveEnvelope,
@@ -242,6 +242,7 @@ pub fn start_game(
 }
 
 type HostEnvelope = GenericEnvelope<Channelized<BroadcastByHost>>;
+type ParticipantEnvelope = GenericEnvelope<ParticipantAction>;
 fn make_snapshot(
     move_count: u64,
     evlog: EventLog,
@@ -254,31 +255,30 @@ fn make_snapshot(
 ) -> JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>> {
     spawn(async move {
         let handle = msg_db.get_handle_read().await;
-        let (sequencer_envelopes, mut m) = spawn_blocking(move || {
+        let (sequencer_envelopes, msg_cache) = spawn_blocking(move || {
             let sequencer_envelopes = handle
                 .load_all_messages_for_user_by_key_connected::<_, HostEnvelope>(&oracle_key)
                 .map_err(|_| "Database Fetch Error")?;
-            let mut m = Default::default();
-            handle
-                .get_all_messages_collect_into_inconsistent_skip_invalid(&mut None, &mut m, true)
-                .map_err(|_| "Database Fetch Error")
-                .and(Ok((sequencer_envelopes, m)))
+            let def = Default::default();
+            let m: Vec<ParticipantEnvelope> =
+                handle
+                    .messages_by_hash(sequencer_envelopes.iter().flat_map(
+                        |m| match &m.msg().data {
+                            BroadcastByHost::Sequence(d) => d,
+                            _ => &def,
+                        },
+                    ))
+                    .map_err(|_| "Database Fetch Error")?;
+            Ok::<_, &'static str>((
+                sequencer_envelopes,
+                m.into_iter()
+                    .map(|v| (v.canonicalized_hash_ref(), v))
+                    .collect(),
+            ))
         })
         .await??;
 
-        // todo handle channels...
-        let def = Default::default();
         // takes only the first move_count moves, and whittles down the messages to just the ones mentioned.
-        let msg_cache = sequencer_envelopes
-            .iter()
-            .flat_map(|m| match &m.msg().data {
-                BroadcastByHost::Sequence(d) => d,
-                _ => &def,
-            })
-            .take(move_count as usize)
-            .flat_map(|k| Some((*k, m.remove(k)?)))
-            .collect();
-
         let v = UnauthenticatedRawSequencer::<ParticipantAction> {
             sequencer_envelopes,
             msg_cache,

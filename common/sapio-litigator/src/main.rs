@@ -49,7 +49,7 @@ struct LitigatedContractInstanceState {
     bound_to: Option<OutPoint>,
     psbt_db: Arc<PSBTDatabase>,
     // Initialized after first move
-    module: Box<dyn Fn() -> Result<WasmPluginHandle<Compiled>, String>+Send>,
+    module: Box<dyn Fn() -> Result<WasmPluginHandle<Compiled>, String> + Send>,
     args: Result<CreateArgs<Value>, String>,
     contract: Result<Compiled, String>,
     event_counter: u64,

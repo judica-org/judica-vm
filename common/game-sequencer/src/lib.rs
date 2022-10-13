@@ -177,7 +177,7 @@ impl<M: AttestEnvelopable> JsonSchema for OfflineSequencer<M> {
 #[derive(Debug)]
 pub enum SequenceingError<T> {
     MappingError(T),
-    MissingEnvelope,
+    MissingEnvelope(CanonicalEnvelopeHash),
 }
 
 impl<E> From<E> for SequenceingError<E> {
@@ -214,7 +214,7 @@ impl<M: AttestEnvelopable> OfflineSequencer<M> {
                         v.push(r);
                     }
                 } else {
-                    return Err(SequenceingError::MissingEnvelope);
+                    return Err(SequenceingError::MissingEnvelope(*h));
                 }
             }
         }
