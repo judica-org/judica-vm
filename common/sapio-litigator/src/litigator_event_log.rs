@@ -42,6 +42,7 @@ use sapio_base::{
     txindex::TxIndexLogger,
 };
 use sapio_psbt::SigningKey;
+use sapio_wasm_plugin::host::plugin_handle::SyncModuleLocator;
 use sapio_wasm_plugin::CreateArgs;
 use sapio_wasm_plugin::{
     host::{plugin_handle::ModuleLocator, WasmPluginHandle},
@@ -200,10 +201,9 @@ pub(crate) async fn handle_new_information(
             "NewRecompileTriggeringObservation Computed Args"
         );
         let result = {
-            let g_handle = state.module.lock().await;
             // drop error before releasing g_handle so that the CompilationError non-send type
             // doesn't get held across an await point
-            let res = g_handle
+            let res = (state.module)()
                 .as_ref()
                 .map_err(|e| e.as_str())?
                 //.fresh_clone()?
@@ -306,8 +306,7 @@ pub(crate) async fn handle_create_args(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let EventLoopContext { ref mut state, .. } = e;
     info!(?args, "Contract Args Ready");
-    let module_lock = state.module.lock().await;
-    let module = module_lock.as_ref().map_err(|e| e.to_string())?;
+    let module = (state.module)()?;
 
     state.contract = match module.call(&state.root, &args) {
         Ok(c) => {
@@ -346,19 +345,22 @@ pub(crate) async fn handle_module_bytes(
         mr.0
     };
 
-    let locator: ModuleLocator = ModuleLocator::Bytes(bytes);
-    let module = WasmPluginHandle::<Compiled>::new_async(
-        &globals.data_dir,
-        &globals.emulator,
-        locator,
-        globals.config.bitcoin_network,
-        Default::default(),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    state.module = Box::new({
+        let globals = globals.clone();
+        move || {
+            WasmPluginHandle::<Compiled>::new(
+                &globals.data_dir,
+                &globals.emulator,
+                // TODO: Modify Sapio to take locator ref
+                SyncModuleLocator::Bytes(bytes.clone()),
+                globals.config.bitcoin_network,
+                Default::default(),
+            )
+            .map_err(|e| e.to_string())
+        }
+    });
     info!(status = "Loaded OK", "ModuleBytes");
 
-    *state.module.lock().await = Ok(module);
     Ok(())
 }
 

@@ -49,7 +49,7 @@ struct LitigatedContractInstanceState {
     bound_to: Option<OutPoint>,
     psbt_db: Arc<PSBTDatabase>,
     // Initialized after first move
-    module: Arc<Mutex<Result<WasmPluginHandle<Compiled>, String>>>,
+    module: Box<dyn Fn() -> Result<WasmPluginHandle<Compiled>, String>+Send>,
     args: Result<CreateArgs<Value>, String>,
     contract: Result<Compiled, String>,
     event_counter: u64,
@@ -168,7 +168,7 @@ async fn litigate_contract(globals: Arc<GlobalLitigatorState>, key: XOnlyPublicK
 
     let state = LitigatedContractInstanceState {
         args: Err("No Args Loaded".into()),
-        module: Arc::new(Mutex::new(Err("No Module Loaded".into()))),
+        module: Box::new(|| (Err("No Module Loaded".into()))),
         contract: Err("No Compiled Object".into()),
         bound_to: None,
         psbt_db: Arc::new(PSBTDatabase::new()),
