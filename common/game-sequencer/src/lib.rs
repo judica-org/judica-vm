@@ -147,6 +147,7 @@ impl<M: AttestEnvelopable> TryFrom<RawSequencer<M>> for OfflineSequencer<M> {
                 BroadcastByHost::NewPeer(_) => {}
                 BroadcastByHost::Heartbeat => {}
                 BroadcastByHost::GameSetup(_) => {}
+                BroadcastByHost::ContractSetup(_) => todo!(),
             }
         }
         Ok(OfflineSequencer {
@@ -412,6 +413,7 @@ where
                                     .await;
                                 }
                                 BroadcastByHost::GameSetup(_) => {}
+                                BroadcastByHost::ContractSetup(_) => {}
                             }
                             count += 1;
                         }

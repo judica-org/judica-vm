@@ -14,6 +14,7 @@ use sapio_bitcoin::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{
     collections::VecDeque,
     error::Error,
@@ -95,6 +96,7 @@ pub struct Peer {
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub enum BroadcastByHost {
     GameSetup(GameSetup),
+    ContractSetup(#[schemars(with = "Vec<Value>")] Vec<CanonicalJsonValue>),
     Sequence(VecDeque<CanonicalEnvelopeHash>),
     NewPeer(Peer),
     Heartbeat,

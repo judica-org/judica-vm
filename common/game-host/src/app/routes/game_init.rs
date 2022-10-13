@@ -28,8 +28,10 @@ use axum::{
     Extension, Json,
 };
 use bitcoincore_rpc_async::{json::WalletCreateFundedPsbtOptions, RpcApi};
-use event_log::db_handle::accessors::occurrence::sql::Idempotent;
-use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame, NewGameArgs};
+use event_log::db_handle::accessors::occurrence::{sql::Idempotent, ToOccurrence};
+use game_host_messages::{
+    AddPlayerError, BroadcastByHost, Channelized, FinishArgs, JoinCode, NewGame, NewGameArgs,
+};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
     game::{game_move::GameMove, GameSetup},
@@ -40,7 +42,7 @@ use sapio::sapio_base::effects::{EffectPath, PathFragment};
 use sapio_bitcoin::{
     psbt::PartiallySignedTransaction,
     secp256k1::{All, Secp256k1},
-    Address, Script,
+    Address, KeyPair, Script,
 };
 use sapio_litigator_events::{Event, ModuleRepo, Tag, TaggedEvent};
 use serde::Deserialize;
@@ -48,6 +50,7 @@ use tracing::{debug, trace};
 
 use std::{
     collections::{HashMap, VecDeque},
+    error::Error,
     str::FromStr,
     sync::{Arc, Weak},
     time::Duration,
@@ -226,6 +229,7 @@ pub async fn finish_setup(
     // TODO: Add these to the layer in app.rs / move to globals?
     Extension(globals): Extension<Globals>,
 ) -> Result<(Response<()>, Json<CreatedNewChain>), (StatusCode, String)> {
+    let secp2 = secp.0.clone();
     let v = db
         .lock()
         .await
@@ -280,6 +284,7 @@ pub async fn finish_setup(
                 .ok();
             }
             trace!(game_id=?code, "Envelopes Inserted");
+            let msgdb2 = msgdb.0.clone();
             let resp = create_new_attestation_chain(
                 Json((
                     envelopes
@@ -295,6 +300,7 @@ pub async fn finish_setup(
             .map_err(|e| (e.0, e.1.to_owned()));
 
             trace!(game_id=?code, "Genesis Created");
+            let mut event_init = vec![];
             if let Ok((_, Json(ref b))) = resp {
                 let args = sapio_litigator_events::convert_setup_to_contract_args(
                     gs.to_owned(),
@@ -387,10 +393,7 @@ pub async fn finish_setup(
                 let tx = psbt.extract_tx();
 
                 let seq_str = b.sequencer_key.to_string();
-                let tx_evt = TaggedEvent(
-                    Event::TransactionFinalized("default".into(), tx.clone()),
-                    Some(Tag::ScopedValue(seq_str.clone(), "funding_tx".into())),
-                );
+
                 {
                     let accessor = globals.evlog.get_accessor().await;
                     // TODO: SPAWN_BLOCKING
@@ -403,85 +406,55 @@ pub async fn finish_setup(
                                 "Could not get group by key".into(),
                             )
                         })?;
-                    trace!(game_id=?code, ?sequencer_group, "Got Sequencer Group");
-                    accessor
-                        .insert_new_occurrence_now_from(
-                            sequencer_group,
-                            &TaggedEvent(
-                                Event::ModuleBytes(
-                                    ModuleRepo::default_group_key(),
-                                    globals.module_tag.clone(),
-                                ),
-                                Some(Tag::InitModule),
-                            ),
-                        )
-                        .map_err(|_| {
-                            (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Could not Insert new Group".into(),
-                            )
-                        })?
-                        // ignore idempotent error, safe if the library ever changes
-                        .map_err(|_: Idempotent| ())
-                        .ok();
-
-                    trace!(game_id=?code, "Inserted ModuleBytes into evlog");
-                    accessor
-                        .insert_new_occurrence_now_from(
-                            sequencer_group,
-                            &TaggedEvent(Event::CreateArgs(args), Some(Tag::CreateArgs)),
-                        )
-                        .map_err(|_| {
-                            (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Could not insert create args".into(),
-                            )
-                        })?
-                        .map_err(|_| {
-                            (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Idempotent Key already inserted".into(),
-                            )
-                        })?;
-
-                    trace!(game_id=?code, "Inserted CreateArgs into evlog");
-                    accessor
-                        .insert_new_occurrence_now_from(
-                            sequencer_group,
-                            &TaggedEvent(
-                                Event::Rebind(sapio_bitcoin::OutPoint {
-                                    txid: tx.txid(),
-                                    vout: 0,
-                                }),
-                                Some(Tag::FirstBind),
-                            ),
-                        )
-                        .map_err(|_| {
-                            (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Could not insert rebind args".into(),
-                            )
-                        })?
-                        .map_err(|_| {
-                            (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Idempotent Key already inserted".into(),
-                            )
-                        })?;
-                    trace!(game_id=?code, "Inserted Rebind into evlog");
-                    accessor
-                        .insert_new_occurrence_now_from(sequencer_group, &tx_evt)
-                        .map_err(|_| {
-                            (
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Could not insert tx evt".into(),
-                            )
-                        })?
-                        .ok();
-                    trace!(game_id=?code, "Inserted PSBT into evlog");
+                    let module_bytes = TaggedEvent(
+                        Event::ModuleBytes(
+                            ModuleRepo::default_group_key(),
+                            globals.module_tag.clone(),
+                        ),
+                        Some(Tag::InitModule),
+                    );
+                    let create_args = TaggedEvent(Event::CreateArgs(args), Some(Tag::CreateArgs));
+                    let rebind = TaggedEvent(
+                        Event::Rebind(sapio_bitcoin::OutPoint {
+                            txid: tx.txid(),
+                            vout: 0,
+                        }),
+                        Some(Tag::FirstBind),
+                    );
+                    let tx_evt = TaggedEvent(
+                        Event::TransactionFinalized("default".into(), tx.clone()),
+                        Some(Tag::ScopedValue(seq_str.clone(), "funding_tx".into())),
+                    );
+                    for evt in [
+                        (&module_bytes as &dyn ToOccurrence),
+                        (&create_args as &dyn ToOccurrence),
+                        (&rebind as &dyn ToOccurrence),
+                        (&tx_evt as &dyn ToOccurrence),
+                    ] {
+                        event_init.push(evt.to_data());
+                    }
                     // lastly send the tx...
                     globals.bitcoin_rpc.send_raw_transaction(&tx).await.ok();
                 }
+                let mut h = msgdb2.get_handle_all().await;
+                let sequencer_key = b.sequencer_key;
+                spawn_blocking(move || {
+                    let keys = h.get_keymap()?;
+                    let sk = keys.get(&sequencer_key).ok_or("Key Missing")?;
+                    let keypair = KeyPair::from_secret_key(&secp2, sk);
+                    h.retry_insert_authenticated_envelope_atomic::<Channelized<BroadcastByHost>, _, _>(
+                        Channelized::<BroadcastByHost> {
+                            data: BroadcastByHost::ContractSetup(event_init),
+                            channel: "default".into(),
+                        },
+                        &keypair,
+                        &secp2,
+                        None,
+                        attest_database::db_handle::create::TipControl::GroupsOnly,
+                    );
+                    Ok::<(), Box<dyn Error + Send + Sync>>(())
+                })
+                .await;
 
                 resp
             } else {
