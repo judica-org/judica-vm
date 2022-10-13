@@ -13,6 +13,7 @@ use attest_messages::{
 use attest_util::bitcoin::BitcoinConfig;
 use emulator_connect::{CTVAvailable, CTVEmulator};
 
+use event_log::db_handle::accessors::occurrence::sql::Idempotent;
 use event_log::db_handle::accessors::occurrence::ToOccurrence;
 use game_host_messages::{BroadcastByHost, Channelized};
 use sapio::contract::Compiled;
@@ -109,7 +110,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .or_else(|_| {
                 accessor
                     .insert_new_occurrence_now_from(gid, &mr)?
-                    .or_else(|_Idempotent| {
+                    .or_else(|_: Idempotent| {
                         accessor
                             .get_occurrence_for_group_by_tag(gid, &tag)
                             .map(|(i, _)| i)
