@@ -46,7 +46,6 @@ use crate::tokens::token_swap::TradeOutcome;
 use crate::tokens::token_swap::TradingPairID;
 use crate::tokens::token_swap::UXMaterialsPriceData;
 use crate::MoveEnvelope;
-use rand::{thread_rng, Rng};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -399,18 +398,17 @@ impl GameBoard {
             &self.nfts,
         );
 
-        let plant_types = vec![PlantType::Flare, PlantType::Hydro, PlantType::Solar];
-        let start_locations: Vec<(i64, i64)> = vec![
-            (38075660, -120030170),
-            (-2346660, -76223050),
-            (-5203060, -66345370),
-            (66596730, 31545250),
-            (29521143, 26620126),
-            (58162163, 39188486),
-            (28599246, 116180671),
-            (-29625744, 138416999),
-            (-12141092, 35233406),
-            (21968789, -12535149),
+        let start_locations: Vec<((i64, i64), PlantType)> = vec![
+            ((38075660, -120030170), PlantType::Flare),
+            ((-2346660, -76223050), PlantType::Hydro),
+            ((-5203060, -66345370), PlantType::Solar),
+            ((66596730, 31545250), PlantType::Flare),
+            ((29521143, 26620126), PlantType::Hydro),
+            ((58162163, 39188486), PlantType::Solar),
+            ((28599246, 116180671), PlantType::Flare),
+            ((-29625744, 138416999), PlantType::Hydro),
+            ((-12141092, 35233406), PlantType::Solar),
+            ((21968789, -12535149), PlantType::Flare),
         ];
 
         let mut p: Vec<EntityID> = self
@@ -430,14 +428,15 @@ impl GameBoard {
             };
             let plant_ptr = self.nfts.add(Box::new(base_nft));
             // pick random plant type
-            let random_plant_type = plant_types[thread_rng().gen_range(0..3)];
+            let random_plant_type = start_locations[i].1;
             // pick random location
-            let coordinates: (i64, i64) = start_locations[i];
+            let coordinates: (i64, i64) = start_locations[i].0;
 
             let new_plant =
                 PowerPlant::new(self, plant_ptr, random_plant_type, coordinates, 1 as u64);
             // add to plant register, need to return Plant?
             let _ = self.nfts.power_plants.insert(plant_ptr, new_plant);
+            self.tokens[self.asic_token_id].mint(&plant_ptr, 1);
         }
     }
     /// Creates a new EntityID
