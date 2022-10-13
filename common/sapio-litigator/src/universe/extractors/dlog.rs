@@ -4,7 +4,7 @@
 //  License, v. 2.0. If a copy of the MPL was not distributed with this
 //  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use std::{collections::BTreeSet, error::Error, time::Duration};
+use std::{collections::BTreeSet, error::Error, sync::Arc, time::Duration};
 
 use attest_database::{connection::MsgDB, db_handle::get::nonces::extract_sk_from_envelopes};
 use bitcoin::{hashes::hex::ToHex, XOnlyPublicKey};
@@ -12,7 +12,8 @@ use event_log::{
     connection::EventLog,
     db_handle::accessors::{occurrence::sql::Idempotent, occurrence_group::OccurrenceGroupID},
 };
-use simps::{DLogDiscovered, EK_NEW_DLOG};
+use sapio_base::serialization_helpers::SArc;
+use simps::{ek_new_dlog, DLogDiscovered};
 use tokio::{task::spawn_blocking, time};
 use tracing::{debug, info};
 
@@ -79,7 +80,10 @@ pub async fn dlog_extractor_inner(
                 match evlog.get_accessor().await.insert_new_occurrence_now_from(
                     evlog_group_id,
                     &TaggedEvent(
-                        Event::NewRecompileTriggeringObservation(msg, EK_NEW_DLOG.clone()),
+                        Event::NewRecompileTriggeringObservation(
+                            msg,
+                            SArc(Arc::new(ek_new_dlog(k))),
+                        ),
                         Some(Tag::ScopedValue(
                             "dlog".into(),
                             dlog_discovered.secret_bytes().to_hex(),
