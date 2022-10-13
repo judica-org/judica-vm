@@ -339,7 +339,7 @@ impl GameBoard {
         self.callbacks.schedule(Box::new(ASICProducer {
             id,
             total_units: 100_000,
-            base_price: 5_000,
+            base_price: 100_000,
             price_asset: self.bitcoin_token_id,
             hash_asset: *self.tokens.hashboards.iter().next().unwrap().0,
             adjusts_every: 10_007, // 10 seconds -- prime rounded for chaos
