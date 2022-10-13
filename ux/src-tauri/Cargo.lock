@@ -71,6 +71,7 @@ dependencies = [
  "attest-database",
  "attest-messages",
  "attest-util",
+ "event-log",
  "game-host-messages",
  "game-player-messages",
  "game-sequencer",
@@ -80,6 +81,7 @@ dependencies = [
  "reqwest",
  "ruma-serde",
  "sapio-bitcoin",
+ "sapio-litigator-events",
  "schemars",
  "serde",
  "serde_json",
@@ -762,6 +764,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "event-log"
+version = "0.1.0"
+dependencies = [
+ "attest-messages",
+ "attest-util",
+ "directories",
+ "fallible-iterator",
+ "num-bigint",
+ "num-integer",
+ "ruma-serde",
+ "rusqlite",
+ "sapio-bitcoin",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2929,6 +2950,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "sapio"
+version = "0.2.0"
+dependencies = [
+ "base64",
+ "lazy_static",
+ "paste",
+ "sapio-base",
+ "sapio-bitcoin",
+ "sapio-ctv-emulator-trait",
+ "sapio-miniscript",
+ "sapio_macros",
+ "schemars",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
+name = "sapio-base"
+version = "0.2.0"
+dependencies = [
+ "sapio-bitcoin",
+ "sapio-miniscript",
+ "schemars",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "sapio-bitcoin"
 version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2938,6 +2989,48 @@ dependencies = [
  "bech32",
  "bitcoin_hashes",
  "sapio-secp256k1",
+ "schemars",
+ "serde",
+]
+
+[[package]]
+name = "sapio-ctv-emulator-trait"
+version = "0.2.0"
+dependencies = [
+ "sapio-base",
+ "sapio-bitcoin",
+ "sapio-miniscript",
+ "schemars",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
+name = "sapio-litigator-events"
+version = "0.1.0"
+dependencies = [
+ "event-log",
+ "game-player-messages",
+ "lazy_static",
+ "mine-with-friends-board",
+ "ruma-serde",
+ "sapio",
+ "sapio-base",
+ "sapio-bitcoin",
+ "schemars",
+ "serde",
+ "serde_json",
+ "simps",
+]
+
+[[package]]
+name = "sapio-miniscript"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c43aad266de8a90080257de090e9a13462b70738b72a6ec57961a4a7458b86f4"
+dependencies = [
+ "sapio-bitcoin",
  "schemars",
  "serde",
 ]
@@ -2961,6 +3054,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8bb98458e8394a30a80f53b61482ab26a68446c7f0499568ea908394f4d57c7c"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "sapio_macros"
+version = "0.2.2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -3250,6 +3352,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e51e73328dc4ac0c7ccbda3a494dfa03df1de2f46018127f60c693f2648455b0"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "simps"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "sapio",
+ "sapio-base",
+ "sapio-bitcoin",
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -23,7 +23,11 @@ tracing-subscriber = "0.3.11"
 tracing = "0.1.35"
 [dependencies.attest-util]
 path = "../../common/attest-util"
+[dependencies.sapio-litigator-events]
+path = "../../common/sapio-litigator-events"
 
+[dependencies.event-log]
+path = "../../common/event-log"
 [dependencies.tokio]
 version = "*"
 features = ["time"]

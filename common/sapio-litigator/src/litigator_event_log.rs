@@ -341,8 +341,9 @@ pub(crate) async fn handle_module_bytes(
         let o = accessor.get_occurrence_for_group_by_tag(gid, tag)?;
         info!(?instance, module=?o.0, "ModuleBytes");
         let mr = ModuleRepo::from_occurrence(o.1)?;
-        info!(?instance, code_length = mr.0.len(), "ModuleBytes");
-        mr.0
+        let bytes = mr.to_bytes().ok_or("Malformed")?;
+        info!(?instance, code_length = bytes.len(), "ModuleBytes");
+        bytes
     };
 
     state.module = Box::new({

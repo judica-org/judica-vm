@@ -20,13 +20,14 @@ use sapio::contract::Compiled;
 use sapio_bitcoin::secp256k1::rand;
 use sapio_bitcoin::secp256k1::rand::seq::SliceRandom;
 use sapio_bitcoin::secp256k1::All;
-use sapio_bitcoin::Network;
+use sapio_bitcoin::{base64, Network};
 use sapio_bitcoin::{secp256k1::Secp256k1, KeyPair};
 use sapio_litigator_events::ModuleRepo;
 use sapio_wasm_plugin::host::plugin_handle::ModuleLocator;
 use sapio_wasm_plugin::host::WasmPluginHandle;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use std::time::Duration;
 use std::{
@@ -101,7 +102,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .get_occurrence_group_by_key(&mrk)
             .or_else(|_| accessor.insert_new_occurrence_group(&mrk))
             .or_else(|_| accessor.get_occurrence_group_by_key(&mrk))?;
-        let mr = ModuleRepo(module_bytes);
+        let mr = ModuleRepo((base64::encode(&module_bytes)));
         let tag = mr.unique_tag().unwrap();
         // get or insert or get
         let _a = accessor
@@ -116,9 +117,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                             .map(|(i, _)| i)
                     })
             })?;
-        (mr.0, tag, gid)
+        (mr, tag, gid)
     };
-    let locator: ModuleLocator = ModuleLocator::Bytes(module_bytes);
+    let locator: ModuleLocator = ModuleLocator::Bytes(module_bytes.to_bytes().ok_or("Invalid Bytes")?);
 
     let emulator: Arc<dyn CTVEmulator> = Arc::new(CTVAvailable);
     let compiler_module: CompilerModule = Arc::new(Mutex::new(

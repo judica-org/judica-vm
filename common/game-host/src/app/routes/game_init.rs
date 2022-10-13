@@ -28,8 +28,8 @@ use axum::{
     Extension, Json,
 };
 use bitcoincore_rpc_async::{json::WalletCreateFundedPsbtOptions, RpcApi};
-use event_log::db_handle::accessors::occurrence::sql::Idempotent;
-use game_host_messages::{AddPlayerError, FinishArgs, JoinCode, NewGame, NewGameArgs};
+use event_log::db_handle::accessors::occurrence::{sql::Idempotent, Occurrence, ToOccurrence};
+use game_host_messages::{AddPlayerError, FetchedLit, FinishArgs, JoinCode, NewGame, NewGameArgs};
 use game_player_messages::ParticipantAction;
 use mine_with_friends_board::{
     game::{game_move::GameMove, GameSetup},
@@ -38,16 +38,19 @@ use mine_with_friends_board::{
 };
 use sapio::sapio_base::effects::{EffectPath, PathFragment};
 use sapio_bitcoin::{
+    hashes::hex::ToHex,
     psbt::PartiallySignedTransaction,
     secp256k1::{All, Secp256k1},
-    Address, Script,
+    Address, Script, XOnlyPublicKey,
 };
 use sapio_litigator_events::{Event, ModuleRepo, Tag, TaggedEvent};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tracing::{debug, trace};
 
 use std::{
     collections::{HashMap, VecDeque},
+    error::Error,
     str::FromStr,
     sync::{Arc, Weak},
     time::Duration,
@@ -211,6 +214,64 @@ pub async fn add_player(
             .body(())
             .expect("Response<()> should always be valid"),
         Json(()),
+    ))
+}
+
+pub async fn fetch_litigator_info(
+    Json(x): Json<String>,
+    Extension(globals): Extension<Globals>,
+) -> Result<(Response<()>, Json<FetchedLit>), (StatusCode, String)> {
+    let a = async {
+        let accessor = globals.evlog.get_accessor().await;
+        let id = accessor.get_occurrence_group_by_key(&x)?;
+        let module = accessor
+            .get_occurrence_for_group_by_tag(id, &Tag::InitModule.to_string())?
+            .1;
+        let a = vec![
+            serde_json::to_value(&module)?,
+            serde_json::to_value(
+                accessor
+                    .get_occurrence_for_group_by_tag(id, &Tag::CreateArgs.to_string())?
+                    .1,
+            )?,
+            serde_json::to_value(
+                accessor
+                    .get_occurrence_for_group_by_tag(id, &Tag::FirstBind.to_string())?
+                    .1,
+            )?,
+            serde_json::to_value(
+                accessor
+                    .get_occurrence_for_group_by_tag(
+                        id,
+                        &Tag::ScopedValue(x.to_string(), "funding_tx".into()).to_string(),
+                    )?
+                    .1,
+            )?,
+        ];
+        if let Ok(TaggedEvent(Event::ModuleBytes(group, tag), Some(Tag::InitModule))) =
+            TaggedEvent::from_occurrence(module)
+        {
+            let id = accessor.get_occurrence_group_by_key(&group)?;
+            let module = accessor.get_occurrence_for_group_by_tag(id, &tag)?;
+            Ok::<_, Box<dyn Error>>((a, serde_json::to_value(module.1)?))
+        } else {
+            Err("Didn't Work")?
+        }
+    }
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Could not get litigation info".into(),
+        )
+    })?;
+    Ok((
+        Response::builder()
+            .status(200)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(())
+            .expect("Response<()> should always be valid"),
+        Json(FetchedLit(a.0, a.1)),
     ))
 }
 

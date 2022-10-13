@@ -7,11 +7,14 @@
 use crate::config::Globals;
 use attest_messages::{Authenticated, GenericEnvelope};
 use attest_util::{ensure_dir, CrossPlatformPermissions};
+use event_log::db_handle::accessors::occurrence::Occurrence;
 use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode, NewGame, NewGameArgs};
 use game_player_messages::ParticipantAction;
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
+use sapio_bitcoin::{hashes::hex::ToHex, XOnlyPublicKey};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 use std::{
     error::Error,
     fmt::{Debug, Display},
@@ -86,6 +89,7 @@ const PING: &str = "ping";
 const GAME_NEW: &str = "game/new";
 const GAME_ADD_PLAYER: &str = "game/player/new";
 const GAME_FINISH_SETUP: &str = "game/finish";
+const FETCH_LITIGATOR_INFO: &str = "fetch_litigator_info";
 
 trait DebugErr<R, E> {
     fn debug_err(self) -> Result<R, E>;
@@ -102,10 +106,29 @@ where
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct FetchedLit(pub Vec<Occurrence>, pub Occurrence);
 impl TorClient {
-    pub async fn ping(&self,
+    pub async fn resolve_game(
+        &self,
+        game: XOnlyPublicKey,
         GameHost { url, port }: &GameHost,
-    ) -> Result<String, reqwest::Error> {
+    ) -> Result<FetchedLit, reqwest::Error> {
+        let s = self
+            .client
+            .post(format!("http://{}:{}/{}", url, port, FETCH_LITIGATOR_INFO))
+            .json(&game.to_hex())
+            .send()
+            .await
+            .debug_err()?
+            .text()
+            .await
+            .debug_err()?;
+        info!("{}", &s[0..s.len().min(1000)]);
+        let r : FetchedLit = serde_json::from_str(&s).expect("UH OH, Valid JSON");
+        Ok(r)
+    }
+    pub async fn ping(&self, GameHost { url, port }: &GameHost) -> Result<String, reqwest::Error> {
         self.client
             .get(format!("http://{}:{}/{}", url, port, PING))
             .send()

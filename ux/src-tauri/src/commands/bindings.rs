@@ -7,18 +7,22 @@
 use super::view::{EmittedAppState, TradeType};
 use super::{view::SyncError, *};
 use crate::config::Globals;
-use crate::tor::{GameHost, TorClient};
+use crate::tor::{FetchedLit, GameHost, TorClient};
 use crate::{Game, GameInitState, TriggerRerender};
+use event_log::db_handle::accessors::occurrence::ToOccurrence;
 use game_host_messages::{CreatedNewChain, FinishArgs, JoinCode};
 use mine_with_friends_board::game::game_move::{GameMove, MintPowerPlant};
 use mine_with_friends_board::game::UXUserInventory;
 use mine_with_friends_board::nfts::instances::powerplant::PlantType;
 use mine_with_friends_board::tokens::token_swap::{TradeError, TradeOutcome, TradingPairID};
 use sapio_bitcoin::secp256k1::{All, Secp256k1};
+use sapio_litigator_events::{Event, Tag, TaggedEvent};
+use std::error::Error;
 use std::sync::Arc;
 use tauri::async_runtime::Mutex;
 use tauri::{generate_handler, Invoke};
 use tokio::spawn;
+use tracing::{info, warn};
 
 pub const HANDLER: &(dyn Fn(Invoke) + Send + Sync) = &generate_handler![
     game_synchronizer,
@@ -236,7 +240,52 @@ pub(crate) async fn switch_to_game(
     sk: State<'_, SigningKeyInner>,
     game: GameState<'_>,
     key: XOnlyPublicKey,
-) -> Result<(), ()> {
+    globals: State<'_, Arc<Globals>>,
+    game_host_s: State<'_, Arc<Mutex<Option<GameHost>>>>,
+) -> Result<(), String> {
+    {
+        let key = key.clone();
+        let seq_str = key.to_string();
+        let client = globals.get_client().await.map_err(|e| e.to_string())?;
+        let evlog = globals.get_evlog().await.map_err(|e| e.to_string())?;
+        let host = game_host_s.lock().await;
+        if let Err(e) = async move {
+            if let Some(h) = host.clone() {
+                drop(host);
+                let FetchedLit(evs, module) = client.resolve_game(key, &h).await?;
+                info!("Got Evs OK");
+                let evts = evs
+                    .into_iter()
+                    .map(|x| TaggedEvent::from_occurrence(x))
+                    .collect::<Result<Vec<_>, _>>()?;
+                info!("Mapped to Tags Evs OK");
+                if let TaggedEvent(Event::ModuleBytes(group, tag), Some(Tag::InitModule)) = &evts[0]
+                {
+                    info!("First of Tags is Module");
+                    let accessor = evlog.get_accessor().await;
+                    let sequencer_group = accessor
+                        .insert_new_occurrence_group(&seq_str)
+                        .or_else(|_| accessor.get_occurrence_group_by_key(&seq_str))?;
+                    info!("Created Seq Group / had");
+                    let module_group = accessor
+                        .insert_new_occurrence_group(&seq_str)
+                        .or_else(|_| accessor.get_occurrence_group_by_key(&group))?;
+                    info!("Created Mod Group / had");
+
+                    accessor.insert_occurrence(module_group, &module)?;
+                    for evt in evts {
+                        accessor.insert_new_occurrence_now_from(sequencer_group, &evt)?;
+                    }
+                }
+            }
+
+            Ok::<(), Box<dyn Error + Send + Sync>>(())
+        }
+        .await
+        {
+            warn!(err=?e, "Failed to Get Occurrences / Already had?")
+        }
+    }
     modify::switch_to_game_inner(
         secp.inner().clone(),
         sk.inner().clone(),
@@ -245,6 +294,7 @@ pub(crate) async fn switch_to_game(
         key,
     )
     .await
+    .map_err(|e| "Inner Switch Failed".into())
 }
 
 #[tauri::command]

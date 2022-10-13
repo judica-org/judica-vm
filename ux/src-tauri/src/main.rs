@@ -149,7 +149,7 @@ impl Database {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct DBSelector {
     pub appname: String,
     pub prefix: Option<PathBuf>,
