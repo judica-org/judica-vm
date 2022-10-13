@@ -252,7 +252,8 @@ impl GameStarted {
                         }
                         tmpl.into()
                     }
-                    _ => empty(),
+                    // TODO: Throw Error Here
+                    e => Err(CompilationError::TerminateWith(format!("{:?}", e))),
                 }
             }
         }
@@ -299,7 +300,8 @@ impl GameStarted {
                         }
                         tmpl.into()
                     }
-                    _ => empty(),
+                    // TODO: Throw Error Here
+                    e => Err(CompilationError::TerminateWith(format!("{:?}", e))),
                 }
             }
         }

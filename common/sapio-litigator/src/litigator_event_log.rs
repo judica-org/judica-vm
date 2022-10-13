@@ -143,7 +143,7 @@ pub(crate) async fn handle_new_information(
     let instance = e.evlog_group_id;
     let EventLoopContext { ref mut state, .. } = e;
     info!(?instance, "NewRecompileTriggeringObservation");
-    let idx_str = SArc(Arc::new(format!("event-{}", state.event_counter)));
+    let idx_str = SArc(Arc::new(format!("event{}", state.event_counter)));
     let mut new_args = state.args.as_ref().map_err(|e| e.as_str())?.clone();
     let mut save = EditableMapEffectDB::from(new_args.context.effects.clone());
     let mut any_edits = false;
@@ -164,18 +164,41 @@ pub(crate) async fn handle_new_information(
     {
         any_edits = true;
         // ensure that if specified, that we skip invalid messages
-        save.effects
+        trace!(
+            ?instance,
+            path = ?serde_json::to_string(&api.path).unwrap(),
+            key = &*idx_str.0,
+            "NewRecompileTriggeringObservation saving"
+        );
+        if save
+            .effects
             .entry(SArc(api.path.clone()))
             .or_default()
             .insert(
                 idx_str.clone(),
                 // todo: maybe use arcs here too
                 new_info_as_v.clone(),
+            )
+            .is_some()
+        {
+            debug!(
+                ?instance,
+                path = ?serde_json::to_string(&api.path).unwrap(),
+                key = &*idx_str.0,
+                "NewRecompileTriggeringObservation Error Inserting"
             );
+            panic!("NewRecompileTrigger Would Overwrite Existing state");
+        };
     }
     info!(?instance, any_edits, "NewRecompileTriggeringObservation");
     if any_edits {
         new_args.context.effects = save.into();
+        trace!(
+            ?instance,
+            any_edits,
+            new_args = serde_json::to_string(&new_args)?,
+            "NewRecompileTriggeringObservation Computed Args"
+        );
         let result = {
             let g_handle = state.module.lock().await;
             // drop error before releasing g_handle so that the CompilationError non-send type
@@ -205,7 +228,9 @@ pub(crate) async fn handle_new_information(
                 state.args = Ok(new_args);
                 state.contract = Ok(new_contract);
             }
-            Err(_e) => {}
+            Err(_e) => {
+                // no error here, it's fine to return other things
+            }
         }
     };
     Ok(())
