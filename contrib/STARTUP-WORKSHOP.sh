@@ -5,7 +5,7 @@ BTCPORT=${BTCPORT:-"18443"}
 export USE_RELEASE_TAURI=${USE_RELEASE_TAURI:-"release"}
 
 export BTCPORT
-SCRIPT_LOCATION=$(dirname -- "$(readlink -f -- "$BASH_SOURCE")")
+SCRIPT_LOCATION=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd $SCRIPT_LOCATION
 export RUST_LOG=${RUST_LOG:-"info"}
 ROOTPATH=${ROOTPATH:-"$HOME/demo-app-dir"}
