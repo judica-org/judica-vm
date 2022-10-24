@@ -14,6 +14,7 @@ use sapio_bitcoin::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{
     collections::VecDeque,
     error::Error,
@@ -150,3 +151,6 @@ pub struct CreatedNewChain {
     pub genesis_hash: CanonicalEnvelopeHash,
     pub group_name: String,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct FetchedLit(pub Vec<Value>, pub Value);

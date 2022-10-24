@@ -5,7 +5,9 @@
 //  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use crate::{
-    app::routes::game_init::{add_player, create_new_game_instance, finish_setup, NewGameDB},
+    app::routes::game_init::{
+        add_player, create_new_game_instance, fetch_litigator_info, finish_setup, NewGameDB,
+    },
     globals::Globals,
     Config,
 };
@@ -260,6 +262,7 @@ pub fn run(
             .route("/game/finish", post(finish_setup))
             .route("/peer", get(get_peers))
             .route("/ping", get(connected))
+            .route("/fetch_litigator_info", post(fetch_litigator_info))
             .route("/attestation_chain/new", post(create_new_attestation_chain))
             .route("/attestation_chain", get(list_groups))
             .route(

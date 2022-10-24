@@ -4,6 +4,7 @@
 //  License, v. 2.0. If a copy of the MPL was not distributed with this
 //  file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use bitcoin::base64;
 use bitcoin::hashes::hex::ToHex;
 use bitcoin::hashes::sha256;
 use bitcoin::hashes::Hash;
@@ -123,11 +124,15 @@ pub fn convert_setup_to_contract_args(
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ModuleRepo(pub Vec<u8>);
+pub struct ModuleRepo(pub String);
 
 impl ModuleRepo {
     pub fn default_group_key() -> OccurrenceGroupKey {
         ModuleRepo::stable_typeid().into_inner()
+    }
+    pub fn to_bytes(&self) -> Option<Vec<u8>> {
+        let v = base64::decode(&self.0).ok()?;
+        Some(v)
     }
 }
 
@@ -144,6 +149,6 @@ impl ToOccurrence for ModuleRepo {
     }
 
     fn unique_tag(&self) -> Option<String> {
-        Some(sha256::Hash::hash(&self.0[..]).to_hex())
+        Some(sha256::Hash::hash(&self.to_bytes()?[..]).to_hex())
     }
 }

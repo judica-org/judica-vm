@@ -7,7 +7,7 @@
 use std::fmt::Display;
 
 use ruma_serde::CanonicalJsonValue;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     db_handle::{DataType, Setup, SetupTrait},
@@ -18,7 +18,7 @@ use self::sql::{SQL_OCCURRENCE_CACHED_QUERIES, SQL_OCCURRENCE_TABLES};
 
 pub mod sql;
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Occurrence {
     pub data: CanonicalJsonValue,
     pub time: i64,
