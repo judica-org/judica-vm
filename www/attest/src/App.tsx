@@ -39,7 +39,7 @@ type Status = {
   peers: Array<PeerInfo>,
   tips: Array<{ envelope: Envelope, hash: string }>,
   peer_connections: Array<TaskID>,
-  all_users: Array<[string, string, boolean]>,
+  all_users: Array<[string, string, boolean, string|null]>,
   hidden_service_url: [string, number] | null;
   Error: undefined,
   IsNull: undefined,

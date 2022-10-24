@@ -10,7 +10,10 @@ use crate::{
 };
 use attest_database::{
     connection::MsgDB,
-    db_handle::{create::TipControl, get::PeerInfo},
+    db_handle::{
+        create::TipControl,
+        get::{nonces::extract_sk_from_envelopes, PeerInfo},
+    },
     generate_new_user, generate_new_user_keypair,
 };
 use attest_messages::{Authenticated, CanonicalEnvelopeHash, Envelope, WrappedJson};
@@ -24,7 +27,7 @@ use axum::{
 use bitcoin_header_checkpoints::BitcoinCheckPointCache;
 use reqwest::Method;
 use sapio_bitcoin::{
-    secp256k1::{All, Secp256k1},
+    secp256k1::{All, Secp256k1, SecretKey},
     util::bip32::ExtendedPrivKey,
     KeyPair, XOnlyPublicKey,
 };
@@ -50,7 +53,7 @@ pub struct Status {
     peers: Vec<PeerInfo>,
     tips: Vec<TipData>,
     peer_connections: Vec<TaskID>,
-    all_users: Vec<(XOnlyPublicKey, String, bool)>,
+    all_users: Vec<(XOnlyPublicKey, String, bool, Option<SecretKey>)>,
     hidden_service_url: Option<(String, u16)>,
 }
 
@@ -148,6 +151,19 @@ async fn get_status(
                     format!("User List query failed: {}", e),
                 )
             })?;
+            let equivs = handle
+                .get_reused_nonces()
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("KeyMap query failed: {}", e),
+                    )
+                })?
+                .into_iter()
+                .flat_map(|(x, mut y)| {
+                    Some((x, Some(extract_sk_from_envelopes(y.pop()?, y.pop()?)?)))
+                })
+                .collect::<HashMap<_, _>>();
             let known_keys = handle.get_keymap().map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -156,7 +172,14 @@ async fn get_status(
             })?;
             let all_users: Vec<_> = users
                 .into_iter()
-                .map(|(k, v)| (k, v, known_keys.contains_key(&k)))
+                .map(|(k, v)| {
+                    (
+                        k,
+                        v,
+                        known_keys.contains_key(&k),
+                        equivs.get(&k).cloned().flatten(),
+                    )
+                })
                 .collect();
             Ok::<_, (StatusCode, String)>((tips, peers, all_users))
         })
