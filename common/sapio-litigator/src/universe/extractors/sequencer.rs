@@ -17,6 +17,7 @@ use event_log::{
         occurrence::sql::insert::Idempotent, occurrence_group::OccurrenceGroupID,
     },
 };
+use events::TaggedEvent;
 use game_host_messages::{BroadcastByHost, Channelized};
 use game_player_messages::ParticipantAction;
 use game_sequencer::{OnlineDBFetcher, SequencerError, UnauthenticatedRawSequencer};
@@ -24,6 +25,7 @@ use mine_with_friends_board::{
     game::{FinishReason, GameBoard, MoveRejectReason},
     MoveEnvelope,
 };
+use ruma_serde::test::serde_json_eq;
 use sapio_base::serialization_helpers::SArc;
 use simps::{EventKey, EK_GAME_ACTION_LOSE, EK_GAME_ACTION_WIN};
 use std::{
@@ -75,7 +77,16 @@ pub async fn sequencer_extractor_inner(
         msg_db.clone(),
     );
 
-    let game_setup = get_game_setup(&msg_db, oracle_key).await?;
+    let (game_setup, contract_setup) = get_game_setup(&msg_db, oracle_key).await?;
+    {
+        let accessor = evlog.get_accessor().await;
+        for s in contract_setup {
+            accessor
+                .insert_new_occurrence_now_from(evlog_group_id, &s)?
+                .map_err(|e: Idempotent| ())
+                .ok();
+        }
+    }
 
     let new_game = GameBoard::new(&game_setup);
 
@@ -121,16 +132,25 @@ pub async fn sequencer_extractor_inner(
 pub async fn get_game_setup(
     msg_db: &MsgDB,
     oracle_key: XOnlyPublicKey,
-) -> Result<mine_with_friends_board::game::GameSetup, &'static str> {
-    let genesis = {
+) -> Result<(mine_with_friends_board::game::GameSetup, Vec<TaggedEvent>), &'static str> {
+    let (genesis, c_setup) = {
         let handle = msg_db.get_handle_read().await;
-        spawn_blocking(move || {
+        let g = spawn_blocking(move || {
             handle.get_message_at_height_for_user::<Channelized<BroadcastByHost>>(oracle_key, 0)
         })
         .await
         .map_err(|_| "Panic in DB")?
         .map_err(|_e| "Internal Databse Error")?
-        .ok_or("No Genesis found for selected Key")?
+        .ok_or("No Genesis found for selected Key")?;
+        let handle = msg_db.get_handle_read().await;
+        let c = spawn_blocking(move || {
+            handle.get_message_at_height_for_user::<Channelized<BroadcastByHost>>(oracle_key, 1)
+        })
+        .await
+        .map_err(|_| "Panic in DB")?
+        .map_err(|_e| "Internal Databse Error")?
+        .ok_or("No Setup found for selected Key")?;
+        (g, c)
     };
     let game_setup = {
         let m: Channelized<BroadcastByHost> = genesis.inner().into_msg();
@@ -142,7 +162,21 @@ pub async fn get_game_setup(
             }
         }
     };
-    Ok(game_setup)
+    let contract_setup = {
+        let m: Channelized<BroadcastByHost> = c_setup.inner().into_msg();
+        match m.data {
+            BroadcastByHost::ContractSetup(v) => v
+                .into_iter()
+                .map(|v| serde_json::from_str(&v.to_string()))
+                .collect::<Result<Vec<TaggedEvent>, serde_json::Error>>()
+                .map_err(|_| "Could not convert to event")?,
+            _ => {
+                debug!(?m.data, "Startup Data Was");
+                return Err("Second Message was not a ContractSetup");
+            }
+        }
+    };
+    Ok((game_setup, contract_setup))
 }
 
 pub fn handle_psbts(
